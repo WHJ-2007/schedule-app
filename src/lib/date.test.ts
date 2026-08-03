@@ -15,6 +15,7 @@ import {
   getYearMonths,
   addYears,
   getMonthDayCells,
+  formatYearTitle,
 } from "./date";
 
 describe("toDateKey / parseDateKey", () => {
@@ -151,5 +152,15 @@ describe("week/year helpers", () => {
   it("getMonthDayCells 非周一开头的月份有偏移", () => {
     const cells = getMonthDayCells(2026, 0); // 2026-01-01 是周四 → 3 个 null
     expect(cells.length).toBe(3 + 31);
+  });
+
+  it("getMonthDayCells 周一开头的月份无偏移", () => {
+    const cells = getMonthDayCells(2026, 5); // 2026-06-01 是周一，6月30天
+    expect(cells.length).toBe(30);
+    expect(cells[0]).not.toBeNull();
+  });
+
+  it("formatYearTitle", () => {
+    expect(formatYearTitle(2026)).toBe("2026年");
   });
 });
