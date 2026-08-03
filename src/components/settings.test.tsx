@@ -40,13 +40,13 @@ describe("settings", () => {
   it("切换主题：保存并跳转", () => {
     render(<Settings />);
     fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
-    fireEvent.click(screen.getByRole("button", { name: /玻璃拟态/ }));
-    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("/style-2");
-    expect(pushMock).toHaveBeenCalledWith("/style-2");
+    fireEvent.click(screen.getByRole("button", { name: /手账笔记本/ }));
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("/style-6");
+    expect(pushMock).toHaveBeenCalledWith("/style-6");
   });
 
   it("高亮当前主题", () => {
-    localStorage.setItem(THEME_STORAGE_KEY, "/style-7");
+    localStorage.setItem(THEME_STORAGE_KEY, "/style-6");
     render(<Settings />);
     fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
     expect(screen.getByText("当前")).toBeInTheDocument();

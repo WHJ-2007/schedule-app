@@ -18,24 +18,6 @@ body {
   );
 }
 
-/* style-7 渐变风 */
-@keyframes gradient-move {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-.animate-gradient-move {
-  background-size: 200% 200%;
-  animation: gradient-move 8s ease infinite;
-}
-
-/* style-2 玻璃风 */
-@keyframes float-slow {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
-}
-.animate-float-slow { animation: float-slow 7s ease-in-out infinite; }
-
 /* 全局适度动画 */
 @keyframes fade-in {
   from { opacity: 0; }
@@ -52,6 +34,16 @@ body {
 .anim-fade-in { animation: fade-in 180ms ease-out both; }
 .anim-scale-in { animation: scale-in 200ms ease-out both; }
 .anim-slide-up { animation: slide-up 220ms ease-out both; }
+
+/* 全局按钮反馈动画：悬停轻微放大、按下收缩 */
+button {
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+@media (hover: hover) {
+  button:hover:not(:disabled) { transform: scale(1.02); }
+}
+button:active:not(:disabled) { transform: scale(0.96); }
 
 /* 系统减弱动态效果：全部动画/过渡压到不可感知 */
 @media (prefers-reduced-motion: reduce) {

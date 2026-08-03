@@ -27,12 +27,12 @@ export type ThemeTokens = {
   weekView: { column: string; columnHighlight: string; columnHeader: string; addDay: string; eventRow: string };
   yearView: { monthCard: string; monthTitle: string; miniCell: string; miniDot: string };
   viewPanel?: string;      // 月历/周视图/年视图 section 的面板容器类（style-1 无 → 不填）
-  contentClass?: string;   // 内容容器额外类（style-5 的 lg:pl-16）
+  contentClass?: string;   // 内容容器额外类（当前无主题使用）
   cellGridGap?: string;    // 月历网格间距类（默认 "gap-1.5"）
   dayListSpacing?: string; // 当日日程 ul 间距类（默认 "mt-4 space-y-3"）
-  sidebar?: ReactNode;     // 固定定位的侧栏 JSX（style-5 的左侧品牌导航）
-  dotColors?: string[];    // 月历事件数量点颜色轮换（style-6/7 有）
-  itemColors?: string[];   // 当日日程条目左边框颜色轮换（style-6/7 有）
+  sidebar?: ReactNode;     // 固定定位的侧栏 JSX（当前无主题使用）
+  dotColors?: string[];    // 月历事件数量点颜色轮换（style-6 有）
+  itemColors?: string[];   // 当日日程条目左边框颜色轮换（style-6 有）
   itemDecor?: ReactNode;   // 日程条目内装饰 JSX（style-6 的纸胶带 span）
 };
 
@@ -67,7 +67,7 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       dateLabel: "text-sm text-neutral-500",
       itemRow: "group flex items-center gap-3 border-b border-neutral-100 pb-3 last:border-b-0 last:pb-0",
       checkbox: "accent-blue-600",
-      editButton: "min-w-0 flex-1 text-left",
+      editButton: "min-w-0 flex-1 text-left transition",
       time: "text-xs text-neutral-400 tabular-nums",
       title: "truncate text-sm text-neutral-900",
       doneTitle: "truncate text-sm text-neutral-400 line-through",
@@ -86,7 +86,7 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       save: "rounded-md bg-blue-600 px-4 py-2 text-sm text-white transition hover:bg-blue-700",
     },
     viewTab: {
-      active: "rounded-full bg-neutral-900 px-4 py-1.5 text-sm text-white",
+      active: "rounded-full bg-neutral-900 px-4 py-1.5 text-sm text-white transition",
       inactive: "rounded-full px-4 py-1.5 text-sm text-neutral-500 transition hover:bg-neutral-100",
     },
     weekView: {
@@ -101,170 +101,6 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       monthTitle: "mb-1.5 text-sm font-medium text-neutral-700 transition hover:text-blue-600",
       miniCell: "relative flex aspect-square items-center justify-center rounded text-[10px] text-neutral-500 transition hover:bg-neutral-100",
       miniDot: "absolute bottom-0.5 h-1 w-1 rounded-full bg-blue-600",
-    },
-  },
-
-  // 主题 2：玻璃拟态
-  2: {
-    main: "animate-gradient-move relative min-h-screen overflow-hidden bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500",
-    viewPanel: "rounded-2xl border border-white/30 bg-white/15 p-5 shadow-lg shadow-purple-900/10 backdrop-blur-xl",
-    decorations: (
-      <>
-        <div aria-hidden className="pointer-events-none absolute inset-0">
-          <div className="animate-float-slow absolute -left-24 -top-24 h-96 w-96 rounded-full bg-white/20 blur-3xl" />
-          <div className="animate-float-slow absolute -right-20 top-1/3 h-80 w-80 rounded-full bg-white/20 blur-3xl [animation-delay:-3s]" />
-          <div className="animate-float-slow absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-white/15 blur-3xl [animation-delay:-5s]" />
-        </div>
-      </>
-    ),
-    header: {
-      eyebrow: "GLASS SCHEDULE",
-      eyebrowClass: "text-xs tracking-widest text-white/60",
-      title: "玻璃日程",
-      titleClass: "mt-2 text-3xl font-semibold tracking-wide text-white drop-shadow-lg",
-    },
-    sectionTitle: "text-base text-white",
-    weekdayHeader: "py-1 text-center text-xs text-white/70",
-    navButton: "rounded-lg border border-white/40 px-3 py-1.5 text-sm text-white transition hover:bg-white/10",
-    card: "rounded-2xl border border-white/30 bg-white/15 p-5 shadow-lg shadow-purple-900/10 backdrop-blur-xl",
-    button: { primary: "rounded-lg bg-white px-4 py-2 text-sm font-semibold text-purple-700 transition hover:bg-white/90" },
-    cell: {
-      base: "flex h-24 flex-col items-center rounded-xl pt-2 transition",
-      hover: "hover:bg-white/10",
-      num: "inline-flex h-7 w-7 items-center justify-center rounded-full text-sm",
-      plain: "text-white",
-      outside: "text-white/30",
-      today: "ring-2 ring-white/90",
-      selected: "bg-white/30 hover:bg-white/40",
-      indicatorPills: true,
-      indicatorCap: 2,
-      indicatorArea: "mt-1.5 flex h-4 max-w-full items-center justify-center gap-1 overflow-hidden px-1",
-      selectedOnCell: true,
-    },
-    dot: "truncate rounded-full bg-white/60 px-1.5 py-0.5 text-[10px] text-purple-900",
-    dotMore: "shrink-0 text-[10px] text-white",
-    todayMark: "text-white",
-    dayList: {
-      dateLabel: "text-sm text-white/70",
-      itemRow: "group flex items-center gap-3 border-b border-white/15 pb-3 last:border-b-0 last:pb-0",
-      checkbox: "accent-purple-200",
-      editButton: "min-w-0 flex-1 text-left",
-      time: "rounded-full bg-white/60 px-2 py-0.5 text-purple-900",
-      title: "truncate text-sm text-white",
-      doneTitle: "truncate text-sm text-white/70 line-through",
-      desc: "truncate text-xs text-white/70",
-      delete: "shrink-0 text-white/60 transition hover:text-white",
-      empty: "mt-6 text-sm text-white/60",
-    },
-    dialog: {
-      overlay: "fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm",
-      panel: "w-full max-w-sm rounded-2xl border border-white/30 bg-white/20 shadow-lg shadow-purple-900/20 backdrop-blur-xl",
-      bodyClass: "p-6",
-      title: "text-lg font-semibold text-white",
-      inputLabel: "text-sm text-white/70",
-      input: "mt-1 w-full rounded-lg border border-white/30 bg-white/20 px-3 py-2 text-white placeholder-white/50 focus:ring-2 focus:ring-white/60 focus:outline-none",
-      cancel: "text-sm text-white/70 transition hover:text-white",
-      save: "rounded-lg bg-white px-4 py-2 text-sm font-semibold text-purple-700 transition hover:bg-white/90",
-    },
-    viewTab: {
-      active: "rounded-full bg-white px-4 py-1.5 text-sm font-semibold text-purple-700",
-      inactive: "rounded-full px-4 py-1.5 text-sm text-white/70 transition hover:bg-white/10",
-    },
-    weekView: {
-      column: "flex min-h-44 flex-col rounded-2xl border border-white/30 p-2",
-      columnHighlight: "border-white/60 bg-white/30",
-      columnHeader: "text-xs font-medium text-white/80 transition hover:text-white",
-      addDay: "text-xs text-white/60 transition hover:text-white",
-      eventRow: "flex items-center gap-1 rounded px-1 py-0.5 transition hover:bg-white/10",
-    },
-    yearView: {
-      monthCard: "rounded-2xl border border-white/30 bg-white/15 p-3 shadow-lg shadow-purple-900/10 backdrop-blur-xl",
-      monthTitle: "mb-1.5 text-sm font-medium text-white/80 transition hover:text-white",
-      miniCell: "relative flex aspect-square items-center justify-center rounded text-[10px] text-white/60 transition hover:bg-white/10",
-      miniDot: "absolute bottom-0.5 h-1 w-1 rounded-full bg-white/80",
-    },
-  },
-
-  // 主题 5：商务专业
-  5: {
-    main: "min-h-screen bg-[#f5f7fa]",
-    viewPanel: "rounded-md border border-neutral-200 bg-white p-5 shadow-sm",
-    contentClass: "lg:pl-16",
-    cellGridGap: "",
-    dayListSpacing: "mt-5 space-y-4",
-    sidebar: (
-      <aside className="fixed left-0 top-0 z-20 hidden h-screen w-16 flex-col items-center bg-[#1e3a5f] py-6 lg:flex">
-        <div className="flex h-9 w-9 items-center justify-center rounded bg-[#c9a961] font-serif text-lg font-bold text-white">
-          S
-        </div>
-        <div className="mt-8 flex flex-col items-center gap-8">
-          <span className="text-[10px] tracking-widest text-[#c9a961]">日历</span>
-          <span className="text-[10px] tracking-widest text-[#8fa3bd]">设置</span>
-          <span className="text-[10px] tracking-widest text-[#8fa3bd]">报表</span>
-        </div>
-      </aside>
-    ),
-    header: {
-      eyebrow: <>SCHEDULE · {new Date().getFullYear()}</>,
-      eyebrowClass: "text-[10px] font-semibold uppercase tracking-widest text-[#c9a961]",
-      title: "商务日程",
-      titleClass: "mt-2 font-serif text-2xl font-semibold tracking-wide text-[#1e3a5f]",
-    },
-    sectionTitle: "text-base text-neutral-800",
-    weekdayHeader: "border-b border-neutral-100 py-1.5 text-center text-xs font-semibold text-neutral-500",
-    navButton: "rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-600 transition hover:border-[#1e3a5f] hover:text-[#1e3a5f]",
-    card: "rounded-md border border-neutral-200 bg-white p-5 shadow-sm",
-    button: { primary: "rounded-md bg-[#1e3a5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#16304f]" },
-    cell: {
-      base: "flex h-24 flex-col items-center rounded border-b border-neutral-100 pt-2 transition",
-      hover: "hover:bg-[#f5f7fa]",
-      num: "inline-block rounded-sm px-1.5 text-xs font-medium",
-      plain: "text-neutral-800",
-      outside: "text-neutral-300",
-      today: "bg-[#c9a961] text-[#1e3a5f]",
-      selected: "bg-[#1e3a5f] text-white",
-    },
-    dot: "h-1 w-4 rounded-full bg-[#1e3a5f]",
-    dotMore: "text-[10px] text-[#1e3a5f]",
-    todayMark: "text-[#c9a961]",
-    dayList: {
-      dateLabel: "text-sm text-neutral-500",
-      itemRow: "flex items-start gap-3 border-l-2 border-[#c9a961] pl-3",
-      checkbox: "mt-0.5 accent-[#1e3a5f]",
-      editButton: "min-w-0 flex-1 text-left",
-      time: "text-xs font-semibold text-[#1e3a5f] tabular-nums",
-      title: "truncate text-sm font-medium text-neutral-800",
-      doneTitle: "truncate text-sm font-medium text-neutral-400 line-through",
-      desc: "mt-0.5 truncate text-xs text-neutral-400",
-      delete: "shrink-0 text-neutral-400 transition hover:text-red-500",
-      empty: "mt-6 text-sm text-neutral-500",
-    },
-    dialog: {
-      overlay: "fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40",
-      panel: "w-full max-w-sm rounded-md border-t-2 border-[#c9a961] bg-white shadow-lg",
-      bodyClass: "p-6",
-      title: "text-lg font-semibold text-[#1e3a5f]",
-      inputLabel: "text-sm font-medium text-neutral-600",
-      input: "mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-800 placeholder-neutral-300 focus:border-[#1e3a5f] focus:outline-none",
-      cancel: "text-sm text-neutral-500 transition hover:text-neutral-700",
-      save: "rounded-md bg-[#1e3a5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#16304f]",
-    },
-    viewTab: {
-      active: "rounded-full bg-[#1e3a5f] px-4 py-1.5 text-sm font-semibold text-white",
-      inactive: "rounded-full px-4 py-1.5 text-sm text-neutral-500 transition hover:bg-[#f5f7fa] hover:text-[#1e3a5f]",
-    },
-    weekView: {
-      column: "flex min-h-44 flex-col rounded-md border border-neutral-200 p-2",
-      columnHighlight: "border-[#c9a961] bg-[#f5f7fa]",
-      columnHeader: "text-xs font-medium text-neutral-600 transition hover:text-[#1e3a5f]",
-      addDay: "text-xs text-neutral-400 transition hover:text-[#1e3a5f]",
-      eventRow: "flex items-center gap-1 rounded px-1 py-0.5 transition hover:bg-[#f5f7fa]",
-    },
-    yearView: {
-      monthCard: "rounded-md border border-neutral-200 bg-white p-3 shadow-sm",
-      monthTitle: "mb-1.5 text-sm font-medium text-[#1e3a5f] transition hover:text-[#16304f]",
-      miniCell: "relative flex aspect-square items-center justify-center rounded text-[10px] text-neutral-500 transition hover:bg-[#f5f7fa]",
-      miniDot: "absolute bottom-0.5 h-1 w-1 rounded-full bg-[#1e3a5f]",
     },
   },
 
@@ -322,7 +158,7 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       dateLabel: "font-kai text-sm text-[#4a3f35]",
       itemRow: "flex items-center gap-3 relative rounded-lg border-l-4 bg-[#fffdf5] p-3 shadow-sm",
       checkbox: "accent-[#e05a5a]",
-      editButton: "min-w-0 flex-1 text-left",
+      editButton: "min-w-0 flex-1 text-left transition",
       time: "font-kai text-xs text-[#4a7bb5] tabular-nums",
       title: "font-kai truncate text-sm text-[#4a3f35]",
       doneTitle: "font-kai line-through decoration-[#e05a5a] decoration-2 truncate text-sm text-[#4a3f35]",
@@ -344,10 +180,10 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       inputLabel: "font-kai text-sm text-[#8a7a66]",
       input: "font-kai mt-1 w-full rounded-lg border-2 border-dashed border-[#d8cba8] bg-white/60 px-3 py-2 text-[#4a3f35] focus:border-[#4a7bb5] focus:outline-none",
       cancel: "font-kai text-sm text-[#8a7a66] transition hover:text-[#4a3f35]",
-      save: "font-hand rounded-lg bg-[#4a7bb5] px-4 py-2 text-white",
+      save: "font-hand rounded-lg bg-[#4a7bb5] px-4 py-2 text-white transition",
     },
     viewTab: {
-      active: "rounded-full bg-[#4a3f35] px-4 py-1.5 font-kai text-sm text-white",
+      active: "rounded-full bg-[#4a3f35] px-4 py-1.5 font-kai text-sm text-white transition",
       inactive: "rounded-full px-4 py-1.5 font-kai text-sm text-[#8a7a66] transition hover:bg-[#f5edda]",
     },
     weekView: {
@@ -365,96 +201,4 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
     },
   },
 
-  // 主题 7：现代渐变
-  7: {
-    main: "relative min-h-screen overflow-hidden bg-white",
-    viewPanel: "rounded-2xl border border-neutral-200 bg-white/80 p-5 shadow-xl shadow-neutral-200/50 backdrop-blur",
-    dotColors: ["#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#0ea5e9"],
-    itemColors: ["#8b5cf6", "#ec4899", "#f59e0b", "#10b981"],
-    decorations: (
-      <>
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -left-24 -top-24 h-96 w-96 rounded-full bg-gradient-to-br from-violet-400 to-fuchsia-400 opacity-30 blur-3xl"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -bottom-24 -right-24 h-96 w-96 rounded-full bg-gradient-to-br from-amber-300 to-orange-400 opacity-30 blur-3xl"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute left-1/2 top-1/3 h-72 w-72 -translate-x-1/2 rounded-full bg-gradient-to-br from-teal-300 to-emerald-400 opacity-25 blur-3xl"
-        />
-      </>
-    ),
-    header: {
-      eyebrow: "Modern Daily Planner",
-      eyebrowClass: "text-xs font-bold uppercase tracking-[0.3em] text-neutral-400",
-      title: "渐变日程",
-      titleClass: "animate-gradient-move mt-3 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-amber-500 bg-clip-text text-5xl font-black tracking-tight text-transparent",
-    },
-    sectionTitle: "text-base font-bold text-neutral-900",
-    weekdayHeader: "py-1 text-center text-xs font-bold text-neutral-400",
-    navButton: "rounded-xl border border-neutral-200 px-3 py-1.5 text-sm font-medium transition hover:border-violet-300 hover:text-violet-600",
-    card: "rounded-2xl border border-neutral-200 bg-white/80 p-5 shadow-xl shadow-neutral-200/50 backdrop-blur",
-    button: { primary: "rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-5 py-2.5 font-bold text-white shadow-lg shadow-fuchsia-200 transition hover:opacity-90" },
-    cell: {
-      base: "flex h-24 flex-col items-center rounded-2xl pt-2 transition",
-      hover: "hover:scale-[1.02] hover:bg-white",
-      num: "inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold",
-      plain: "text-neutral-900",
-      outside: "text-neutral-300",
-      today: "animate-gradient-move bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-fuchsia-200",
-      selected: "bg-violet-50 text-neutral-900 ring-2 ring-violet-400",
-      todayWins: true,
-    },
-    dot: "h-2 w-2 rounded-full bg-[#8b5cf6]",
-    dotMore: "text-[10px] font-bold text-violet-500",
-    todayMark: "text-violet-500",
-    dayList: {
-      dateLabel: "text-sm font-semibold text-neutral-500",
-      itemRow: "flex items-center gap-3 rounded-xl border-l-4 bg-white p-3 shadow-sm",
-      checkbox: "accent-violet-500",
-      editButton: "min-w-0 flex-1 text-left",
-      time: "text-xs font-bold text-neutral-400 tabular-nums",
-      title: "truncate text-sm font-bold text-neutral-900",
-      doneTitle: "truncate text-sm font-bold text-neutral-400 line-through",
-      desc: "truncate text-xs text-neutral-400",
-      delete: "shrink-0 text-neutral-300 transition hover:text-red-500",
-      empty: "mt-6 text-sm text-neutral-400",
-    },
-    dialog: {
-      overlay: "fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/30 backdrop-blur-sm",
-      panel: "w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl",
-      bodyClass: "p-6",
-      decor: (
-        <div
-          aria-hidden
-          className="h-1.5 w-full rounded-t-2xl bg-gradient-to-r from-violet-500 via-fuchsia-500 to-amber-400"
-        />
-      ),
-      title: "text-lg font-bold text-neutral-900",
-      inputLabel: "text-sm font-semibold text-neutral-600",
-      input: "mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-violet-400",
-      cancel: "text-sm font-semibold text-neutral-500 transition hover:text-neutral-700",
-      save: "rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-fuchsia-200 transition hover:opacity-90",
-    },
-    viewTab: {
-      active: "rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500 px-4 py-1.5 text-sm font-bold text-white shadow-lg shadow-fuchsia-200",
-      inactive: "rounded-full px-4 py-1.5 text-sm font-medium text-neutral-500 transition hover:bg-violet-50 hover:text-violet-600",
-    },
-    weekView: {
-      column: "flex min-h-44 flex-col rounded-2xl border border-neutral-200 p-2",
-      columnHighlight: "border-violet-300 bg-violet-50",
-      columnHeader: "text-xs font-semibold text-neutral-700 transition hover:text-violet-600",
-      addDay: "text-xs text-neutral-400 transition hover:text-violet-600",
-      eventRow: "flex items-center gap-1 rounded px-1 py-0.5 transition hover:bg-violet-50",
-    },
-    yearView: {
-      monthCard: "rounded-2xl border border-neutral-200 bg-white/80 p-3 shadow-sm backdrop-blur",
-      monthTitle: "mb-1.5 text-sm font-bold text-neutral-800 transition hover:text-violet-600",
-      miniCell: "relative flex aspect-square items-center justify-center rounded text-[10px] font-medium text-neutral-500 transition hover:bg-violet-50",
-      miniDot: "absolute bottom-0.5 h-1 w-1 rounded-full bg-violet-500",
-    },
-  },
 };

@@ -12,4 +12,21 @@ describe("globals.css", () => {
     expect(css).toContain(".anim-slide-up");
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
   });
+
+  it("全局按钮反馈动画存在且排除禁用态", () => {
+    const css = readFileSync("src/app/globals.css", "utf-8");
+    expect(css).toContain("button:hover:not(:disabled) { transform: scale(1.02); }");
+    expect(css).toContain("button:active:not(:disabled) { transform: scale(0.96); }");
+    expect(css).toContain("button {");
+    expect(css).toContain("transition-duration: 150ms");
+    expect(css).toContain("@media (hover: hover)");
+  });
+
+  it("已删除主题的动画规则不再存在", () => {
+    const css = readFileSync("src/app/globals.css", "utf-8");
+    expect(css).not.toContain("gradient-move");
+    expect(css).not.toContain("float-slow");
+    expect(css).not.toContain("animate-gradient-move");
+    expect(css).not.toContain("animate-float-slow");
+  });
 });

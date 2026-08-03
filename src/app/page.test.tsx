@@ -22,13 +22,13 @@ describe("home page", () => {
   });
 
   it("保存过时重定向到保存的主题", async () => {
-    localStorage.setItem(THEME_STORAGE_KEY, "/style-7");
+    localStorage.setItem(THEME_STORAGE_KEY, "/style-6");
     render(<Home />);
-    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/style-7"));
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/style-6"));
   });
 
   it("已删除主题回退默认", async () => {
-    localStorage.setItem(THEME_STORAGE_KEY, "/style-3");
+    localStorage.setItem(THEME_STORAGE_KEY, "/style-2");
     render(<Home />);
     await waitFor(() => expect(replaceMock).toHaveBeenCalledWith(DEFAULT_THEME_PATH));
   });

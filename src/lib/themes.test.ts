@@ -12,14 +12,14 @@ afterEach(() => {
 });
 
 describe("themes", () => {
-  it("保留恰好 5 个主题，编号为 1/2/5/6/7", () => {
-    expect(THEMES).toHaveLength(5);
-    expect(THEMES.map((t) => t.n)).toEqual([1, 2, 5, 6, 7]);
+  it("保留恰好 2 个主题，编号为 1/6", () => {
+    expect(THEMES).toHaveLength(2);
+    expect(THEMES.map((t) => t.n)).toEqual([1, 6]);
   });
 
   it("路径唯一且与编号一致", () => {
     const paths = THEMES.map((t) => t.path);
-    expect(new Set(paths).size).toBe(5);
+    expect(new Set(paths).size).toBe(2);
     for (const t of THEMES) expect(t.path).toBe(`/style-${t.n}`);
   });
 
@@ -28,12 +28,12 @@ describe("themes", () => {
   });
 
   it("保存后读回有效路径", () => {
-    saveThemePath("/style-7");
-    expect(getSavedThemePath()).toBe("/style-7");
+    saveThemePath("/style-6");
+    expect(getSavedThemePath()).toBe("/style-6");
   });
 
   it("已删除主题/垃圾值回退默认", () => {
-    localStorage.setItem(THEME_STORAGE_KEY, "/style-3");
+    localStorage.setItem(THEME_STORAGE_KEY, "/style-2");
     expect(getSavedThemePath()).toBe(DEFAULT_THEME_PATH);
     localStorage.setItem(THEME_STORAGE_KEY, "garbage");
     expect(getSavedThemePath()).toBe(DEFAULT_THEME_PATH);
