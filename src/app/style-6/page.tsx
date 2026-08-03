@@ -157,7 +157,7 @@ export default function Style6() {
 
             <div className="mb-1.5 grid grid-cols-7 gap-1.5">
               {WEEKDAY_NAMES.map((w) => (
-                <div key={w} className="font-kai py-1 text-center text-xs text-neutral-400">
+                <div key={w} className="font-kai py-1 text-center text-xs text-neutral-500">
                   {w}
                 </div>
               ))}
@@ -187,7 +187,7 @@ export default function Style6() {
                             ? "ring-2 ring-[#e05a5a] text-[#4a3f35]"
                             : inMonth
                               ? "text-[#4a3f35]"
-                              : "text-neutral-400")
+                              : "text-neutral-500")
                       }
                     >
                       {d.getDate()}
@@ -220,7 +220,7 @@ export default function Style6() {
             </button>
 
             {dayEvents.length === 0 ? (
-              <p className="font-kai mt-6 text-sm text-neutral-400">这一天没有日程</p>
+              <p className="font-kai mt-6 text-sm text-neutral-500">这一天没有日程</p>
             ) : (
               <ul className="mt-5 space-y-4">
                 {dayEvents.map((e, idx) => (
@@ -260,7 +260,7 @@ export default function Style6() {
                           {e.title}
                         </div>
                         {e.description && (
-                          <div className="font-kai truncate text-xs text-neutral-400">
+                          <div className="font-kai truncate text-xs text-neutral-500">
                             {e.description}
                           </div>
                         )}
@@ -269,7 +269,7 @@ export default function Style6() {
                         type="button"
                         onClick={() => deleteEvent(e.id)}
                         aria-label="删除"
-                        className="shrink-0 text-neutral-400 transition hover:text-red-500"
+                        className="shrink-0 text-neutral-500 transition hover:text-red-500"
                       >
                         ✕
                       </button>
