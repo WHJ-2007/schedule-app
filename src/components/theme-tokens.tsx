@@ -12,6 +12,7 @@ export type ThemeTokens = {
   cell: { base: string; hover: string; num: string; plain: string; outside: string; today: string; selected: string;
           indicatorCap?: number;          // 事件指示器上限（默认 3）
           indicatorPills?: boolean;       // true = 用时间药丸而非空圆点
+          indicatorArea?: string;         // 事件指示区容器类（默认 "mt-1.5 flex h-4 items-center justify-center gap-1"）
           selectedOnCell?: boolean;       // true = selected 高亮作用于整个格子按钮而非数字圈
           todayWins?: boolean };          // true = 今天样式优先于选中样式
   dot: string;                           // 事件数量圆点
@@ -137,6 +138,7 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       selected: "bg-white/30 hover:bg-white/40",
       indicatorPills: true,
       indicatorCap: 2,
+      indicatorArea: "mt-1.5 flex h-4 max-w-full items-center justify-center gap-1 overflow-hidden px-1",
       selectedOnCell: true,
     },
     dot: "truncate rounded-full bg-white/60 px-1.5 py-0.5 text-[10px] text-purple-900",

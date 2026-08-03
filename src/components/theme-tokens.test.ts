@@ -33,6 +33,7 @@ describe("theme tokens", () => {
     expect(THEME_TOKENS[2].viewPanel).toBeDefined();
     expect(THEME_TOKENS[2].cell.indicatorPills).toBe(true);
     expect(THEME_TOKENS[2].cell.indicatorCap).toBe(2);
+    expect(THEME_TOKENS[2].cell.indicatorArea).toContain("overflow-hidden");
     expect(THEME_TOKENS[2].cell.selectedOnCell).toBe(true);
     expect(THEME_TOKENS[2].cell.selected).toBe("bg-white/30 hover:bg-white/40");
     expect(THEME_TOKENS[2].dialog.bodyClass).toBeTruthy();
