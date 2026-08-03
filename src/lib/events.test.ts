@@ -107,4 +107,10 @@ describe("persistence", () => {
     localStorage.setItem(STORAGE_KEY, "{{{not json");
     expect(() => loadEvents()).not.toThrow();
   });
+
+  it("drops wrong-shape items instead of crashing", () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([{ bad: true }, { id: "x", title: 42, date: "2026-08-03", time: "", description: "", done: false }]));
+    const events = loadEvents();
+    expect(events).toEqual([]);
+  });
 });

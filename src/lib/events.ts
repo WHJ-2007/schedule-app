@@ -86,6 +86,12 @@ export function toggleEventDone(list: ScheduleEvent[], id: string): ScheduleEven
   return list.map((e) => (e.id === id ? { ...e, done: !e.done } : e));
 }
 
+export function isValidEvent(e: unknown): e is ScheduleEvent {
+  if (typeof e !== "object" || e === null) return false;
+  const o = e as Record<string, unknown>;
+  return typeof o.id === "string" && typeof o.title === "string" && typeof o.date === "string";
+}
+
 export function saveEvents(list: ScheduleEvent[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
@@ -101,7 +107,7 @@ export function loadEvents(): ScheduleEvent[] {
   }
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as ScheduleEvent[]) : [];
+    return Array.isArray(parsed) ? parsed.filter(isValidEvent) : [];
   } catch {
     return [];
   }
