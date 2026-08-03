@@ -30,8 +30,12 @@ function renderTimeline(eventsByDay: ScheduleEvent[][], overrides: Partial<Param
   return render(<WeekTimeline {...props} />);
 }
 
+function expandFold() {
+  fireEvent.click(screen.getByRole("button", { name: /展开凌晨时段/ }));
+}
+
 describe("WeekTimeline", () => {
-  it("渲染 24 个小时刻度", () => {
+  it("渲染小时刻度（默认折叠凌晨时段）", () => {
     renderTimeline(emptyWeek);
     expect(screen.getByText("0:00")).toBeInTheDocument();
     expect(screen.getByText("8:00")).toBeInTheDocument();
@@ -55,8 +59,8 @@ describe("WeekTimeline", () => {
     ];
     renderTimeline(events);
     const block = screen.getByRole("button", { name: /编辑 晨会/ });
-    // 9.5h * 48px/h = 456px；1.5h * 48px/h = 72px
-    expect(block.style.top).toBe("456px");
+    // 折叠凌晨后 9:30 位于 88(条带下沿) + 150min*0.8 = 208px；1.5h * 48px/h = 72px
+    expect(block.style.top).toBe("208px");
     expect(block.style.height).toBe("72px");
     expect(block.textContent).toContain("09:30–11:00");
   });
@@ -77,7 +81,7 @@ describe("WeekTimeline", () => {
     ];
     renderTimeline(events);
     const block = screen.getByRole("button", { name: /编辑 阅读/ });
-    expect(block.style.top).toBe("1008px"); // 21h * 48px/h
+    expect(block.style.top).toBe("760px"); // 88 + (1260-420)min * 0.8px/min
     expect(block.style.height).toBe("48px"); // 默认 1 小时
   });
 
@@ -104,6 +108,7 @@ describe("WeekTimeline", () => {
   it("拖选时间段后回调带上日期与起止时间", () => {
     const onAddDay = vi.fn();
     renderTimeline(emptyWeek, { onAddDay });
+    expandFold();
     const col = document.querySelector('[data-date="2026-08-03"]')!;
     // 96px → 2:00，144px → 3:00（列顶视口坐标 0，jsdom rect 全 0）
     fireEvent.mouseDown(col, { clientY: 96 });
@@ -115,6 +120,7 @@ describe("WeekTimeline", () => {
   it("向上拖选时起止时间取最小最大", () => {
     const onAddDay = vi.fn();
     renderTimeline(emptyWeek, { onAddDay });
+    expandFold();
     const col = document.querySelector('[data-date="2026-08-03"]')!;
     fireEvent.mouseDown(col, { clientY: 144 }); // 3:00
     fireEvent.mouseMove(col, { clientY: 96 }); // 2:00
@@ -124,6 +130,7 @@ describe("WeekTimeline", () => {
 
   it("拖选过程中显示高亮块，松开后消失", () => {
     renderTimeline(emptyWeek);
+    expandFold();
     const col = document.querySelector('[data-date="2026-08-03"]')!;
     fireEvent.mouseDown(col, { clientY: 96 });
     fireEvent.mouseMove(col, { clientY: 144 });
@@ -138,6 +145,7 @@ describe("WeekTimeline", () => {
   it("原地单击不触发创建，仅清除高亮", () => {
     const onAddDay = vi.fn();
     renderTimeline(emptyWeek, { onAddDay });
+    expandFold();
     const col = document.querySelector('[data-date="2026-08-03"]')!;
     fireEvent.mouseDown(col, { clientY: 96 }); // 2:00
     expect(col.querySelector('[data-testid="drag-select"]')).not.toBeNull();
@@ -149,6 +157,7 @@ describe("WeekTimeline", () => {
   it("拖动不足一个槽位不触发（移动 15 分钟仍吸附回起点）", () => {
     const onAddDay = vi.fn();
     renderTimeline(emptyWeek, { onAddDay });
+    expandFold();
     const col = document.querySelector('[data-date="2026-08-03"]')!;
     fireEvent.mouseDown(col, { clientY: 96 }); // 2:00
     fireEvent.mouseMove(col, { clientY: 108 }); // 2:15，仍吸附 2:00
@@ -186,5 +195,77 @@ describe("WeekTimeline", () => {
     const { container } = renderTimeline(emptyWeek);
     const col = container.querySelector('[data-date="2026-08-03"]')!;
     expect(col.className).toContain("border-blue-200");
+  });
+});
+
+describe("WeekTimeline (凌晨折叠)", () => {
+  it("默认折叠：1:00–6:00 刻度隐藏，显示折叠条", () => {
+    renderTimeline(emptyWeek);
+    expect(screen.queryByText("1:00")).toBeNull();
+    expect(screen.queryByText("5:00")).toBeNull();
+    expect(screen.getByText("0:00")).toBeInTheDocument();
+    expect(screen.getByText("7:00")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /展开凌晨时段/ })).toBeInTheDocument();
+  });
+
+  it("点击折叠条展开，凌晨刻度恢复", () => {
+    renderTimeline(emptyWeek);
+    expandFold();
+    expect(screen.getByText("1:00")).toBeInTheDocument();
+    expect(screen.getByText("5:00")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /收起凌晨时段/ })).toBeInTheDocument();
+  });
+
+  it("展开后可再收起", () => {
+    renderTimeline(emptyWeek);
+    expandFold();
+    fireEvent.click(screen.getByRole("button", { name: /收起凌晨时段/ }));
+    expect(screen.queryByText("1:00")).toBeNull();
+    expect(screen.getByRole("button", { name: /展开凌晨时段/ })).toBeInTheDocument();
+  });
+
+  it("折叠区事件隐藏并计入折叠条数量", () => {
+    const events: ScheduleEvent[][] = [
+      [
+        {
+          id: "e",
+          title: "夜班",
+          date: "2026-08-03",
+          time: "02:00",
+          endTime: "03:00",
+          description: "",
+          done: false,
+        },
+      ],
+      ...Array.from({ length: 6 }, () => []),
+    ];
+    renderTimeline(events);
+    expect(screen.queryByRole("button", { name: /编辑 夜班/ })).toBeNull();
+    const band = screen.getByRole("button", { name: /展开凌晨时段/ });
+    expect(band.textContent).toContain("1 项日程");
+    // 展开后事件可见
+    expandFold();
+    expect(screen.getByRole("button", { name: /编辑 夜班/ })).toBeInTheDocument();
+  });
+
+  it("折叠时在折叠条上按下不开始拖选", () => {
+    const onAddDay = vi.fn();
+    renderTimeline(emptyWeek, { onAddDay });
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    // 60px 位于折叠条内（48–88px）
+    fireEvent.mouseDown(col, { clientY: 60 });
+    fireEvent.mouseMove(col, { clientY: 120 });
+    fireEvent.mouseUp(col);
+    expect(onAddDay).not.toHaveBeenCalled();
+  });
+
+  it("折叠条上方 0:00 区仍可拖选（不越过凌晨区）", () => {
+    const onAddDay = vi.fn();
+    renderTimeline(emptyWeek, { onAddDay });
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    fireEvent.mouseDown(col, { clientY: 4 }); // 0:00（吸附）
+    fireEvent.mouseMove(col, { clientY: 44 }); // 1:00（吸附，再往下就进入折叠条）
+    fireEvent.mouseUp(col);
+    expect(onAddDay).toHaveBeenCalledWith("2026-08-03", "00:00", "01:00");
   });
 });

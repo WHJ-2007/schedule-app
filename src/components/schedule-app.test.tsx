@@ -150,6 +150,7 @@ describe("ScheduleApp (switcher & week view)", () => {
   it("周视图拖选时间段：弹窗预填起止时间，保存后时间轴出现事件块", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.click(screen.getByRole("button", { name: /展开凌晨时段/ }));
     const col = document.querySelector(`[data-date="${toDateKey(getWeekDates(new Date())[0])}"]`)!;
     // 96px → 2:00，144px → 3:00
     fireEvent.mouseDown(col, { clientY: 96 });
@@ -285,20 +286,19 @@ describe("ScheduleApp (selection bubble)", () => {
 });
 
 describe("ScheduleApp (page-turn animation)", () => {
-  const sectionOf = (title: string) => screen.getByText(title).closest("section")!;
+  // 动画只作用于日期区域容器（data-testid="view-anim"），标题与导航按钮不参与
+  const animArea = () => screen.getByTestId("view-anim");
 
-  it("月视图：下月从右滑入、上月从左滑入", () => {
+  it("月视图：下月从右滑入、上月从左滑入（仅日期区域）", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
     const now = new Date();
     fireEvent.click(screen.getByRole("button", { name: /下月/ }));
     const next = addMonths(now.getFullYear(), now.getMonth(), 1);
-    expect(sectionOf(formatMonthTitle(next.year, next.monthIndex)).className).toContain(
-      "anim-slide-in-right"
-    );
+    expect(screen.getByText(formatMonthTitle(next.year, next.monthIndex))).toBeInTheDocument();
+    expect(animArea().className).toContain("anim-slide-in-right");
     fireEvent.click(screen.getByRole("button", { name: /上月/ }));
-    expect(sectionOf(formatMonthTitle(now.getFullYear(), now.getMonth())).className).toContain(
-      "anim-slide-in-left"
-    );
+    expect(screen.getByText(formatMonthTitle(now.getFullYear(), now.getMonth()))).toBeInTheDocument();
+    expect(animArea().className).toContain("anim-slide-in-left");
   });
 
   it("年视图：下一年从右滑入、上一年从左滑入（与月视图一致）", () => {
@@ -306,12 +306,14 @@ describe("ScheduleApp (page-turn animation)", () => {
     fireEvent.click(screen.getByRole("button", { name: "年" }));
     const year = new Date().getFullYear();
     fireEvent.click(screen.getByRole("button", { name: /下一年/ }));
-    expect(sectionOf(formatYearTitle(year + 1)).className).toContain("anim-slide-in-right");
+    expect(screen.getByText(formatYearTitle(year + 1))).toBeInTheDocument();
+    expect(animArea().className).toContain("anim-slide-in-right");
     fireEvent.click(screen.getByRole("button", { name: /上一年/ }));
-    expect(sectionOf(formatYearTitle(year)).className).toContain("anim-slide-in-left");
+    expect(screen.getByText(formatYearTitle(year))).toBeInTheDocument();
+    expect(animArea().className).toContain("anim-slide-in-left");
   });
 
-  it("周视图：下一周从右滑入、上一周从左滑入（年月周标题跟随）", () => {
+  it("周视图：下一周从右滑入、上一周从左滑入", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const now = new Date();
@@ -319,9 +321,11 @@ describe("ScheduleApp (page-turn animation)", () => {
     const nextWeek = getWeekDates(
       addDays(now.getFullYear(), now.getMonth(), now.getDate(), 7)
     );
-    expect(sectionOf(formatWeekTitle(nextWeek)).className).toContain("anim-slide-in-right");
+    expect(screen.getByText(formatWeekTitle(nextWeek))).toBeInTheDocument();
+    expect(animArea().className).toContain("anim-slide-in-right");
     fireEvent.click(screen.getByRole("button", { name: /上一周/ }));
-    expect(sectionOf(formatWeekTitle(getWeekDates(now))).className).toContain("anim-slide-in-left");
+    expect(screen.getByText(formatWeekTitle(getWeekDates(now)))).toBeInTheDocument();
+    expect(animArea().className).toContain("anim-slide-in-left");
   });
 
   it.each([1, 6])("主题 %i 翻月动画与功能一致", (n) => {
@@ -329,9 +333,7 @@ describe("ScheduleApp (page-turn animation)", () => {
     const now = new Date();
     fireEvent.click(screen.getByRole("button", { name: /下月/ }));
     const next = addMonths(now.getFullYear(), now.getMonth(), 1);
-    expect(sectionOf(formatMonthTitle(next.year, next.monthIndex)).className).toContain(
-      "anim-slide-in-right"
-    );
+    expect(animArea().className).toContain("anim-slide-in-right");
     // 功能一致：翻月后日期可点选
     const grid = getMonthGrid(next.year, next.monthIndex);
     const counts = new Map<number, number>();

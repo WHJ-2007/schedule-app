@@ -204,7 +204,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
           </header>
 
           <div className="mb-6 flex gap-2">
-            {(["week", "month", "year"] as ViewMode[]).map((v) => (
+            {(["year", "month", "week"] as ViewMode[]).map((v) => (
               <button
                 key={v}
                 type="button"
@@ -212,7 +212,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                 aria-pressed={viewMode === v}
                 className={viewMode === v ? tokens.viewTab.active : tokens.viewTab.inactive}
               >
-                {v === "week" ? "周" : v === "month" ? "月" : "年"}
+                {v === "year" ? "年" : v === "month" ? "月" : "周"}
               </button>
             ))}
           </div>
@@ -221,22 +221,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
             {viewMode === "month" && (
             <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
               {/* 月历 */}
-              <section
-                key={`${viewYear}-${viewMonth}`}
-                onAnimationEnd={(e) => {
-                  if (e.target === e.currentTarget) setNavDir(null);
-                }}
-                className={[
-                  tokens.viewPanel,
-                  navDir === "left"
-                    ? "anim-slide-in-left"
-                    : navDir === "right"
-                      ? "anim-slide-in-right"
-                      : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-              >
+              <section className={tokens.viewPanel}>
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className={tokens.sectionTitle}>{formatMonthTitle(viewYear, viewMonth)}</h2>
                   <div className="flex gap-2">
@@ -262,7 +247,21 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
 
                 <div
                   ref={gridRef}
-                  className={"relative grid grid-cols-7 " + (tokens.cellGridGap ?? "gap-1.5")}
+                  key={`${viewYear}-${viewMonth}`}
+                  data-testid="view-anim"
+                  onAnimationEnd={(e) => {
+                    if (e.target === e.currentTarget) setNavDir(null);
+                  }}
+                  className={[
+                    "relative grid grid-cols-7 " + (tokens.cellGridGap ?? "gap-1.5"),
+                    navDir === "left"
+                      ? "anim-slide-in-left"
+                      : navDir === "right"
+                        ? "anim-slide-in-right"
+                        : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                 >
                   {grid.map((d) => {
                     const key = toDateKey(d);
@@ -391,20 +390,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
             </div>
             )}
             {viewMode === "week" && (
-              <section
-                key={`week-${toDateKey(weekDates[0])}`}
-                onAnimationEnd={(e) => {
-                  if (e.target === e.currentTarget) setNavDir(null);
-                }}
-                className={[
-                  tokens.viewPanel,
-                  navDir === "left"
-                    ? "anim-slide-in-left"
-                    : navDir === "right"
-                      ? "anim-slide-in-right"
-                      : "",
-                ].join(" ")}
-              >
+              <section className={tokens.viewPanel}>
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className={tokens.sectionTitle}>{formatWeekTitle(weekDates)}</h2>
                   <div className="flex gap-2">
@@ -420,37 +406,38 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                   </div>
                 </div>
 
-                <WeekTimeline
-                  tokens={tokens}
-                  dates={weekDates}
-                  eventsByDay={weekEvents}
-                  anchorKey={selectedDateKey}
-                  today={today}
-                  onJumpToMonth={jumpToMonth}
-                  onAddDay={openAdd}
-                  onEdit={openEdit}
-                  onToggleDone={toggleDone}
-                  onDelete={deleteEvent}
-                />
+                <div
+                  data-testid="view-anim"
+                  onAnimationEnd={(e) => {
+                    if (e.target === e.currentTarget) setNavDir(null);
+                  }}
+                  className={[
+                    navDir === "left"
+                      ? "anim-slide-in-left"
+                      : navDir === "right"
+                        ? "anim-slide-in-right"
+                        : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  <WeekTimeline
+                    tokens={tokens}
+                    dates={weekDates}
+                    eventsByDay={weekEvents}
+                    anchorKey={selectedDateKey}
+                    today={today}
+                    onJumpToMonth={jumpToMonth}
+                    onAddDay={openAdd}
+                    onEdit={openEdit}
+                    onToggleDone={toggleDone}
+                    onDelete={deleteEvent}
+                  />
+                </div>
               </section>
             )}
             {viewMode === "year" && (
-              <section
-                key={viewYear}
-                onAnimationEnd={(e) => {
-                  if (e.target === e.currentTarget) setNavDir(null);
-                }}
-                className={[
-                  tokens.viewPanel,
-                  navDir === "left"
-                    ? "anim-slide-in-left"
-                    : navDir === "right"
-                      ? "anim-slide-in-right"
-                      : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-              >
+              <section className={tokens.viewPanel}>
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className={tokens.sectionTitle}>{formatYearTitle(viewYear)}</h2>
                   <div className="flex gap-2">
@@ -466,7 +453,23 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+                <div
+                  key={viewYear}
+                  data-testid="view-anim"
+                  onAnimationEnd={(e) => {
+                    if (e.target === e.currentTarget) setNavDir(null);
+                  }}
+                  className={[
+                    "grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4",
+                    navDir === "left"
+                      ? "anim-slide-in-left"
+                      : navDir === "right"
+                        ? "anim-slide-in-right"
+                        : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
                   {yearMonths.map((m, mi) => (
                     <div
                       key={m.getMonth()}

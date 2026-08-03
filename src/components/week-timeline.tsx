@@ -16,6 +16,10 @@ const HOUR_PX = 48; // 每小时高度（像素）
 const SNAP_MIN = 30; // 拖选吸附粒度（分钟）
 const GUTTER = 48; // 左侧刻度列宽度
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const FOLD_START = 60; // 折叠区起点 1:00（分钟）
+const FOLD_END = 420; // 折叠区终点 7:00（分钟），折叠含 1:00–6:00 共六行
+const FOLD_BAND_H = 40; // 折叠时条带高度
+const EXPAND_BAND_H = 26; // 展开时条带高度
 
 type DragState = {
   col: number;
@@ -50,23 +54,68 @@ export default function WeekTimeline({
   onDelete: (id: string) => void;
 }) {
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [folded, setFolded] = useState(true); // 默认折叠凌晨 1:00–6:00
   // 拖拽状态同步进 ref：window 监听只挂载一次，快速单击时 mouseup
   // 也能被捕获（useEffect 被动绑定在真实浏览器是异步的，会丢快速单击）
   const dragRef = useRef<DragState | null>(null);
   const onAddDayRef = useRef(onAddDay);
   onAddDayRef.current = onAddDay;
+  // 折叠状态同步进 ref：window 监听闭包只捕获首次渲染的值，必须读 ref
+  const foldedRef = useRef(folded);
+  foldedRef.current = folded;
 
   const snap = (minutes: number) => Math.round(minutes / SNAP_MIN) * SNAP_MIN;
 
-  const minutesAt = (clientY: number, top: number) =>
-    snap(((clientY - top) / HOUR_PX) * 60);
+  const bandTop = folded ? HOUR_PX : 7 * HOUR_PX; // 条带 y：折叠时在 0:00 与 7:00 之间，展开时在 6:00 与 7:00 之间
+  const bandH = folded ? FOLD_BAND_H : EXPAND_BAND_H;
+  const dayHeight = (folded ? 18 : 24) * HOUR_PX + bandH;
+
+  // 分钟 → 可见 y 坐标；折叠时 1:00–6:59 收缩进条带（事件渲染前已过滤该区段）
+  const yOf = (m: number) => {
+    if (folded && m >= FOLD_START && m < FOLD_END) return bandTop + bandH;
+    if (folded && m >= FOLD_END) return bandTop + bandH + ((m - FOLD_END) * HOUR_PX) / 60;
+    return (m * HOUR_PX) / 60;
+  };
+
+  // 可见 y 坐标 → 分钟；条带区域返回 null（不创建/不更新拖选）
+  const minutesAtY = (y: number) => {
+    const f = foldedRef.current;
+    const bTop = f ? HOUR_PX : 7 * HOUR_PX;
+    const bH = f ? FOLD_BAND_H : EXPAND_BAND_H;
+    if (y < bTop) return snap((y / HOUR_PX) * 60);
+    if (y < bTop + bH) return null;
+    return snap(((y - bTop - bH) / HOUR_PX) * 60 + FOLD_END);
+  };
+
+  const hourTop = (h: number) => {
+    if (h < 1) return h * HOUR_PX;
+    if (h >= 7) return bandTop + bandH + (h - 7) * HOUR_PX;
+    return folded ? null : h * HOUR_PX; // 折叠区内刻度
+  };
+
+  const visibleHours = folded ? [0, ...HOURS.slice(7)] : HOURS;
+  const lineYs = HOURS.slice(1)
+    .map(hourTop)
+    .filter((y): y is number => y !== null);
+
+  const foldCount = eventsByDay.reduce(
+    (sum, day) =>
+      sum +
+      day.filter((e) => {
+        if (!e.time) return false;
+        const m = parseTimeToMinutes(e.time);
+        return m >= FOLD_START && m < FOLD_END;
+      }).length,
+    0
+  );
 
   // 拖选期间在 window 上监听，鼠标移出列外仍持续；mouse 事件 jsdom 支持良好
   useEffect(() => {
     const move = (e: MouseEvent) => {
       const d = dragRef.current;
       if (!d) return;
-      const cur = minutesAt(e.clientY, d.top);
+      const cur = minutesAtY(e.clientY - d.top);
+      if (cur == null) return; // 指针进入条带区域：保持原选区
       const start = Math.min(d.down, cur);
       const end = Math.max(d.down, cur);
       const next = { ...d, start, end: end === start ? end + SNAP_MIN : end };
@@ -93,13 +142,12 @@ export default function WeekTimeline({
 
   const handleDown = (e: React.MouseEvent<HTMLDivElement>, col: number, dateKey: string) => {
     const top = e.currentTarget.getBoundingClientRect().top;
-    const down = minutesAt(e.clientY, top);
+    const down = minutesAtY(e.clientY - top);
+    if (down == null) return; // 在条带上按下：交给条带按钮处理
     const d = { col, dateKey, top, down, start: down, end: down + SNAP_MIN };
     dragRef.current = d;
     setDrag(d);
   };
-
-  const dayHeight = HOURS.length * HOUR_PX;
 
   return (
     <div className={tokens.weekView.timeline}>
@@ -169,11 +217,11 @@ export default function WeekTimeline({
         </div>
       </div>
 
-      {/* 滚动区：左侧小时刻度 ＋ 右侧 7 列时间轴 */}
-      <div className="flex overflow-y-auto" style={{ maxHeight: 560 }}>
-        <div className="shrink-0" style={{ width: GUTTER, height: dayHeight }}>
-          {HOURS.map((h) => (
-            <div key={h} className="relative" style={{ height: HOUR_PX }}>
+      {/* 滚动区：左侧小时刻度 ＋ 右侧 7 列时间轴 ＋ 凌晨折叠条 */}
+      <div className="relative flex overflow-y-auto" style={{ maxHeight: 560 }}>
+        <div className="relative shrink-0" style={{ width: GUTTER, height: dayHeight }}>
+          {visibleHours.map((h) => (
+            <div key={h} className="absolute" style={{ top: hourTop(h)!, height: HOUR_PX }}>
               <span className={tokens.weekView.hourLabel}>{h}:00</span>
             </div>
           ))}
@@ -190,20 +238,16 @@ export default function WeekTimeline({
                 className={"relative min-w-0 " + (isAnchor ? tokens.weekView.columnHighlight : "")}
                 onMouseDown={(e) => handleDown(e, i, key)}
               >
-                {HOURS.slice(1).map((h) => (
-                  <div
-                    key={h}
-                    className={tokens.weekView.gridLine}
-                    style={{ top: h * HOUR_PX }}
-                  />
+                {lineYs.map((y) => (
+                  <div key={y} className={tokens.weekView.gridLine} style={{ top: y }} />
                 ))}
                 {drag && drag.col === i && (
                   <div
                     data-testid="drag-select"
                     className={tokens.weekView.dragSelect}
                     style={{
-                      top: (drag.start * HOUR_PX) / 60,
-                      height: ((drag.end - drag.start) * HOUR_PX) / 60,
+                      top: yOf(drag.start),
+                      height: yOf(drag.end) - yOf(drag.start),
                     }}
                   />
                 )}
@@ -211,6 +255,8 @@ export default function WeekTimeline({
                   const start = parseTimeToMinutes(e.time);
                   const end = e.endTime ? parseTimeToMinutes(e.endTime) : start + 60;
                   const duration = end > start ? end - start : 60;
+                  // 折叠时与凌晨区相交的事件整体收起，仅显示在折叠条计数里
+                  if (folded && start < FOLD_END && end > FOLD_START) return null;
                   return (
                     <button
                       key={e.id}
@@ -220,7 +266,7 @@ export default function WeekTimeline({
                       aria-label={`编辑 ${e.title}`}
                       className={tokens.weekView.eventBlock}
                       style={{
-                        top: (start * HOUR_PX) / 60,
+                        top: yOf(start),
                         height: (duration * HOUR_PX) / 60,
                       }}
                     >
@@ -241,6 +287,19 @@ export default function WeekTimeline({
             );
           })}
         </div>
+        {/* 凌晨折叠条：点击展开/收起 */}
+        <button
+          type="button"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => setFolded((f) => !f)}
+          aria-label={folded ? "展开凌晨时段 1:00–6:00" : "收起凌晨时段 1:00–6:00"}
+          className={"absolute inset-x-0 z-10 " + tokens.weekView.foldBand}
+          style={{ top: bandTop, height: bandH }}
+        >
+          {folded
+            ? `凌晨时段 1:00–6:00 已折叠${foldCount > 0 ? `（${foldCount} 项日程）` : ""} · 点击展开`
+            : "点击收起凌晨时段"}
+        </button>
       </div>
     </div>
   );

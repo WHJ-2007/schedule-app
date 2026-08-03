@@ -32,6 +32,7 @@ export type ThemeTokens = {
     eventBlock: string;      // 时间轴上按时间定位的事件块
     dragSelect: string;      // 拖选时间段高亮
     allDayItem: string;      // 全天事件胶囊
+    foldBand: string;        // 凌晨折叠条（配合 absolute inset-x-0 z-10 使用）
   };
   yearView: { monthCard: string; monthTitle: string; miniCell: string; miniDot: string };
   viewPanel?: string;      // 月历/周视图/年视图 section 的面板容器类（style-1 无 → 不填）
@@ -107,6 +108,7 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       eventBlock: "absolute inset-x-0.5 overflow-hidden rounded-md bg-blue-600 px-1.5 py-0.5 text-left text-white shadow-sm transition hover:bg-blue-700",
       dragSelect: "pointer-events-none absolute inset-x-0.5 rounded-md bg-blue-600/25",
       allDayItem: "block w-full truncate rounded bg-neutral-100 px-1.5 py-0.5 text-left text-[10px] text-neutral-700 transition hover:bg-neutral-200",
+      foldBand: "flex items-center justify-center gap-2 border-y border-neutral-200 bg-neutral-100/80 text-[10px] text-neutral-500 transition hover:bg-neutral-100",
     },
     yearView: {
       monthCard: "rounded-lg border border-neutral-100 p-3",
@@ -208,6 +210,7 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       eventBlock: "absolute inset-x-0.5 overflow-hidden rounded-md bg-[#e05a5a] px-1.5 py-0.5 text-left text-white shadow-sm transition hover:brightness-105",
       dragSelect: "pointer-events-none absolute inset-x-0.5 rounded-md bg-[#4a7bb5]/30",
       allDayItem: "font-kai block w-full truncate rounded bg-[#f5edda] px-1.5 py-0.5 text-left text-[10px] text-[#4a3f35] transition hover:bg-[#e9dcc0]",
+      foldBand: "font-kai flex items-center justify-center gap-2 border-y border-[#e5dcc8] bg-[#f3ecdc]/80 text-[10px] text-[#8a7a5c] transition hover:bg-[#efe7d3]",
     },
     yearView: {
       monthCard: "rounded-lg border border-[#e5dcc8] bg-[#fffdf5] p-3 shadow-sm",
