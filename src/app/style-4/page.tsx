@@ -118,7 +118,7 @@ export default function Style4() {
       <div className="relative z-10 mx-auto max-w-5xl px-6 py-12">
         <header className="mb-10">
           <p className="text-xs tracking-widest text-[#c9a2b5]">SWEET DAILY PLANNER</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-wide text-[#f08cae]">
+          <h1 className="mt-2 text-3xl font-bold tracking-wide text-[#e07b9e]">
             🌸 马卡龙日程
           </h1>
         </header>
@@ -155,7 +155,7 @@ export default function Style4() {
 
             <div className="mb-1.5 grid grid-cols-7 gap-1.5">
               {WEEKDAY_NAMES.map((w) => (
-                <div key={w} className="py-1 text-center text-xs font-semibold text-neutral-400">
+                <div key={w} className="py-1 text-center text-xs font-semibold text-neutral-500">
                   {w}
                 </div>
               ))}
@@ -180,7 +180,7 @@ export default function Style4() {
                       className={
                         "inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold " +
                         (isSelected
-                          ? "bg-[#ffb6c8] text-white"
+                          ? "bg-[#ffb6c8] text-[#b3405f]"
                           : isToday
                             ? "bg-[#a8e6cf] text-[#1f5f4a]"
                             : inMonth
@@ -211,13 +211,13 @@ export default function Style4() {
             <button
               type="button"
               onClick={openAdd}
-              className="mt-4 w-full rounded-full bg-[#ffb6c8] px-5 py-2.5 font-bold text-white shadow-md shadow-[#ffc8d8] transition hover:bg-[#f99cb4]"
+              className="mt-4 w-full rounded-full bg-[#ffb6c8] px-5 py-2.5 font-bold text-[#b3405f] shadow-md shadow-[#ffc8d8] transition hover:bg-[#f99cb4]"
             >
               ＋ 添加日程
             </button>
 
             {dayEvents.length === 0 ? (
-              <p className="mt-6 text-sm text-neutral-400">这一天没有日程</p>
+              <p className="mt-6 text-sm text-neutral-500">这一天没有日程</p>
             ) : (
               <ul className="mt-4 space-y-3">
                 {dayEvents.map((e) => (
@@ -333,7 +333,7 @@ export default function Style4() {
               </button>
               <button
                 type="submit"
-                className="rounded-full bg-[#ffb6c8] px-5 py-2 text-sm font-bold text-white shadow-md shadow-[#ffc8d8] transition hover:bg-[#f99cb4]"
+                className="rounded-full bg-[#ffb6c8] px-5 py-2 text-sm font-bold text-[#b3405f] shadow-md shadow-[#ffc8d8] transition hover:bg-[#f99cb4]"
               >
                 保存
               </button>
