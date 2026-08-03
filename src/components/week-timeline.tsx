@@ -82,6 +82,7 @@ export default function WeekTimeline({
   const [folded, setFolded] = useState(true); // 默认折叠凌晨 0:00–6:00
   const [hover, setHover] = useState<{ col: number; min: number | null } | null>(null); // 悬停高亮：列 + 分钟
   const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null); // 拖拽时间气泡
+  const [editAnchor, setEditAnchor] = useState<{ x: number; y: number } | null>(null); // 编辑按钮弹出位置（光标旁）
   const timelineRef = useRef<HTMLDivElement | null>(null);
 
   // 拖拽/选中状态同步进 ref：window 监听只挂载一次，闭包只捕获首次渲染值，
@@ -102,9 +103,10 @@ export default function WeekTimeline({
   const weekKeysRef = useRef(weekKeys);
   weekKeysRef.current = weekKeys;
 
-  // 翻周后选中项已离开可视范围：清空选中
+  // 翻周后选中项已离开可视范围：清空选中与编辑按钮
   useEffect(() => {
     setSelectedIds([]);
+    setEditAnchor(null);
   }, [dates]);
 
   const snap = (minutes: number) => Math.round(minutes / SNAP_MIN) * SNAP_MIN;
@@ -226,7 +228,7 @@ export default function WeekTimeline({
         });
       }
     };
-    const up = () => {
+    const up = (e: MouseEvent) => {
       // 事件挪动提交
       const m = moveRef.current;
       if (m) {
@@ -248,6 +250,9 @@ export default function WeekTimeline({
         moveRef.current = null;
         setMove(null);
         setTip(null);
+        // 挪动（或点击选中）结束后编辑按钮弹出在光标旁
+        const r = timelineRef.current?.getBoundingClientRect();
+        setEditAnchor({ x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) });
         return;
       }
       // 空白拖拽提交：矩形内有日程 → 框选；否则批量新建（横向跨几天）
@@ -258,6 +263,7 @@ export default function WeekTimeline({
       setTip(null);
       if (d.end - d.start <= SNAP_MIN) {
         setSelectedIds([]); // 空白单击：取消选中
+        setEditAnchor(null);
         return;
       }
       const colMin = Math.min(d.startCol, d.curCol);
@@ -273,7 +279,11 @@ export default function WeekTimeline({
       }
       if (hit.length > 0) {
         setSelectedIds(hit);
+        const r = timelineRef.current?.getBoundingClientRect();
+        setEditAnchor({ x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) });
       } else {
+        setSelectedIds([]); // 拖选空白新建：清掉残留选中
+        setEditAnchor(null);
         onAddDayRef.current(
           weekKeysRef.current.slice(colMin, colMax + 1),
           minutesToTime(d.start),
@@ -358,6 +368,10 @@ export default function WeekTimeline({
     moveRef.current = m;
     setMove(m);
   };
+
+  const editTarget = editAnchor
+    ? eventsByDay.flat().find((x) => x.id === selectedIds[0])
+    : undefined;
 
   return (
     <div ref={timelineRef} className={"relative " + tokens.weekView.timeline}>
@@ -505,8 +519,11 @@ export default function WeekTimeline({
                       role="button"
                       tabIndex={0}
                       aria-label={`日程 ${e.title}`}
-                      onClick={() => {
+                      onClick={(ev) => {
                         if (!selectedIds.includes(e.id)) setSelectedIds([e.id]);
+                        // 编辑按钮弹出在光标旁
+                        const r = timelineRef.current?.getBoundingClientRect();
+                        setEditAnchor({ x: ev.clientX - (r?.left ?? 0), y: ev.clientY - (r?.top ?? 0) });
                       }}
                       onMouseDown={(ev) => handleBlockDown(ev, e, i)}
                       className={
@@ -534,20 +551,6 @@ export default function WeekTimeline({
                       <span className="block truncate text-[10px] opacity-80">
                         {formatEventTime(e.time)}–{formatEventTime(e.endTime ?? "")}
                       </span>
-                      {isSelected && move == null && (
-                        <button
-                          type="button"
-                          onMouseDown={(ev) => ev.stopPropagation()}
-                          onClick={(ev) => {
-                            ev.stopPropagation();
-                            onEdit(e);
-                          }}
-                          aria-label={`编辑 ${e.title}`}
-                          className={tokens.weekView.eventEdit}
-                        >
-                          ✎
-                        </button>
-                      )}
                     </div>
                   );
                 })}
@@ -574,6 +577,18 @@ export default function WeekTimeline({
         <div className={tokens.weekView.dragTip} style={{ left: tip.x, top: tip.y }}>
           {tip.text}
         </div>
+      )}
+      {/* 编辑按钮：选中日程后弹出在光标旁，方便点击 */}
+      {editAnchor && editTarget && (
+        <button
+          type="button"
+          onClick={() => onEdit(editTarget)}
+          aria-label={`编辑 ${editTarget.title}`}
+          className={tokens.weekView.eventEdit}
+          style={{ left: editAnchor.x, top: editAnchor.y }}
+        >
+          ✎ 编辑
+        </button>
       )}
     </div>
   );

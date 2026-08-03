@@ -254,7 +254,6 @@ describe("WeekTimeline (选择与框选)", () => {
     fireEvent.mouseUp(col);
     expect(onAddDay).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: /编辑 晨会/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /编辑 评审/ })).toBeInTheDocument();
   });
 
   it("横向框选跨列选中两列事件", () => {
@@ -274,7 +273,6 @@ describe("WeekTimeline (选择与框选)", () => {
     });
     fireEvent.mouseUp(document.querySelector('[data-date="2026-08-04"]')!);
     expect(screen.getByRole("button", { name: /编辑 晨会/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /编辑 评审/ })).toBeInTheDocument();
   });
 
   it("横向拖拽空白区批量创建（同时间段多天）", () => {
@@ -290,6 +288,40 @@ describe("WeekTimeline (选择与框选)", () => {
       "02:00",
       "03:00"
     );
+  });
+
+  it("编辑按钮弹出在光标旁，点击其他事件跟随切换", () => {
+    const a = ev("a", "晨会", "09:00", "10:00");
+    const b = ev("b", "评审", "11:00", "12:00");
+    renderTimeline([[a, b], ...emptyWeek.slice(1)]);
+    fireEvent.click(screen.getByRole("button", { name: /日程 晨会/ }), {
+      clientX: 120,
+      clientY: 160,
+    });
+    const btn = screen.getByRole("button", { name: /编辑 晨会/ });
+    expect(btn.style.left).toBe("120px"); // 按钮弹出在光标旁
+    expect(btn.style.top).toBe("160px");
+    fireEvent.click(screen.getByRole("button", { name: /日程 评审/ }), {
+      clientX: 130,
+      clientY: 170,
+    });
+    const btn2 = screen.getByRole("button", { name: /编辑 评审/ });
+    expect(btn2.style.left).toBe("130px");
+    expect(screen.queryByRole("button", { name: /编辑 晨会/ })).toBeNull();
+  });
+
+  it("拖选空白新建后清除残留选中与编辑按钮", () => {
+    const onAddDay = vi.fn();
+    const a = ev("a", "夜跑", "23:00", "23:30");
+    renderTimeline([[a], ...emptyWeek.slice(1)], { onAddDay });
+    fireEvent.click(screen.getByRole("button", { name: /日程 夜跑/ }));
+    expect(screen.getByRole("button", { name: /编辑 夜跑/ })).toBeInTheDocument();
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    fireEvent.mouseDown(col, { clientX: 50, clientY: 88 }); // 8:00 空白（夜跑在 23:00，矩形外）
+    fireEvent.mouseMove(col, { clientX: 50, clientY: 304 }); // 12:30
+    fireEvent.mouseUp(col);
+    expect(onAddDay).toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /编辑 夜跑/ })).toBeNull();
   });
 });
 

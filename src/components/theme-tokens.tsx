@@ -36,7 +36,7 @@ export type ThemeTokens = {
     allDayItem: string;      // 全天事件胶囊
     foldBand: string;        // 凌晨折叠条（配合 absolute inset-x-0 z-10 使用）
     eventSelected: string;   // 选中日程的描边
-    eventEdit: string;       // 选中日程上的小编辑按钮
+    eventEdit: string;       // 选中后弹出在光标旁的编辑按钮（配合 left/top 内联样式）
     dragTip: string;         // 拖选/挪动时的时间气泡（配合 left/top 内联样式）
   };
   yearView: { monthCard: string; monthTitle: string; miniCell: string; miniDot: string };
@@ -117,7 +117,7 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       allDayItem: "block w-full truncate rounded bg-neutral-100 px-1.5 py-0.5 text-left text-[10px] text-neutral-700 transition hover:bg-neutral-200",
       foldBand: "flex items-center justify-center gap-2 border-y border-dashed border-neutral-200/80 bg-white/60 text-[10px] text-neutral-400 transition hover:bg-white/90 hover:text-neutral-600",
       eventSelected: "ring-2 ring-blue-900/70",
-      eventEdit: "absolute right-0.5 top-0.5 rounded bg-white/90 px-1 text-[10px] leading-4 text-blue-700 transition hover:bg-white",
+      eventEdit: "absolute z-30 -translate-x-1/2 -translate-y-[calc(100%+8px)] whitespace-nowrap rounded-md bg-blue-700 px-2 py-1 text-[11px] font-medium text-white shadow-md transition hover:bg-blue-800",
       dragTip: "pointer-events-none absolute z-40 -translate-x-1/2 -translate-y-[calc(100%+10px)] whitespace-nowrap rounded-full bg-neutral-900/90 px-3 py-1 text-[11px] font-medium text-white shadow-lg",
     },
     yearView: {
@@ -224,7 +224,7 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       allDayItem: "font-kai block w-full truncate rounded bg-[#f5edda] px-1.5 py-0.5 text-left text-[10px] text-[#4a3f35] transition hover:bg-[#e9dcc0]",
       foldBand: "font-kai flex items-center justify-center gap-2 border-y border-dashed border-[#e5dcc8]/70 bg-[#fffdf5]/50 text-[10px] text-[#b3947c] transition hover:bg-[#fffdf5]/90 hover:text-[#4a3f35]",
       eventSelected: "ring-2 ring-[#4a7bb5]",
-      eventEdit: "absolute right-0.5 top-0.5 rounded bg-[#fffdf5]/95 px-1 font-kai text-[10px] leading-4 text-[#4a7bb5] transition hover:bg-white",
+      eventEdit: "font-kai absolute z-30 -translate-x-1/2 -translate-y-[calc(100%+8px)] whitespace-nowrap rounded-md bg-[#4a7bb5] px-2 py-1 text-[11px] text-white shadow-md transition hover:bg-[#3d6b9e]",
       dragTip: "font-kai pointer-events-none absolute z-40 -translate-x-1/2 -translate-y-[calc(100%+10px)] whitespace-nowrap rounded-full bg-[#4a3f35]/90 px-3 py-1 text-[11px] text-[#fffdf5] shadow-lg ring-1 ring-[#e5dcc8]",
     },
     yearView: {
