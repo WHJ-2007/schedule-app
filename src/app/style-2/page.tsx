@@ -144,7 +144,7 @@ export default function Style2() {
 
             <div className="mb-1.5 grid grid-cols-7 gap-1.5">
               {WEEKDAY_NAMES.map((w) => (
-                <div key={w} className="py-1 text-center text-xs text-white/50">
+                <div key={w} className="py-1 text-center text-xs text-white/70">
                   {w}
                 </div>
               ))}
@@ -164,8 +164,8 @@ export default function Style2() {
                     onClick={() => setSelectedDateKey(key)}
                     aria-label={`${d.getMonth() + 1}月${d.getDate()}日`}
                     className={
-                      "flex h-24 flex-col items-center rounded-xl pt-2 transition hover:bg-white/10 " +
-                      (isSelected ? "bg-white/30" : "")
+                      "flex h-24 flex-col items-center rounded-xl pt-2 transition " +
+                      (isSelected ? "bg-white/30 hover:bg-white/40" : "hover:bg-white/10")
                     }
                   >
                     <span
@@ -231,21 +231,21 @@ export default function Style2() {
                       className="min-w-0 flex-1 text-left"
                     >
                       <div className="text-xs text-white/70 tabular-nums">
-                        <span className="rounded-full bg-white/20 px-2 py-0.5 text-white/90">
+                        <span className="rounded-full bg-white/60 px-2 py-0.5 text-purple-900">
                           {formatEventTime(e.time)}
                         </span>
                       </div>
                       <div
                         className={
                           e.done
-                            ? "truncate text-sm text-white/50 line-through"
+                            ? "truncate text-sm text-white/70 line-through"
                             : "truncate text-sm text-white"
                         }
                       >
                         {e.title}
                       </div>
                       {e.description && (
-                        <div className="truncate text-xs text-white/50">{e.description}</div>
+                        <div className="truncate text-xs text-white/70">{e.description}</div>
                       )}
                     </button>
                     <button
