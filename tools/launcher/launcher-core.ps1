@@ -81,7 +81,12 @@ function Start-DevServer {
 function Stop-DevServer {
     $id = Load-PidFile
     if ($id) {
-        taskkill /PID $id /T /F 2>&1 | Out-Null
+        $proc = Get-CimInstance Win32_Process -Filter "ProcessId = $id" -ErrorAction SilentlyContinue
+        $cmd = $proc.CommandLine
+        $root = [regex]::Escape((Get-ProjectRoot))
+        if ($cmd -and ($cmd -match "next" -or $cmd -match "npm" -or $cmd -match $root)) {
+            taskkill /PID $id /T /F 2>&1 | Out-Null
+        }
     }
     Remove-PidFile
     return $true
