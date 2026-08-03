@@ -16,6 +16,8 @@ import {
   addYears,
   getMonthDayCells,
   formatYearTitle,
+  parseTimeToMinutes,
+  minutesToTime,
 } from "./date";
 
 describe("toDateKey / parseDateKey", () => {
@@ -162,5 +164,34 @@ describe("week/year helpers", () => {
 
   it("formatYearTitle", () => {
     expect(formatYearTitle(2026)).toBe("2026年");
+  });
+});
+
+describe("parseTimeToMinutes / minutesToTime", () => {
+  it("parseTimeToMinutes 转换 HH:mm 为分钟", () => {
+    expect(parseTimeToMinutes("00:00")).toBe(0);
+    expect(parseTimeToMinutes("09:30")).toBe(570);
+    expect(parseTimeToMinutes("23:59")).toBe(1439);
+  });
+
+  it("parseTimeToMinutes 空串或非法值回退 0", () => {
+    expect(parseTimeToMinutes("")).toBe(0);
+    expect(parseTimeToMinutes("abc")).toBe(0);
+  });
+
+  it("minutesToTime 补零格式化", () => {
+    expect(minutesToTime(0)).toBe("00:00");
+    expect(minutesToTime(120)).toBe("02:00");
+    expect(minutesToTime(570)).toBe("09:30");
+    expect(minutesToTime(1439)).toBe("23:59");
+  });
+
+  it("minutesToTime 越界值被夹紧", () => {
+    expect(minutesToTime(-30)).toBe("00:00");
+    expect(minutesToTime(1440)).toBe("23:59");
+  });
+
+  it("parse 与 format 往返一致", () => {
+    expect(minutesToTime(parseTimeToMinutes("14:15"))).toBe("14:15");
   });
 });

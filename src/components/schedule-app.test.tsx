@@ -11,6 +11,7 @@ import {
   formatMonthTitle,
   formatYearTitle,
   addMonths,
+  toDateKey,
 } from "@/lib/date";
 
 vi.mock("next/navigation", () => ({
@@ -143,6 +144,35 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(
       screen.getByText(formatMonthTitle(target.getFullYear(), target.getMonth()))
     ).toBeInTheDocument();
+  });
+
+  it("周视图拖选时间段：弹窗预填起止时间，保存后时间轴出现事件块", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const col = document.querySelector(`[data-date="${toDateKey(getWeekDates(new Date())[0])}"]`)!;
+    // 96px → 2:00，144px → 3:00
+    fireEvent.mouseDown(col, { clientY: 96 });
+    fireEvent.mouseMove(col, { clientY: 144 });
+    fireEvent.mouseUp(col);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText(/开始时间/)).toHaveValue("02:00");
+    expect(screen.getByLabelText(/结束时间/)).toHaveValue("03:00");
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "拖选新建" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    expect(screen.getByRole("button", { name: /编辑 拖选新建/ })).toBeInTheDocument();
+  });
+
+  it("周视图时间轴事件块点击打开编辑弹窗并回填结束时间", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: /添加日程/ }));
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "时间段事件" } });
+    fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "10:00" } });
+    fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:30" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.click(screen.getByRole("button", { name: /编辑 时间段事件/ }));
+    expect(screen.getByLabelText(/开始时间/)).toHaveValue("10:00");
+    expect(screen.getByLabelText(/结束时间/)).toHaveValue("11:30");
   });
 });
 

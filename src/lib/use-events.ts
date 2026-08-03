@@ -33,6 +33,7 @@ export function useEvents() {
       title: input.title.trim(),
       date: input.date,
       time: input.time ?? "",
+      endTime: input.endTime || undefined,
       description: input.description ?? "",
       done: false,
     };

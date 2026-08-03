@@ -57,6 +57,17 @@ export function formatEventTime(time: string): string {
   return time || "全天";
 }
 
+export function parseTimeToMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return 0;
+  return h * 60 + m;
+}
+
+export function minutesToTime(minutes: number): string {
+  const m = Math.max(0, Math.min(23 * 60 + 59, Math.round(minutes)));
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
 export function addDays(year: number, monthIndex: number, day: number, delta: number): Date {
   return new Date(year, monthIndex, day + delta);
 }

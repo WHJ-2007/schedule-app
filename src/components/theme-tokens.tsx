@@ -24,7 +24,15 @@ export type ThemeTokens = {
             decor?: ReactNode;           // 弹窗顶部装饰 JSX
             bodyClass?: string };        // 弹窗内容内边距
   viewTab: { active: string; inactive: string };
-  weekView: { column: string; columnHighlight: string; columnHeader: string; addDay: string; eventRow: string };
+  weekView: {
+    columnHighlight: string; columnHeader: string; addDay: string;
+    timeline: string;        // 时间轴整体容器（边框等）
+    hourLabel: string;       // 纵轴小时刻度文字
+    gridLine: string;        // 小时分割线
+    eventBlock: string;      // 时间轴上按时间定位的事件块
+    dragSelect: string;      // 拖选时间段高亮
+    allDayItem: string;      // 全天事件胶囊
+  };
   yearView: { monthCard: string; monthTitle: string; miniCell: string; miniDot: string };
   viewPanel?: string;      // 月历/周视图/年视图 section 的面板容器类（style-1 无 → 不填）
   contentClass?: string;   // 内容容器额外类（当前无主题使用）
@@ -90,11 +98,15 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       inactive: "rounded-full px-4 py-1.5 text-sm text-neutral-500 transition hover:bg-neutral-100",
     },
     weekView: {
-      column: "flex min-h-44 flex-col rounded-lg border border-neutral-100 p-2",
       columnHighlight: "border-blue-200 bg-blue-50",
       columnHeader: "text-xs font-medium text-neutral-700 transition hover:text-blue-600",
       addDay: "text-xs text-neutral-400 transition hover:text-blue-600",
-      eventRow: "flex items-center gap-1 rounded px-1 py-0.5 transition hover:bg-neutral-100",
+      timeline: "rounded-lg border border-neutral-100 bg-white",
+      hourLabel: "absolute right-2 -translate-y-1/2 text-[10px] text-neutral-400 tabular-nums",
+      gridLine: "absolute inset-x-0 border-t border-neutral-100",
+      eventBlock: "absolute inset-x-0.5 overflow-hidden rounded-md bg-blue-600 px-1.5 py-0.5 text-left text-white shadow-sm transition hover:bg-blue-700",
+      dragSelect: "pointer-events-none absolute inset-x-0.5 rounded-md bg-blue-600/25",
+      allDayItem: "block w-full truncate rounded bg-neutral-100 px-1.5 py-0.5 text-left text-[10px] text-neutral-700 transition hover:bg-neutral-200",
     },
     yearView: {
       monthCard: "rounded-lg border border-neutral-100 p-3",
@@ -187,11 +199,15 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       inactive: "rounded-full px-4 py-1.5 font-kai text-sm text-[#8a7a66] transition hover:bg-[#f5edda]",
     },
     weekView: {
-      column: "flex min-h-44 flex-col rounded-lg border border-dashed border-[#d8cba8] p-2",
       columnHighlight: "border-[#4a7bb5] bg-[#dbe9f5]",
       columnHeader: "font-kai text-xs font-medium text-[#4a3f35] transition hover:text-[#4a7bb5]",
       addDay: "text-xs text-neutral-500 transition hover:text-[#4a7bb5]",
-      eventRow: "flex items-center gap-1 rounded px-1 py-0.5 transition hover:bg-[#f5edda]",
+      timeline: "rounded-lg border border-[#e5dcc8] bg-[#fffdf5]",
+      hourLabel: "font-kai absolute right-2 -translate-y-1/2 text-[10px] text-neutral-500",
+      gridLine: "absolute inset-x-0 border-t border-dashed border-[#e5dcc8]",
+      eventBlock: "absolute inset-x-0.5 overflow-hidden rounded-md bg-[#e05a5a] px-1.5 py-0.5 text-left text-white shadow-sm transition hover:brightness-105",
+      dragSelect: "pointer-events-none absolute inset-x-0.5 rounded-md bg-[#4a7bb5]/30",
+      allDayItem: "font-kai block w-full truncate rounded bg-[#f5edda] px-1.5 py-0.5 text-left text-[10px] text-[#4a3f35] transition hover:bg-[#e9dcc0]",
     },
     yearView: {
       monthCard: "rounded-lg border border-[#e5dcc8] bg-[#fffdf5] p-3 shadow-sm",

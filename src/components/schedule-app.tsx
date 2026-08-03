@@ -27,17 +27,19 @@ import { getSavedView, saveView, type ViewMode } from "@/lib/views";
 import type { ThemeTokens } from "./theme-tokens";
 import Settings from "./settings";
 import SelectionBubble from "./selection-bubble";
+import WeekTimeline from "./week-timeline";
 
 type FormState = {
   id: string | null;
   date: string;
   title: string;
   time: string;
+  endTime: string;
   description: string;
 };
 
 function emptyForm(date: string): FormState {
-  return { id: null, date, title: "", time: "", description: "" };
+  return { id: null, date, title: "", time: "", endTime: "", description: "" };
 }
 
 function sortByTime(list: ScheduleEvent[]): ScheduleEvent[] {
@@ -150,18 +152,37 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     [yearMonths]
   );
 
-  const openAdd = (dateKey: string) => setForm(emptyForm(dateKey));
+  const openAdd = (dateKey: string, time?: string, endTime?: string) =>
+    setForm({ ...emptyForm(dateKey), time: time ?? "", endTime: endTime ?? "" });
   const openEdit = (e: ScheduleEvent) =>
-    setForm({ id: e.id, date: e.date, title: e.title, time: e.time, description: e.description });
+    setForm({
+      id: e.id,
+      date: e.date,
+      title: e.title,
+      time: e.time,
+      endTime: e.endTime ?? "",
+      description: e.description,
+    });
 
   const handleSave = () => {
     if (!form) return;
     const title = form.title.trim();
     if (!title) return;
     if (form.id) {
-      updateEvent(form.id, { title, time: form.time, description: form.description });
+      updateEvent(form.id, {
+        title,
+        time: form.time,
+        endTime: form.endTime || undefined,
+        description: form.description,
+      });
     } else {
-      addEvent({ title, date: form.date, time: form.time, description: form.description });
+      addEvent({
+        title,
+        date: form.date,
+        time: form.time,
+        endTime: form.endTime || undefined,
+        description: form.description,
+      });
       setSelectedDateKey(form.date);
     }
     setForm(null);
@@ -383,84 +404,18 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-7 gap-1.5">
-                  {weekDates.map((d, i) => {
-                    const key = toDateKey(d);
-                    const list = weekEvents[i];
-                    const isAnchor = key === selectedDateKey;
-                    const isToday = isSameDay(d, today);
-                    return (
-                      <div
-                        key={key}
-                        className={
-                          "anim-fade-in " +
-                          tokens.weekView.column +
-                          " " +
-                          (isAnchor ? tokens.weekView.columnHighlight : "")
-                        }
-                        style={{ animationDelay: `${i * 40}ms` }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <button
-                            type="button"
-                            onClick={() => jumpToMonth(d)}
-                            aria-label={`跳转到${d.getMonth() + 1}月${d.getDate()}日`}
-                            className={tokens.weekView.columnHeader}
-                          >
-                            {WEEKDAY_NAMES[i]} {d.getDate()}
-                            {isToday && <span className={tokens.todayMark}> 今</span>}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openAdd(key)}
-                            aria-label={`在${d.getMonth() + 1}月${d.getDate()}日添加日程`}
-                            className={tokens.weekView.addDay}
-                          >
-                            ＋
-                          </button>
-                        </div>
-                        <ul className="mt-1.5 space-y-1">
-                          {list.map((e) => (
-                            <li key={e.id} className={tokens.weekView.eventRow}>
-                              <input
-                                type="checkbox"
-                                checked={e.done}
-                                onChange={() => toggleDone(e.id)}
-                                aria-label={e.done ? `取消完成：${e.title}` : `标记完成：${e.title}`}
-                                className={tokens.dayList.checkbox}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => openEdit(e)}
-                                aria-label={`编辑 ${e.title}`}
-                                className={tokens.dayList.editButton}
-                              >
-                                <div className={tokens.dayList.time}>{formatEventTime(e.time)}</div>
-                                <div
-                                  className={
-                                    e.done
-                                      ? tokens.dayList.doneTitle + " truncate"
-                                      : tokens.dayList.title + " truncate"
-                                  }
-                                >
-                                  {e.title}
-                                </div>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => deleteEvent(e.id)}
-                                aria-label="删除"
-                                className={tokens.dayList.delete}
-                              >
-                                ✕
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    );
-                  })}
-                </div>
+                <WeekTimeline
+                  tokens={tokens}
+                  dates={weekDates}
+                  eventsByDay={weekEvents}
+                  anchorKey={selectedDateKey}
+                  today={today}
+                  onJumpToMonth={jumpToMonth}
+                  onAddDay={openAdd}
+                  onEdit={openEdit}
+                  onToggleDone={toggleDone}
+                  onDelete={deleteEvent}
+                />
               </section>
             )}
             {viewMode === "year" && (
@@ -574,12 +529,22 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                   />
                 </label>
                 <label htmlFor="time" className="block">
-                  <span className={tokens.dialog.inputLabel}>时间</span>
+                  <span className={tokens.dialog.inputLabel}>开始时间</span>
                   <input
                     id="time"
                     type="time"
                     value={form.time}
                     onChange={(e) => setForm({ ...form, time: e.target.value })}
+                    className={tokens.dialog.input}
+                  />
+                </label>
+                <label htmlFor="endTime" className="block">
+                  <span className={tokens.dialog.inputLabel}>结束时间</span>
+                  <input
+                    id="endTime"
+                    type="time"
+                    value={form.endTime}
+                    onChange={(e) => setForm({ ...form, endTime: e.target.value })}
                     className={tokens.dialog.input}
                   />
                 </label>
