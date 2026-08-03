@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import ScheduleApp from "./schedule-app";
 import { THEME_TOKENS } from "./theme-tokens";
-import { getMonthGrid, isSameMonth, formatDayLabel } from "@/lib/date";
+import { getMonthGrid, isSameMonth, formatDayLabel, getWeekDates } from "@/lib/date";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -42,5 +42,83 @@ describe("ScheduleApp (month view)", () => {
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "测试日程" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     expect(screen.getByText("测试日程")).toBeInTheDocument();
+  });
+});
+
+describe("ScheduleApp (switcher & week view)", () => {
+  it("渲染 周/月/年 切换器", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    expect(screen.getByRole("button", { name: "周" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "月" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "年" })).toBeInTheDocument();
+  });
+
+  it("点周页签显示 7 天列并持久化", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const now = new Date();
+    const week = getWeekDates(now);
+    for (const d of week) {
+      expect(
+        screen.getByRole("button", { name: `跳转到${d.getMonth() + 1}月${d.getDate()}日` })
+      ).toBeInTheDocument();
+    }
+    expect(localStorage.getItem("schedule-view")).toBe("week");
+  });
+
+  it("周视图翻周：上一周/下一周日期变化", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const now = new Date();
+    fireEvent.click(screen.getByRole("button", { name: /上一周/ }));
+    const prevWeek = getWeekDates(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7));
+    expect(
+      screen.getByRole("button", { name: `跳转到${prevWeek[0].getMonth() + 1}月${prevWeek[0].getDate()}日` })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /下一周/ }));
+    const nextWeek = getWeekDates(now);
+    expect(
+      screen.getByRole("button", { name: `跳转到${nextWeek[0].getMonth() + 1}月${nextWeek[0].getDate()}日` })
+    ).toBeInTheDocument();
+  });
+
+  it("点周视图列头日期切到月视图并选中那天", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const now = new Date();
+    const week = getWeekDates(now);
+    const target = week[2];
+    fireEvent.click(
+      screen.getByRole("button", { name: `跳转到${target.getMonth() + 1}月${target.getDate()}日` })
+    );
+    expect(screen.getByRole("button", { name: "月" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(formatDayLabel(target))).toBeInTheDocument();
+  });
+
+  it("周视图点事件直接打开编辑弹窗", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: /添加日程/ }));
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "周视图事件" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.click(screen.getByRole("button", { name: /编辑 周视图事件/ }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText(/标题/)).toHaveValue("周视图事件");
+  });
+
+  it("周视图列头＋按钮添加到该日", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const now = new Date();
+    const week = getWeekDates(now);
+    const target = week[3];
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${target.getMonth() + 1}月${target.getDate()}日添加日程` })
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "该日新增" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: `跳转到${target.getMonth() + 1}月${target.getDate()}日` }));
+    expect(screen.getByText("该日新增")).toBeInTheDocument();
   });
 });

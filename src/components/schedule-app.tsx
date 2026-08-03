@@ -14,8 +14,12 @@ import {
   formatMonthTitle,
   formatDayLabel,
   formatEventTime,
+  getWeekDates,
+  formatWeekTitle,
+  addDays,
 } from "@/lib/date";
 import type { ScheduleEvent } from "@/lib/events";
+import { getSavedView, saveView, type ViewMode } from "@/lib/views";
 import type { ThemeTokens } from "./theme-tokens";
 import Settings from "./settings";
 
@@ -45,6 +49,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
   const [selectedDateKey, setSelectedDateKey] = useState(() => todayKey());
   const [form, setForm] = useState<FormState | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>(() => getSavedView());
 
   const byDay = useMemo(() => {
     const m = new Map<string, ScheduleEvent[]>();
@@ -59,6 +64,11 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const grid = useMemo(() => getMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
   const today = new Date();
   const selectedDate = parseDateKey(selectedDateKey);
+  const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const weekEvents = useMemo(
+    () => weekDates.map((d) => sortByTime(byDay.get(toDateKey(d)) ?? [])),
+    [weekDates, byDay]
+  );
   const dayEvents = sortByTime(byDay.get(selectedDateKey) ?? []);
   const indicatorCap = tokens.cell.indicatorCap ?? 3;
   const indicatorArea = tokens.cell.indicatorArea ?? "mt-1.5 flex h-4 items-center justify-center gap-1";
@@ -79,6 +89,28 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     setViewMonth(t.getMonth());
     setSelectedDateKey(todayKey());
   };
+
+  const pickView = (v: ViewMode) => {
+    saveView(v);
+    setViewMode(v);
+  };
+
+  const jumpToMonth = (d: Date) => {
+    setViewYear(d.getFullYear());
+    setViewMonth(d.getMonth());
+    setSelectedDateKey(toDateKey(d));
+    setViewMode("month");
+  };
+
+  const goPrevWeek = () => {
+    const d = addDays(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), -7);
+    setSelectedDateKey(toDateKey(d));
+  };
+  const goNextWeek = () => {
+    const d = addDays(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 7);
+    setSelectedDateKey(toDateKey(d));
+  };
+  const goTodayWeek = () => setSelectedDateKey(todayKey());
 
   const openAdd = (dateKey: string) => setForm(emptyForm(dateKey));
   const openEdit = (e: ScheduleEvent) =>
@@ -109,7 +141,22 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
             {tokens.header.tagline}
           </header>
 
-          <div key="month" className="anim-fade-in">
+          <div className="mb-6 flex gap-2">
+            {(["week", "month", "year"] as ViewMode[]).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => pickView(v)}
+                aria-pressed={viewMode === v}
+                className={viewMode === v ? tokens.viewTab.active : tokens.viewTab.inactive}
+              >
+                {v === "week" ? "周" : v === "month" ? "月" : "年"}
+              </button>
+            ))}
+          </div>
+
+          <div key={viewMode} className="anim-fade-in">
+            {viewMode === "month" && (
             <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
               {/* 月历 */}
               <section className={tokens.viewPanel}>
@@ -271,6 +318,104 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                 )}
               </section>
             </div>
+            )}
+            {viewMode === "week" && (
+              <section className={tokens.viewPanel}>
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className={tokens.sectionTitle}>{formatWeekTitle(weekDates)}</h2>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={goPrevWeek} className={tokens.navButton}>
+                      上一周
+                    </button>
+                    <button type="button" onClick={goTodayWeek} className={tokens.navButton}>
+                      今天
+                    </button>
+                    <button type="button" onClick={goNextWeek} className={tokens.navButton}>
+                      下一周
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-7 gap-1.5">
+                  {weekDates.map((d, i) => {
+                    const key = toDateKey(d);
+                    const list = weekEvents[i];
+                    const isAnchor = key === selectedDateKey;
+                    const isToday = isSameDay(d, today);
+                    return (
+                      <div
+                        key={key}
+                        className={
+                          "anim-fade-in " +
+                          tokens.weekView.column +
+                          " " +
+                          (isAnchor ? tokens.weekView.columnHighlight : "")
+                        }
+                        style={{ animationDelay: `${i * 40}ms` }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => jumpToMonth(d)}
+                            aria-label={`跳转到${d.getMonth() + 1}月${d.getDate()}日`}
+                            className={tokens.weekView.columnHeader}
+                          >
+                            {WEEKDAY_NAMES[i]} {d.getDate()}
+                            {isToday && <span className={tokens.todayMark}> 今</span>}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openAdd(key)}
+                            aria-label={`在${d.getMonth() + 1}月${d.getDate()}日添加日程`}
+                            className={tokens.weekView.addDay}
+                          >
+                            ＋
+                          </button>
+                        </div>
+                        <ul className="mt-1.5 space-y-1">
+                          {list.map((e) => (
+                            <li key={e.id} className={tokens.weekView.eventRow}>
+                              <input
+                                type="checkbox"
+                                checked={e.done}
+                                onChange={() => toggleDone(e.id)}
+                                aria-label={e.done ? `取消完成：${e.title}` : `标记完成：${e.title}`}
+                                className={tokens.dayList.checkbox}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => openEdit(e)}
+                                aria-label={`编辑 ${e.title}`}
+                                className={tokens.dayList.editButton}
+                              >
+                                <div className={tokens.dayList.time}>{formatEventTime(e.time)}</div>
+                                <div
+                                  className={
+                                    e.done
+                                      ? tokens.dayList.doneTitle + " truncate"
+                                      : tokens.dayList.title + " truncate"
+                                  }
+                                >
+                                  {e.title}
+                                </div>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteEvent(e.id)}
+                                aria-label="删除"
+                                className={tokens.dayList.delete}
+                              >
+                                ✕
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
           </div>
         </div>
       </div>
