@@ -17,6 +17,10 @@ import {
   getWeekDates,
   formatWeekTitle,
   addDays,
+  getYearMonths,
+  getMonthDayCells,
+  formatYearTitle,
+  addYears,
 } from "@/lib/date";
 import type { ScheduleEvent } from "@/lib/events";
 import { getSavedView, saveView, type ViewMode } from "@/lib/views";
@@ -120,6 +124,15 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     setViewYear(t.getFullYear());
     setViewMonth(t.getMonth());
   };
+
+  const goPrevYear = () => setViewYear((y) => addYears(y, -1));
+  const goNextYear = () => setViewYear((y) => addYears(y, 1));
+  const goTodayYear = () => setViewYear(new Date().getFullYear());
+  const yearMonths = useMemo(() => getYearMonths(viewYear), [viewYear]);
+  const yearMonthCells = useMemo(
+    () => yearMonths.map((m) => getMonthDayCells(m.getFullYear(), m.getMonth())),
+    [yearMonths]
+  );
 
   const openAdd = (dateKey: string) => setForm(emptyForm(dateKey));
   const openEdit = (e: ScheduleEvent) =>
@@ -422,6 +435,66 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                       </div>
                     );
                   })}
+                </div>
+              </section>
+            )}
+            {viewMode === "year" && (
+              <section className={tokens.viewPanel}>
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className={tokens.sectionTitle}>{formatYearTitle(viewYear)}</h2>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={goPrevYear} className={tokens.navButton}>
+                      上一年
+                    </button>
+                    <button type="button" onClick={goTodayYear} className={tokens.navButton}>
+                      今天
+                    </button>
+                    <button type="button" onClick={goNextYear} className={tokens.navButton}>
+                      下一年
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+                  {yearMonths.map((m, mi) => (
+                    <div
+                      key={m.getMonth()}
+                      className={"anim-fade-in " + tokens.yearView.monthCard}
+                      style={{ animationDelay: `${Math.min(mi, 3) * 40}ms` }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => jumpToMonth(m)}
+                        aria-label={`查看${m.getFullYear()}年${m.getMonth() + 1}月`}
+                        className={tokens.yearView.monthTitle}
+                      >
+                        {m.getMonth() + 1}月
+                      </button>
+                      <div className="grid grid-cols-7 gap-0.5">
+                        {yearMonthCells[mi].map((d, i) => {
+                          if (!d) return <span key={`blank-${i}`} />;
+                          const key = toDateKey(d);
+                          const n = (byDay.get(key) ?? []).length;
+                          const isToday = isSameDay(d, today);
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => jumpToMonth(d)}
+                              aria-label={`${d.getMonth() + 1}月${d.getDate()}日`}
+                              className={
+                                tokens.yearView.miniCell +
+                                (isToday ? " " + tokens.todayMark : "")
+                              }
+                            >
+                              {d.getDate()}
+                              {n > 0 && <span className={tokens.yearView.miniDot} />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </section>
             )}

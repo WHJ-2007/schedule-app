@@ -136,3 +136,45 @@ describe("ScheduleApp (switcher & week view)", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("ScheduleApp (year view)", () => {
+  it("点年页签显示 12 个月卡片", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "年" }));
+    const year = new Date().getFullYear();
+    for (let m = 1; m <= 12; m++) {
+      expect(screen.getByRole("button", { name: `查看${year}年${m}月` })).toBeInTheDocument();
+    }
+  });
+
+  it("年视图上一年/下一年切换", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "年" }));
+    const year = new Date().getFullYear();
+    fireEvent.click(screen.getByRole("button", { name: /上一年/ }));
+    expect(screen.getByRole("button", { name: `查看${year - 1}年1月` })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /下一年/ }));
+    expect(screen.getByRole("button", { name: `查看${year}年1月` })).toBeInTheDocument();
+  });
+
+  it("点月名切到月视图并定位该月", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "年" }));
+    const year = new Date().getFullYear();
+    fireEvent.click(screen.getByRole("button", { name: "上一年" }));
+    fireEvent.click(screen.getByRole("button", { name: `查看${year - 1}年6月` }));
+    expect(screen.getByText(formatMonthTitle(year - 1, 5))).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "月" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("点迷你网格日期切到月视图并选中那天", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "年" }));
+    const year = new Date().getFullYear();
+    // 当前月迷你网格里的 15 日
+    const d = new Date(year, new Date().getMonth(), 15);
+    const label = `${d.getMonth() + 1}月${d.getDate()}日`;
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    expect(screen.getByText(formatDayLabel(d))).toBeInTheDocument();
+  });
+});
