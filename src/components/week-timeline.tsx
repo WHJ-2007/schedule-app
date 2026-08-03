@@ -18,8 +18,8 @@ const HOUR_PX = 48; // 每小时高度（像素）
 const SNAP_MIN = 30; // 拖选吸附粒度（分钟）
 const GUTTER = 48; // 左侧刻度列宽度
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
-const FOLD_START = 60; // 折叠区起点 1:00（分钟）
-const FOLD_END = 420; // 折叠区终点 7:00（分钟），折叠含 1:00–6:00 共六行
+const FOLD_START = 0; // 折叠区起点 0:00（分钟）
+const FOLD_END = 420; // 折叠区终点 7:00（分钟），折叠含 0:00–6:00 共七行
 const FOLD_BAND_H = 40; // 折叠时条带高度
 const EXPAND_BAND_H = 26; // 展开时条带高度
 
@@ -79,7 +79,8 @@ export default function WeekTimeline({
   const [drag, setDrag] = useState<RegionState | null>(null);
   const [move, setMove] = useState<MoveState | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [folded, setFolded] = useState(true); // 默认折叠凌晨 1:00–6:00
+  const [folded, setFolded] = useState(true); // 默认折叠凌晨 0:00–6:00
+  const [hover, setHover] = useState<{ col: number; min: number | null } | null>(null); // 悬停高亮：列 + 分钟
 
   // 拖拽/选中状态同步进 ref：window 监听只挂载一次，闭包只捕获首次渲染值，
   // 快速单击时 mouseup 也能被捕获（useEffect 被动绑定在真实浏览器是异步的）
@@ -106,7 +107,7 @@ export default function WeekTimeline({
 
   const snap = (minutes: number) => Math.round(minutes / SNAP_MIN) * SNAP_MIN;
 
-  const bandTop = folded ? HOUR_PX : 7 * HOUR_PX; // 条带 y：折叠时在 0:00 与 7:00 之间，展开时在 6:00 与 7:00 之间
+  const bandTop = folded ? 0 : 7 * HOUR_PX; // 条带 y：折叠时在顶部（0:00 起），展开时在 6:00 与 7:00 之间
   const bandH = folded ? FOLD_BAND_H : EXPAND_BAND_H;
   const dayHeight = (folded ? 18 : 24) * HOUR_PX + bandH;
 
@@ -120,7 +121,7 @@ export default function WeekTimeline({
   // 可见 y 坐标 → 分钟；条带区域返回 null（不创建/不更新）
   const minutesAtY = (y: number) => {
     const f = foldedRef.current;
-    const bTop = f ? HOUR_PX : 7 * HOUR_PX;
+    const bTop = f ? 0 : 7 * HOUR_PX;
     const bH = f ? FOLD_BAND_H : EXPAND_BAND_H;
     if (y < bTop) return snap((y / HOUR_PX) * 60);
     if (y < bTop + bH) return null;
@@ -128,12 +129,11 @@ export default function WeekTimeline({
   };
 
   const hourTop = (h: number) => {
-    if (h < 1) return h * HOUR_PX;
     if (h >= 7) return bandTop + bandH + (h - 7) * HOUR_PX;
-    return folded ? null : h * HOUR_PX; // 折叠区内刻度
+    return folded ? null : h * HOUR_PX; // 折叠区内刻度（0:00–6:00）
   };
 
-  const visibleHours = folded ? [0, ...HOURS.slice(7)] : HOURS;
+  const visibleHours = folded ? HOURS.slice(7) : HOURS;
   const lineYs = HOURS.slice(1)
     .map(hourTop)
     .filter((y): y is number => y !== null);
@@ -144,7 +144,7 @@ export default function WeekTimeline({
       day.filter((e) => {
         if (!e.time) return false;
         const m = parseTimeToMinutes(e.time);
-        return m >= FOLD_START && m < FOLD_END;
+        return m < FOLD_END;
       }).length,
     0
   );
@@ -157,12 +157,10 @@ export default function WeekTimeline({
     return rects.length - 1;
   };
 
-  // 折叠时被隐藏的事件（与凌晨区相交）不可被框选/挪动
+  // 折叠时被隐藏的事件（起点早于 7:00 即与 0:00 起的条带相交）不可被框选/挪动
   const isHidden = (e: ScheduleEvent) => {
     if (!e.time || !foldedRef.current) return false;
-    const s = parseTimeToMinutes(e.time);
-    const en = e.endTime ? parseTimeToMinutes(e.endTime) : s + 60;
-    return s < FOLD_END && en > FOLD_START;
+    return parseTimeToMinutes(e.time) < FOLD_END;
   };
 
   // 拖选/挪动期间在 window 上监听，鼠标移出列外仍持续
@@ -254,7 +252,17 @@ export default function WeekTimeline({
     };
   }, []);
 
+  // 悬停高亮：鼠标位置的日期列与小时刻度跟随变化；拖拽/挪动期间不更新
+  const handleTimelineMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (dragRef.current || moveRef.current) return;
+    const rects = colRects();
+    const col = colFromX(e.clientX, rects);
+    const min = minutesAtY(e.clientY - rects[col].top);
+    setHover((prev) => (prev && prev.col === col && prev.min === min ? prev : { col, min }));
+  };
+
   const handleColumnDown = (e: React.MouseEvent<HTMLDivElement>, col: number) => {
+    setHover(null);
     const rects = colRects();
     const top = rects[col].top;
     const down = minutesAtY(e.clientY - top);
@@ -274,6 +282,7 @@ export default function WeekTimeline({
 
   const handleBlockDown = (e: React.MouseEvent, ev: ScheduleEvent, col: number) => {
     e.stopPropagation(); // 不触发空白拖选
+    setHover(null);
     const rects = colRects();
     const downMin = minutesAtY(e.clientY - rects[col].top);
     if (downMin == null) return;
@@ -324,7 +333,13 @@ export default function WeekTimeline({
             const allDay = (eventsByDay[i] ?? []).filter((e) => !e.time);
             const isToday = isSameDay(d, today);
             return (
-              <div key={key} className="min-w-0 px-1.5 py-1.5">
+              <div
+                key={key}
+                className={
+                  "min-w-0 px-1.5 py-1.5" +
+                  (hover?.col === i ? " " + tokens.weekView.columnHover : "")
+                }
+              >
                 <div className="flex items-center justify-between gap-1">
                   <button
                     type="button"
@@ -382,11 +397,25 @@ export default function WeekTimeline({
       </div>
 
       {/* 滚动区：左侧小时刻度 ＋ 右侧 7 列时间轴 ＋ 凌晨折叠条 */}
-      <div className="relative flex overflow-y-auto" style={{ maxHeight: 560 }}>
+      <div
+        className="relative flex overflow-y-auto"
+        style={{ maxHeight: 560 }}
+        onMouseMove={handleTimelineMove}
+        onMouseLeave={() => setHover(null)}
+      >
         <div className="relative shrink-0" style={{ width: GUTTER, height: dayHeight }}>
           {visibleHours.map((h) => (
             <div key={h} className="absolute" style={{ top: hourTop(h)!, height: HOUR_PX }}>
-              <span className={tokens.weekView.hourLabel}>{h}:00</span>
+              <span
+                className={
+                  tokens.weekView.hourLabel +
+                  (hover?.min != null && Math.floor(hover.min / 60) === h
+                    ? " " + tokens.weekView.hourLabelActive
+                    : "")
+                }
+              >
+                {h}:00
+              </span>
             </div>
           ))}
         </div>
@@ -399,7 +428,14 @@ export default function WeekTimeline({
               <div
                 key={key}
                 data-date={key}
-                className={"relative min-w-0 " + (isAnchor ? tokens.weekView.columnHighlight : "")}
+                className={
+                  "relative min-w-0 " +
+                  (isAnchor
+                    ? tokens.weekView.columnHighlight
+                    : hover?.col === i
+                      ? tokens.weekView.columnHover
+                      : "")
+                }
                 onMouseDown={(e) => handleColumnDown(e, i)}
               >
                 {lineYs.map((y) => (
@@ -485,12 +521,12 @@ export default function WeekTimeline({
           type="button"
           onMouseDown={(e) => e.stopPropagation()}
           onClick={() => setFolded((f) => !f)}
-          aria-label={folded ? "展开凌晨时段 1:00–6:00" : "收起凌晨时段 1:00–6:00"}
+          aria-label={folded ? "展开凌晨时段 0:00–6:00" : "收起凌晨时段 0:00–6:00"}
           className={"absolute inset-x-0 z-10 " + tokens.weekView.foldBand}
           style={{ top: bandTop, height: bandH }}
         >
           {folded
-            ? `凌晨时段 1:00–6:00 已折叠${foldCount > 0 ? `（${foldCount} 项日程）` : ""} · 点击展开`
+            ? `凌晨时段 0:00–6:00 已折叠${foldCount > 0 ? `（${foldCount} 项日程）` : ""} · 点击展开`
             : "点击收起凌晨时段"}
         </button>
       </div>

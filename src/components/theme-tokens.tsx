@@ -26,6 +26,8 @@ export type ThemeTokens = {
   viewTab: { active: string; inactive: string };
   weekView: {
     columnHighlight: string; columnHeader: string; addDay: string;
+    columnHover: string;     // 悬停列背景淡色（鼠标位置对应日期）
+    hourLabelActive: string; // 悬停时对应小时刻度高亮
     timeline: string;        // 时间轴整体容器（边框等）
     hourLabel: string;       // 纵轴小时刻度文字
     gridLine: string;        // 小时分割线
@@ -102,6 +104,8 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
     },
     weekView: {
       columnHighlight: "border-blue-200 bg-blue-50",
+      columnHover: "bg-neutral-100/70",
+      hourLabelActive: "font-semibold text-blue-600",
       columnHeader: "text-xs font-medium text-neutral-700 transition hover:text-blue-600",
       addDay: "text-xs text-neutral-400 transition hover:text-blue-600",
       timeline: "rounded-lg border border-neutral-100 bg-white",
@@ -110,7 +114,7 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       eventBlock: "absolute inset-x-0.5 overflow-hidden rounded-md bg-blue-600 px-1.5 py-0.5 text-left text-white shadow-sm transition hover:bg-blue-700",
       dragSelect: "pointer-events-none absolute inset-x-0.5 rounded-md bg-blue-600/25",
       allDayItem: "block w-full truncate rounded bg-neutral-100 px-1.5 py-0.5 text-left text-[10px] text-neutral-700 transition hover:bg-neutral-200",
-      foldBand: "flex items-center justify-center gap-2 border-y border-neutral-200 bg-neutral-100/80 text-[10px] text-neutral-500 transition hover:bg-neutral-100",
+      foldBand: "flex items-center justify-center gap-2 border-y border-dashed border-neutral-200/80 bg-white/60 text-[10px] text-neutral-400 transition hover:bg-white/90 hover:text-neutral-600",
       eventSelected: "ring-2 ring-blue-900/70",
       eventEdit: "absolute right-0.5 top-0.5 rounded bg-white/90 px-1 text-[10px] leading-4 text-blue-700 transition hover:bg-white",
     },
@@ -206,6 +210,8 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
     },
     weekView: {
       columnHighlight: "border-[#4a7bb5] bg-[#dbe9f5]",
+      columnHover: "bg-[#f5edda]/70",
+      hourLabelActive: "font-bold text-[#4a7bb5]",
       columnHeader: "font-kai text-xs font-medium text-[#4a3f35] transition hover:text-[#4a7bb5]",
       addDay: "text-xs text-neutral-500 transition hover:text-[#4a7bb5]",
       timeline: "rounded-lg border border-[#e5dcc8] bg-[#fffdf5]",
@@ -214,7 +220,7 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       eventBlock: "absolute inset-x-0.5 overflow-hidden rounded-md bg-[#e05a5a] px-1.5 py-0.5 text-left text-white shadow-sm transition hover:brightness-105",
       dragSelect: "pointer-events-none absolute inset-x-0.5 rounded-md bg-[#4a7bb5]/30",
       allDayItem: "font-kai block w-full truncate rounded bg-[#f5edda] px-1.5 py-0.5 text-left text-[10px] text-[#4a3f35] transition hover:bg-[#e9dcc0]",
-      foldBand: "font-kai flex items-center justify-center gap-2 border-y border-[#e5dcc8] bg-[#f3ecdc]/80 text-[10px] text-[#8a7a5c] transition hover:bg-[#efe7d3]",
+      foldBand: "font-kai flex items-center justify-center gap-2 border-y border-dashed border-[#e5dcc8]/70 bg-[#fffdf5]/50 text-[10px] text-[#b3947c] transition hover:bg-[#fffdf5]/90 hover:text-[#4a3f35]",
       eventSelected: "ring-2 ring-[#4a7bb5]",
       eventEdit: "absolute right-0.5 top-0.5 rounded bg-[#fffdf5]/95 px-1 font-kai text-[10px] leading-4 text-[#4a7bb5] transition hover:bg-white",
     },

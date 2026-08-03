@@ -63,16 +63,17 @@ function expandFold() {
 describe("WeekTimeline", () => {
   it("渲染小时刻度（默认折叠凌晨时段）", () => {
     renderTimeline(emptyWeek);
-    expect(screen.getByText("0:00")).toBeInTheDocument();
+    expect(screen.getByText("7:00")).toBeInTheDocument();
     expect(screen.getByText("8:00")).toBeInTheDocument();
     expect(screen.getByText("23:00")).toBeInTheDocument();
+    expect(screen.queryByText("0:00")).toBeNull();
   });
 
   it("带时间的事件按起止时间定位成块", () => {
     renderTimeline([[ev("a", "晨会", "09:30", "11:00")], ...emptyWeek.slice(1)]);
     const block = screen.getByRole("button", { name: /日程 晨会/ });
-    // 折叠凌晨后 9:30 位于 88(条带下沿) + 150min*0.8 = 208px；1.5h * 48px/h = 72px
-    expect(block.style.top).toBe("208px");
+    // 折叠凌晨后 9:30 位于 40(条带下沿) + 150min*0.8 = 160px；1.5h * 48px/h = 72px
+    expect(block.style.top).toBe("160px");
     expect(block.style.height).toBe("72px");
     expect(block.textContent).toContain("09:30–11:00");
   });
@@ -80,7 +81,7 @@ describe("WeekTimeline", () => {
   it("无结束时间的事件默认按 1 小时显示", () => {
     renderTimeline([[ev("b", "阅读", "21:00")], ...emptyWeek.slice(1)]);
     const block = screen.getByRole("button", { name: /日程 阅读/ });
-    expect(block.style.top).toBe("760px"); // 88 + (1260-420)min * 0.8px/min
+    expect(block.style.top).toBe("712px"); // 40 + (1260-420)min * 0.8px/min
     expect(block.style.height).toBe("48px"); // 默认 1 小时
   });
 
@@ -178,11 +179,11 @@ describe("WeekTimeline", () => {
 });
 
 describe("WeekTimeline (凌晨折叠)", () => {
-  it("默认折叠：1:00–6:00 刻度隐藏，显示折叠条", () => {
+  it("默认折叠：0:00–6:00 刻度隐藏，显示折叠条", () => {
     renderTimeline(emptyWeek);
+    expect(screen.queryByText("0:00")).toBeNull();
     expect(screen.queryByText("1:00")).toBeNull();
     expect(screen.queryByText("5:00")).toBeNull();
-    expect(screen.getByText("0:00")).toBeInTheDocument();
     expect(screen.getByText("7:00")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /展开凌晨时段/ })).toBeInTheDocument();
   });
@@ -190,6 +191,7 @@ describe("WeekTimeline (凌晨折叠)", () => {
   it("点击折叠条展开，凌晨刻度恢复", () => {
     renderTimeline(emptyWeek);
     expandFold();
+    expect(screen.getByText("0:00")).toBeInTheDocument();
     expect(screen.getByText("1:00")).toBeInTheDocument();
     expect(screen.getByText("5:00")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /收起凌晨时段/ })).toBeInTheDocument();
@@ -199,7 +201,7 @@ describe("WeekTimeline (凌晨折叠)", () => {
     renderTimeline(emptyWeek);
     expandFold();
     fireEvent.click(screen.getByRole("button", { name: /收起凌晨时段/ }));
-    expect(screen.queryByText("1:00")).toBeNull();
+    expect(screen.queryByText("0:00")).toBeNull();
     expect(screen.getByRole("button", { name: /展开凌晨时段/ })).toBeInTheDocument();
   });
 
@@ -217,21 +219,11 @@ describe("WeekTimeline (凌晨折叠)", () => {
     const onAddDay = vi.fn();
     renderTimeline(emptyWeek, { onAddDay });
     const col = document.querySelector('[data-date="2026-08-03"]')!;
-    // 60px 位于折叠条内（48–88px）
-    fireEvent.mouseDown(col, { clientX: 50, clientY: 60 });
+    // 20px 位于顶部折叠条内（0–40px）
+    fireEvent.mouseDown(col, { clientX: 50, clientY: 20 });
     fireEvent.mouseMove(col, { clientX: 50, clientY: 120 });
     fireEvent.mouseUp(col);
     expect(onAddDay).not.toHaveBeenCalled();
-  });
-
-  it("折叠条上方 0:00 区仍可拖选（不越过凌晨区）", () => {
-    const onAddDay = vi.fn();
-    renderTimeline(emptyWeek, { onAddDay });
-    const col = document.querySelector('[data-date="2026-08-03"]')!;
-    fireEvent.mouseDown(col, { clientX: 50, clientY: 4 }); // 0:00（吸附）
-    fireEvent.mouseMove(col, { clientX: 50, clientY: 44 }); // 1:00（吸附，再往下就进入折叠条）
-    fireEvent.mouseUp(col);
-    expect(onAddDay).toHaveBeenCalledWith(["2026-08-03"], "00:00", "01:00");
   });
 });
 
@@ -246,7 +238,7 @@ describe("WeekTimeline (选择与框选)", () => {
     expect(screen.getByRole("button", { name: /编辑 评审/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /编辑 晨会/ })).toBeNull();
     const col = document.querySelector('[data-date="2026-08-03"]')!;
-    fireEvent.mouseDown(col, { clientX: 50, clientY: 136 }); // 8:00 空白处
+    fireEvent.mouseDown(col, { clientX: 50, clientY: 88 }); // 8:00 空白处
     fireEvent.mouseUp(col);
     expect(screen.queryByRole("button", { name: /编辑 评审/ })).toBeNull();
   });
@@ -257,8 +249,8 @@ describe("WeekTimeline (选择与框选)", () => {
     const b = ev("b", "评审", "11:00", "12:00");
     renderTimeline([[a, b], ...emptyWeek.slice(1)], { onAddDay });
     const col = document.querySelector('[data-date="2026-08-03"]')!;
-    fireEvent.mouseDown(col, { clientX: 50, clientY: 136 }); // 8:00
-    fireEvent.mouseMove(col, { clientX: 50, clientY: 352 }); // 12:30
+    fireEvent.mouseDown(col, { clientX: 50, clientY: 88 }); // 8:00
+    fireEvent.mouseMove(col, { clientX: 50, clientY: 304 }); // 12:30
     fireEvent.mouseUp(col);
     expect(onAddDay).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: /编辑 晨会/ })).toBeInTheDocument();
@@ -274,11 +266,11 @@ describe("WeekTimeline (选择与框选)", () => {
     renderTimeline(days);
     fireEvent.mouseDown(document.querySelector('[data-date="2026-08-03"]')!, {
       clientX: 50,
-      clientY: 136,
+      clientY: 88,
     });
     fireEvent.mouseMove(document.querySelector('[data-date="2026-08-04"]')!, {
       clientX: 150,
-      clientY: 352,
+      clientY: 304,
     });
     fireEvent.mouseUp(document.querySelector('[data-date="2026-08-04"]')!);
     expect(screen.getByRole("button", { name: /编辑 晨会/ })).toBeInTheDocument();
@@ -307,8 +299,8 @@ describe("WeekTimeline (整体挪动)", () => {
     const a = ev("a", "晨会", "09:00", "10:00");
     renderTimeline([[a], ...emptyWeek.slice(1)], { onMove });
     const block = screen.getByRole("button", { name: /日程 晨会/ });
-    fireEvent.mouseDown(block, { clientX: 50, clientY: 190 }); // 9:00
-    fireEvent.mouseMove(block, { clientX: 150, clientY: 264 }); // +90 分钟、+1 天
+    fireEvent.mouseDown(block, { clientX: 50, clientY: 136 }); // 9:00
+    fireEvent.mouseMove(block, { clientX: 150, clientY: 200 }); // 620→630min，+90 分钟、+1 天
     expect(block.style.transform).toBe("translate(100px, 72px)");
     fireEvent.mouseUp(block);
     expect(block.style.transform).toBe("");
@@ -325,12 +317,12 @@ describe("WeekTimeline (整体挪动)", () => {
     const b = ev("b", "评审", "11:00", "12:00");
     renderTimeline([[a, b], ...emptyWeek.slice(1)], { onMove });
     const col = document.querySelector('[data-date="2026-08-03"]')!;
-    fireEvent.mouseDown(col, { clientX: 50, clientY: 136 }); // 框选
-    fireEvent.mouseMove(col, { clientX: 50, clientY: 352 });
+    fireEvent.mouseDown(col, { clientX: 50, clientY: 88 }); // 框选
+    fireEvent.mouseMove(col, { clientX: 50, clientY: 304 });
     fireEvent.mouseUp(col);
     const block = screen.getByRole("button", { name: /日程 晨会/ });
-    fireEvent.mouseDown(block, { clientX: 50, clientY: 190 }); // 9:00
-    fireEvent.mouseMove(block, { clientX: 150, clientY: 264 }); // +90 分钟、+1 天
+    fireEvent.mouseDown(block, { clientX: 50, clientY: 136 }); // 9:00
+    fireEvent.mouseMove(block, { clientX: 150, clientY: 200 }); // 620→630min，+90 分钟、+1 天
     fireEvent.mouseUp(block);
     expect(onMove).toHaveBeenCalledWith("a", {
       date: "2026-08-04",
@@ -349,13 +341,65 @@ describe("WeekTimeline (整体挪动)", () => {
     const a = ev("a", "夜跑", "23:00", "23:30");
     renderTimeline([[a], ...emptyWeek.slice(1)], { onMove });
     const block = screen.getByRole("button", { name: /日程 夜跑/ });
-    fireEvent.mouseDown(block, { clientX: 50, clientY: 860 }); // 23:00
+    fireEvent.mouseDown(block, { clientX: 50, clientY: 812 }); // 23:00（块位于 808–832）
     fireEvent.mouseMove(block, { clientX: 50, clientY: 1150 }); // 拖到可见区底部以下
     fireEvent.mouseUp(block);
     expect(onMove).toHaveBeenCalledWith("a", {
       date: "2026-08-03",
       time: "23:29",
       endTime: "23:59",
+    });
+  });
+});
+
+describe("WeekTimeline (悬停高亮)", () => {
+  // 列 0 是 anchor 列（拿 columnHighlight 而非 columnHover），悬停断言用 col1/col2
+  const col1 = () => document.querySelector('[data-date="2026-08-04"]')!;
+  const col2 = () => document.querySelector('[data-date="2026-08-05"]')!;
+  const timelineContainer = () => screen.getByRole("button", { name: /展开凌晨时段/ }).parentElement!;
+
+  it("悬停列高亮对应日期列与小时刻度", () => {
+    renderTimeline(emptyWeek);
+    fireEvent.mouseMove(col1(), { clientX: 150, clientY: 88 }); // 8:00
+    expect(col1().className).toContain("bg-neutral-100/70");
+    expect(screen.getByText("8:00").className).toContain("text-blue-600");
+  });
+
+  it("移动到另一列另一时刻，高亮随之切换", () => {
+    renderTimeline(emptyWeek);
+    fireEvent.mouseMove(col1(), { clientX: 150, clientY: 88 }); // 8:00
+    fireEvent.mouseMove(col2(), { clientX: 250, clientY: 200 }); // 10:30 → 吸附 10:00
+    expect(col1().className).not.toContain("bg-neutral-100/70");
+    expect(col2().className).toContain("bg-neutral-100/70");
+    expect(screen.getByText("10:00").className).toContain("text-blue-600");
+    expect(screen.getByText("8:00").className).not.toContain("text-blue-600");
+  });
+
+  it("鼠标离开时间轴后高亮清除", () => {
+    renderTimeline(emptyWeek);
+    fireEvent.mouseMove(col2(), { clientX: 250, clientY: 200 });
+    // React onMouseLeave 基于 mouseout/relatedTarget 实现
+    fireEvent.mouseOut(timelineContainer(), { relatedTarget: document.body });
+    expect(col2().className).not.toContain("bg-neutral-100/70");
+    expect(screen.getByText("10:00").className).not.toContain("text-blue-600");
+  });
+
+  it("悬停不干扰事件块拖拽", () => {
+    const onMove = vi.fn();
+    const a = ev("a", "晨会", "09:00", "10:00");
+    renderTimeline([[a], ...emptyWeek.slice(1)], { onMove });
+    const block = screen.getByRole("button", { name: /日程 晨会/ });
+    fireEvent.mouseMove(block, { clientX: 50, clientY: 200 }); // 悬停 10:30 → 10:00 刻度高亮
+    expect(screen.getByText("10:00").className).toContain("text-blue-600");
+    fireEvent.mouseDown(block, { clientX: 50, clientY: 136 }); // 9:00
+    fireEvent.mouseMove(block, { clientX: 150, clientY: 200 }); // +90 分钟、+1 天
+    expect(onMove).not.toHaveBeenCalled(); // 拖拽期间悬停高亮已清除
+    expect(screen.getByText("10:00").className).not.toContain("text-blue-600");
+    fireEvent.mouseUp(block);
+    expect(onMove).toHaveBeenCalledWith("a", {
+      date: "2026-08-04",
+      time: "10:30",
+      endTime: "11:30",
     });
   });
 });
