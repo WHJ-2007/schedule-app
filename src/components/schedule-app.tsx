@@ -105,12 +105,21 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const goPrevWeek = () => {
     const d = addDays(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), -7);
     setSelectedDateKey(toDateKey(d));
+    setViewYear(d.getFullYear());
+    setViewMonth(d.getMonth());
   };
   const goNextWeek = () => {
     const d = addDays(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 7);
     setSelectedDateKey(toDateKey(d));
+    setViewYear(d.getFullYear());
+    setViewMonth(d.getMonth());
   };
-  const goTodayWeek = () => setSelectedDateKey(todayKey());
+  const goTodayWeek = () => {
+    const t = new Date();
+    setSelectedDateKey(todayKey());
+    setViewYear(t.getFullYear());
+    setViewMonth(t.getMonth());
+  };
 
   const openAdd = (dateKey: string) => setForm(emptyForm(dateKey));
   const openEdit = (e: ScheduleEvent) =>

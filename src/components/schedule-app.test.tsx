@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import ScheduleApp from "./schedule-app";
 import { THEME_TOKENS } from "./theme-tokens";
-import { getMonthGrid, isSameMonth, formatDayLabel, getWeekDates } from "@/lib/date";
+import { getMonthGrid, isSameMonth, formatDayLabel, getWeekDates, addDays, formatMonthTitle } from "@/lib/date";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -120,5 +120,19 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: `跳转到${target.getMonth() + 1}月${target.getDate()}日` }));
     expect(screen.getByText("该日新增")).toBeInTheDocument();
+  });
+
+  it("周视图连续翻周跨月后切回月视图显示对应月份", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    for (let i = 0; i < 6; i++) {
+      fireEvent.click(screen.getByRole("button", { name: /上一周/ }));
+    }
+    fireEvent.click(screen.getByRole("button", { name: "月" }));
+    const now = new Date();
+    const target = addDays(now.getFullYear(), now.getMonth(), now.getDate(), -42);
+    expect(
+      screen.getByText(formatMonthTitle(target.getFullYear(), target.getMonth()))
+    ).toBeInTheDocument();
   });
 });
