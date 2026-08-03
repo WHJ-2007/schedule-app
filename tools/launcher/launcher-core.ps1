@@ -61,3 +61,47 @@ function Get-PortInUse([int]$port = $script:Port) {
 }
 
 function Get-ServerUrl { return ("http://localhost:" + $script:Port) }
+
+function Start-DevServer {
+    # 返回 $true 成功启动；$false 端口被占用
+    if (Get-PortInUse) { return $false }
+    $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if (-not $npm) { throw "找不到 npm.cmd，请确认已安装 Node.js" }
+    Ensure-RuntimeDir | Out-Null
+    $out = Get-DevOutPath
+    $err = Get-DevErrPath
+    $p = Start-Process -FilePath $npm.Source -ArgumentList @("run", "dev") `
+        -WorkingDirectory (Get-ProjectRoot) `
+        -RedirectStandardOutput $out -RedirectStandardError $err `
+        -WindowStyle Hidden -PassThru
+    Save-PidFile $p.Id
+    return $true
+}
+
+function Stop-DevServer {
+    $id = Load-PidFile
+    if ($id) {
+        taskkill /PID $id /T /F 2>&1 | Out-Null
+    }
+    Remove-PidFile
+    return $true
+}
+
+function Get-DevServerStatus {
+    # 返回 "stopped" | "starting" | "running"
+    $id = Load-PidFile
+    if (-not $id -or -not (Is-ProcessAlive $id)) {
+        if ($id) { Remove-PidFile }
+        return "stopped"
+    }
+    if (Get-PortInUse) { return "running" }
+    return "starting"
+}
+
+function Wait-PortReady([int]$timeoutSeconds = 15) {
+    for ($i = 0; $i -lt $timeoutSeconds; $i++) {
+        if (Get-PortInUse) { return $true }
+        Start-Sleep -Seconds 1
+    }
+    return (Get-PortInUse)
+}

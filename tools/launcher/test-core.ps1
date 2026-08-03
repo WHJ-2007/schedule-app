@@ -59,4 +59,43 @@ $freePort = 4000
 while (Get-PortInUse -port $freePort) { $freePort++ }
 Assert-False "空闲端口检测为空闲" (Get-PortInUse -port $freePort)
 
+# —— 服务启停（真实 npm run dev）——
+if (Get-PortInUse) { Write-Host "WARN: 端口 3000 已被占用，启停测试可能失败" -ForegroundColor Yellow }
+
+$started = Start-DevServer
+Assert-True "启动服务成功" $started
+if ($started) {
+    Assert-True "启动后写入 PID 文件" ([bool](Load-PidFile))
+    $ready = Wait-PortReady -timeoutSeconds 60
+    Assert-True "60 秒内端口就绪" $ready
+    # 端口就绪后再测二次启动：否则首个 dev server 尚未监听，二次启动会误判为空闲并多起一个进程
+    Assert-True "二次启动因端口占用返回 False" (-not (Start-DevServer))
+    Assert-True "PID 文件仍为原 PID" ([bool](Load-PidFile))
+    Assert-True "状态为运行中" ((Get-DevServerStatus) -eq "running")
+    $code = (Invoke-WebRequest -Uri "http://localhost:3000/" -UseBasicParsing -TimeoutSec 10).StatusCode
+    Assert-True "首页返回 200" ($code -eq 200)
+
+    # 意外退出模拟：杀进程树
+    $srvPid = Load-PidFile
+    taskkill /PID $srvPid /T /F 2>&1 | Out-Null
+    Start-Sleep -Seconds 3
+    Assert-True "意外退出后状态回已停止" ((Get-DevServerStatus) -eq "stopped")
+    Assert-True "意外退出后 PID 文件被清理" (-not (Test-Path (Get-PidFilePath)))
+
+    # 重新启动 → 正常停止
+    Assert-True "再次启动成功" (Start-DevServer)
+    $ready2 = Wait-PortReady -timeoutSeconds 60
+    Assert-True "再次启动端口就绪" $ready2
+    Stop-DevServer | Out-Null
+    Start-Sleep -Seconds 3
+    Assert-True "停止后端口关闭" (-not (Get-PortInUse))
+    Assert-True "停止后 PID 文件被清理" (-not (Test-Path (Get-PidFilePath)))
+    Assert-True "停止后状态为已停止" ((Get-DevServerStatus) -eq "stopped")
+
+    # 假 PID 恢复逻辑
+    Save-PidFile 99999999
+    Assert-True "假 PID 状态为已停止" ((Get-DevServerStatus) -eq "stopped")
+    Assert-True "假 PID 被清理" (-not (Test-Path (Get-PidFilePath)))
+}
+
 Test-Done
