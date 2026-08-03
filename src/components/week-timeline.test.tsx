@@ -403,3 +403,37 @@ describe("WeekTimeline (悬停高亮)", () => {
     });
   });
 });
+
+describe("WeekTimeline (拖拽时间气泡)", () => {
+  it("拖选时跟随显示起止时间，松手后消失", () => {
+    renderTimeline(emptyWeek);
+    expandFold();
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    fireEvent.mouseDown(col, { clientX: 50, clientY: 96 }); // 2:00
+    fireEvent.mouseMove(col, { clientX: 50, clientY: 144 }); // 3:00
+    expect(screen.getByText("02:00–03:00")).toBeInTheDocument();
+    fireEvent.mouseUp(col);
+    expect(screen.queryByText("02:00–03:00")).toBeNull();
+  });
+
+  it("横向跨列拖选显示日期范围", () => {
+    renderTimeline(emptyWeek);
+    expandFold();
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    fireEvent.mouseDown(col, { clientX: 50, clientY: 96 });
+    fireEvent.mouseMove(col, { clientX: 250, clientY: 144 }); // 拖到第 3 列
+    expect(screen.getByText("8月3日–8月5日 02:00–03:00")).toBeInTheDocument();
+  });
+
+  it("挪动事件时显示目标日期与时间，提交后消失", () => {
+    const onMove = vi.fn();
+    const a = ev("a", "晨会", "09:00", "10:00");
+    renderTimeline([[a], ...emptyWeek.slice(1)], { onMove });
+    const block = screen.getByRole("button", { name: /日程 晨会/ });
+    fireEvent.mouseDown(block, { clientX: 50, clientY: 136 }); // 9:00
+    fireEvent.mouseMove(block, { clientX: 150, clientY: 200 }); // 620→630min，+1 天
+    expect(screen.getByText("8月4日 10:30–11:30")).toBeInTheDocument();
+    fireEvent.mouseUp(block);
+    expect(screen.queryByText("8月4日 10:30–11:30")).toBeNull();
+  });
+});

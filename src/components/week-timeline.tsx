@@ -81,6 +81,8 @@ export default function WeekTimeline({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [folded, setFolded] = useState(true); // 默认折叠凌晨 0:00–6:00
   const [hover, setHover] = useState<{ col: number; min: number | null } | null>(null); // 悬停高亮：列 + 分钟
+  const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null); // 拖拽时间气泡
+  const timelineRef = useRef<HTMLDivElement | null>(null);
 
   // 拖拽/选中状态同步进 ref：window 监听只挂载一次，闭包只捕获首次渲染值，
   // 快速单击时 mouseup 也能被捕获（useEffect 被动绑定在真实浏览器是异步的）
@@ -134,9 +136,10 @@ export default function WeekTimeline({
   };
 
   const visibleHours = folded ? HOURS.slice(7) : HOURS;
-  const lineYs = HOURS.slice(1)
-    .map(hourTop)
-    .filter((y): y is number => y !== null);
+  // 网格线按小时做 key：折叠切换时 top 变化走 transition，key 稳定才不重挂载
+  const lineHours = HOURS.slice(1)
+    .map((h) => ({ h, y: hourTop(h) }))
+    .filter((x): x is { h: number; y: number } => x.y !== null);
 
   const foldCount = eventsByDay.reduce(
     (sum, day) =>
@@ -166,6 +169,7 @@ export default function WeekTimeline({
   // 拖选/挪动期间在 window 上监听，鼠标移出列外仍持续
   useEffect(() => {
     const handleMove = (e: MouseEvent) => {
+      const rect = timelineRef.current?.getBoundingClientRect();
       const m = moveRef.current;
       if (m) {
         const dx = Math.max(m.dxMin, Math.min(m.dxMax, colFromX(e.clientX, m.colRects) - m.downCol));
@@ -174,6 +178,22 @@ export default function WeekTimeline({
         const next = { ...m, dx, dy };
         moveRef.current = next;
         setMove(next);
+        if (rect) {
+          const first = selectedRef.current
+            .map((id) => eventsRef.current.flat().find((x) => x.id === id))
+            .find((x) => x && x.time && !isHidden(x));
+          if (first) {
+            const s = parseTimeToMinutes(first.time);
+            const en = first.endTime ? parseTimeToMinutes(first.endTime) : s + 60;
+            const day = parseDateKey(first.date);
+            const nd = addDays(day.getFullYear(), day.getMonth(), day.getDate(), next.dx);
+            setTip({
+              x: e.clientX - rect.left,
+              y: e.clientY - rect.top,
+              text: `${nd.getMonth() + 1}月${nd.getDate()}日 ${minutesToTime(s + next.dy)}–${minutesToTime(en + next.dy)}`,
+            });
+          }
+        }
         return;
       }
       const d = dragRef.current;
@@ -190,6 +210,21 @@ export default function WeekTimeline({
       const next = { ...d, curCol, start, end: end === start ? end + SNAP_MIN : end };
       dragRef.current = next;
       setDrag(next);
+      if (rect) {
+        const colMin = Math.min(next.startCol, next.curCol);
+        const colMax = Math.max(next.startCol, next.curCol);
+        const range = `${minutesToTime(next.start)}–${minutesToTime(next.end)}`;
+        const sd = parseDateKey(weekKeysRef.current[colMin]);
+        const ed = parseDateKey(weekKeysRef.current[colMax]);
+        setTip({
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+          text:
+            colMin === colMax
+              ? range
+              : `${sd.getMonth() + 1}月${sd.getDate()}日–${ed.getMonth() + 1}月${ed.getDate()}日 ${range}`,
+        });
+      }
     };
     const up = () => {
       // 事件挪动提交
@@ -212,6 +247,7 @@ export default function WeekTimeline({
         }
         moveRef.current = null;
         setMove(null);
+        setTip(null);
         return;
       }
       // 空白拖拽提交：矩形内有日程 → 框选；否则批量新建（横向跨几天）
@@ -219,6 +255,7 @@ export default function WeekTimeline({
       if (!d) return;
       dragRef.current = null;
       setDrag(null);
+      setTip(null);
       if (d.end - d.start <= SNAP_MIN) {
         setSelectedIds([]); // 空白单击：取消选中
         return;
@@ -323,7 +360,7 @@ export default function WeekTimeline({
   };
 
   return (
-    <div className={tokens.weekView.timeline}>
+    <div ref={timelineRef} className={"relative " + tokens.weekView.timeline}>
       {/* 列头行：日期跳月视图 ＋ 全天事件胶囊 */}
       <div className="flex border-b border-neutral-200">
         <div style={{ width: GUTTER }} />
@@ -403,9 +440,10 @@ export default function WeekTimeline({
         onMouseMove={handleTimelineMove}
         onMouseLeave={() => setHover(null)}
       >
-        <div className="relative shrink-0" style={{ width: GUTTER, height: dayHeight }}>
+        <div className="anim-fold relative shrink-0" style={{ width: GUTTER, height: dayHeight }}>
           {visibleHours.map((h) => (
-            <div key={h} className="absolute" style={{ top: hourTop(h)!, height: HOUR_PX }}>
+            // inset-x-0：绝对定位容器必须有宽度，否则子刻度溢出到列外不可见
+            <div key={h} className="anim-fold absolute inset-x-0" style={{ top: hourTop(h)!, height: HOUR_PX }}>
               <span
                 className={
                   tokens.weekView.hourLabel +
@@ -419,7 +457,7 @@ export default function WeekTimeline({
             </div>
           ))}
         </div>
-        <div className="grid flex-1 grid-cols-7" style={{ height: dayHeight }}>
+        <div className="anim-fold grid flex-1 grid-cols-7" style={{ height: dayHeight }}>
           {dates.map((d, i) => {
             const key = toDateKey(d);
             const timed = (eventsByDay[i] ?? []).filter((e) => e.time);
@@ -438,8 +476,8 @@ export default function WeekTimeline({
                 }
                 onMouseDown={(e) => handleColumnDown(e, i)}
               >
-                {lineYs.map((y) => (
-                  <div key={y} className={tokens.weekView.gridLine} style={{ top: y }} />
+                {lineHours.map(({ h, y }) => (
+                  <div key={h} className={"anim-fold " + tokens.weekView.gridLine} style={{ top: y }} />
                 ))}
                 {drag &&
                   i >= Math.min(drag.startCol, drag.curCol) &&
@@ -472,6 +510,7 @@ export default function WeekTimeline({
                       }}
                       onMouseDown={(ev) => handleBlockDown(ev, e, i)}
                       className={
+                        "anim-fold " +
                         tokens.weekView.eventBlock +
                         (isSelected ? " " + tokens.weekView.eventSelected : "")
                       }
@@ -522,7 +561,7 @@ export default function WeekTimeline({
           onMouseDown={(e) => e.stopPropagation()}
           onClick={() => setFolded((f) => !f)}
           aria-label={folded ? "展开凌晨时段 0:00–6:00" : "收起凌晨时段 0:00–6:00"}
-          className={"absolute inset-x-0 z-10 " + tokens.weekView.foldBand}
+          className={"anim-fold absolute inset-x-0 z-10 " + tokens.weekView.foldBand}
           style={{ top: bandTop, height: bandH }}
         >
           {folded
@@ -530,6 +569,12 @@ export default function WeekTimeline({
             : "点击收起凌晨时段"}
         </button>
       </div>
+      {/* 拖拽时间气泡：跟随鼠标显示当前选区/目标时间（放滚动容器外，避免裁剪与滚动偏移） */}
+      {tip && (
+        <div className={tokens.weekView.dragTip} style={{ left: tip.x, top: tip.y }}>
+          {tip.text}
+        </div>
+      )}
     </div>
   );
 }

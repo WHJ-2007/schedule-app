@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useEvents } from "@/lib/use-events";
 import {
   WEEKDAY_NAMES,
@@ -56,9 +56,14 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
   const [selectedDateKey, setSelectedDateKey] = useState(() => todayKey());
   const [form, setForm] = useState<FormState | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>(() => getSavedView());
+  // 初始恒为 month：SSR 无 localStorage，直接读保存视图会导致服务端 HTML 与客户端首帧不一致而水合失败
+  const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [navDir, setNavDir] = useState<"left" | "right" | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setViewMode(getSavedView());
+  }, []);
 
   const byDay = useMemo(() => {
     const m = new Map<string, ScheduleEvent[]>();
