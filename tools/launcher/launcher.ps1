@@ -9,7 +9,7 @@ $script:LastStatus = $null
 $script:Exiting = $false
 
 function Append-Log([string]$text) {
-    $line = Get-Date -Format "[HH:mm:ss] " + $text
+    $line = (Get-Date -Format "[HH:mm:ss] ") + $text
     Append-SessionLog $line
     $box = $script:LogBox
     if ($box) {

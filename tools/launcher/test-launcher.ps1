@@ -31,5 +31,13 @@ Assert-True "打开按钮初始禁用" ($script:BtnOpen.Enabled -eq $false)
 Assert-True "关闭按钮初始禁用" ($script:BtnStop.Enabled -eq $false)
 Assert-True "复制按钮存在" ($script:BtnCopy.Text -eq "📋 复制日志")
 Assert-True "日志框只读" ($script:LogBox.ReadOnly -eq $true)
+
+$script:CapturedSessionLine = $null
+function Append-SessionLog([string]$text) { $script:CapturedSessionLine = $text }
+Append-Log "测试消息"
+Assert-True "Append-Log 生成带时间戳行" ($script:CapturedSessionLine -match "^\[\d\d:\d\d:\d\d\] 测试消息$")
+Assert-True "Append-Log 追加到日志框" ($script:LogBox.Text -match "测试消息")
+Assert-True "日志框行数不超过上限" ($script:LogBox.Lines.Count -le 2000)
+
 $f.Dispose()
 Test-Done
