@@ -152,7 +152,7 @@ export default function Style5() {
 
               <div className="grid grid-cols-7">
                 {WEEKDAY_NAMES.map((w) => (
-                  <div key={w} className="border-b border-neutral-100 py-1.5 text-center text-xs font-semibold text-neutral-400">
+                  <div key={w} className="border-b border-neutral-100 py-1.5 text-center text-xs font-semibold text-neutral-500">
                     {w}
                   </div>
                 ))}
@@ -179,7 +179,7 @@ export default function Style5() {
                           (isSelected
                             ? "bg-[#1e3a5f] text-white"
                             : isToday
-                              ? "bg-[#c9a961] text-white"
+                              ? "bg-[#c9a961] text-[#1e3a5f]"
                               : inMonth
                                 ? "text-neutral-800"
                                 : "text-neutral-300")
@@ -211,7 +211,7 @@ export default function Style5() {
               </button>
 
               {dayEvents.length === 0 ? (
-                <p className="mt-6 text-sm text-neutral-400">这一天没有日程</p>
+                <p className="mt-6 text-sm text-neutral-500">这一天没有日程</p>
               ) : (
                 <ul className="mt-5 space-y-4">
                   {dayEvents.map((e) => (
@@ -251,7 +251,7 @@ export default function Style5() {
                         type="button"
                         onClick={() => deleteEvent(e.id)}
                         aria-label="删除"
-                        className="shrink-0 text-neutral-300 transition hover:text-red-500"
+                        className="shrink-0 text-neutral-400 transition hover:text-red-500"
                       >
                         ✕
                       </button>
