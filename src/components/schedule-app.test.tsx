@@ -12,6 +12,7 @@ import {
   formatYearTitle,
   addMonths,
   toDateKey,
+  formatWeekTitle,
 } from "@/lib/date";
 
 vi.mock("next/navigation", () => ({
@@ -308,6 +309,19 @@ describe("ScheduleApp (page-turn animation)", () => {
     expect(sectionOf(formatYearTitle(year + 1)).className).toContain("anim-slide-in-right");
     fireEvent.click(screen.getByRole("button", { name: /上一年/ }));
     expect(sectionOf(formatYearTitle(year)).className).toContain("anim-slide-in-left");
+  });
+
+  it("周视图：下一周从右滑入、上一周从左滑入（年月周标题跟随）", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const now = new Date();
+    fireEvent.click(screen.getByRole("button", { name: /下一周/ }));
+    const nextWeek = getWeekDates(
+      addDays(now.getFullYear(), now.getMonth(), now.getDate(), 7)
+    );
+    expect(sectionOf(formatWeekTitle(nextWeek)).className).toContain("anim-slide-in-right");
+    fireEvent.click(screen.getByRole("button", { name: /上一周/ }));
+    expect(sectionOf(formatWeekTitle(getWeekDates(now))).className).toContain("anim-slide-in-left");
   });
 
   it.each([1, 6])("主题 %i 翻月动画与功能一致", (n) => {

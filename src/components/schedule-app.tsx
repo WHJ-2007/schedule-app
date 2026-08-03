@@ -116,18 +116,21 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   };
 
   const goPrevWeek = () => {
+    setNavDir("left");
     const d = addDays(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), -7);
     setSelectedDateKey(toDateKey(d));
     setViewYear(d.getFullYear());
     setViewMonth(d.getMonth());
   };
   const goNextWeek = () => {
+    setNavDir("right");
     const d = addDays(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 7);
     setSelectedDateKey(toDateKey(d));
     setViewYear(d.getFullYear());
     setViewMonth(d.getMonth());
   };
   const goTodayWeek = () => {
+    setNavDir(null);
     const t = new Date();
     setSelectedDateKey(todayKey());
     setViewYear(t.getFullYear());
@@ -388,7 +391,20 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
             </div>
             )}
             {viewMode === "week" && (
-              <section className={tokens.viewPanel}>
+              <section
+                key={`week-${toDateKey(weekDates[0])}`}
+                onAnimationEnd={(e) => {
+                  if (e.target === e.currentTarget) setNavDir(null);
+                }}
+                className={[
+                  tokens.viewPanel,
+                  navDir === "left"
+                    ? "anim-slide-in-left"
+                    : navDir === "right"
+                      ? "anim-slide-in-right"
+                      : "",
+                ].join(" ")}
+              >
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className={tokens.sectionTitle}>{formatWeekTitle(weekDates)}</h2>
                   <div className="flex gap-2">
