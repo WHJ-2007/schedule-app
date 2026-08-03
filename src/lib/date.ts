@@ -82,10 +82,10 @@ export function getWeekDates(anchor: Date): Date[] {
 }
 
 export function formatWeekTitle(week: Date[]): string {
-  const first = week[0];
-  const last = week[6];
-  const fmt = (d: Date) => `${d.getMonth() + 1}月${d.getDate()}日`;
-  return `${fmt(first)} – ${fmt(last)}`;
+  // 以周一所在年月为准，周序号为该周在月份内的周次
+  const monday = week[0];
+  const weekOfMonth = Math.ceil(monday.getDate() / 7);
+  return `${monday.getFullYear()}年${monday.getMonth() + 1}月 第${weekOfMonth}周`;
 }
 
 export function getYearMonths(year: number): Date[] {

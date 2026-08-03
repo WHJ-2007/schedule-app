@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   WEEKDAY_NAMES,
   toDateKey,
@@ -50,6 +50,11 @@ export default function WeekTimeline({
   onDelete: (id: string) => void;
 }) {
   const [drag, setDrag] = useState<DragState | null>(null);
+  // 拖拽状态同步进 ref：window 监听只挂载一次，快速单击时 mouseup
+  // 也能被捕获（useEffect 被动绑定在真实浏览器是异步的，会丢快速单击）
+  const dragRef = useRef<DragState | null>(null);
+  const onAddDayRef = useRef(onAddDay);
+  onAddDayRef.current = onAddDay;
 
   const snap = (minutes: number) => Math.round(minutes / SNAP_MIN) * SNAP_MIN;
 
@@ -58,15 +63,21 @@ export default function WeekTimeline({
 
   // 拖选期间在 window 上监听，鼠标移出列外仍持续；mouse 事件 jsdom 支持良好
   useEffect(() => {
-    if (!drag) return;
     const move = (e: MouseEvent) => {
-      const cur = minutesAt(e.clientY, drag.top);
-      const start = Math.min(drag.down, cur);
-      const end = Math.max(drag.down, cur);
-      setDrag((d) => (d ? { ...d, start, end: end === start ? end + SNAP_MIN : end } : d));
+      const d = dragRef.current;
+      if (!d) return;
+      const cur = minutesAt(e.clientY, d.top);
+      const start = Math.min(d.down, cur);
+      const end = Math.max(d.down, cur);
+      const next = { ...d, start, end: end === start ? end + SNAP_MIN : end };
+      dragRef.current = next;
+      setDrag(next);
     };
     const up = () => {
-      onAddDay(drag.dateKey, minutesToTime(drag.start), minutesToTime(drag.end));
+      const d = dragRef.current;
+      if (!d) return;
+      onAddDayRef.current(d.dateKey, minutesToTime(d.start), minutesToTime(d.end));
+      dragRef.current = null;
       setDrag(null);
     };
     window.addEventListener("mousemove", move);
@@ -75,12 +86,14 @@ export default function WeekTimeline({
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
     };
-  }, [drag, onAddDay]);
+  }, []);
 
   const handleDown = (e: React.MouseEvent<HTMLDivElement>, col: number, dateKey: string) => {
     const top = e.currentTarget.getBoundingClientRect().top;
     const down = minutesAt(e.clientY, top);
-    setDrag({ col, dateKey, top, down, start: down, end: down + SNAP_MIN });
+    const d = { col, dateKey, top, down, start: down, end: down + SNAP_MIN };
+    dragRef.current = d;
+    setDrag(d);
   };
 
   const dayHeight = HOURS.length * HOUR_PX;

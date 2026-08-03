@@ -122,12 +122,16 @@ describe("week/year helpers", () => {
     expect(week[0].getDate()).toBe(27);
   });
 
-  it("formatWeekTitle 同月", () => {
-    expect(formatWeekTitle(getWeekDates(new Date(2026, 7, 15)))).toBe("8月10日 – 8月16日");
+  it("formatWeekTitle 按年月周输出", () => {
+    expect(formatWeekTitle(getWeekDates(new Date(2026, 7, 15)))).toBe("2026年8月 第2周");
   });
 
-  it("formatWeekTitle 跨月", () => {
-    expect(formatWeekTitle(getWeekDates(new Date(2026, 7, 1)))).toBe("7月27日 – 8月2日");
+  it("formatWeekTitle 周一开头的月份为第 1 周", () => {
+    expect(formatWeekTitle(getWeekDates(new Date(2026, 7, 3)))).toBe("2026年8月 第1周");
+  });
+
+  it("formatWeekTitle 跨月周以周一所在年月为准", () => {
+    expect(formatWeekTitle(getWeekDates(new Date(2026, 7, 1)))).toBe("2026年7月 第4周");
   });
 
   it("getYearMonths 恰 12 个月首日", () => {
