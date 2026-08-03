@@ -55,6 +55,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const [selectedDateKey, setSelectedDateKey] = useState(() => todayKey());
   const [form, setForm] = useState<FormState | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(() => getSavedView());
+  const [navDir, setNavDir] = useState<"left" | "right" | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
 
   const byDay = useMemo(() => {
@@ -80,16 +81,19 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const indicatorArea = tokens.cell.indicatorArea ?? "mt-1.5 flex h-4 items-center justify-center gap-1";
 
   const goPrev = () => {
+    setNavDir("left");
     const p = addMonths(viewYear, viewMonth, -1);
     setViewYear(p.year);
     setViewMonth(p.monthIndex);
   };
   const goNext = () => {
+    setNavDir("right");
     const p = addMonths(viewYear, viewMonth, 1);
     setViewYear(p.year);
     setViewMonth(p.monthIndex);
   };
   const goToday = () => {
+    setNavDir(null);
     const t = new Date();
     setViewYear(t.getFullYear());
     setViewMonth(t.getMonth());
@@ -102,6 +106,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   };
 
   const jumpToMonth = (d: Date) => {
+    setNavDir(null);
     setViewYear(d.getFullYear());
     setViewMonth(d.getMonth());
     setSelectedDateKey(toDateKey(d));
@@ -127,9 +132,18 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     setViewMonth(t.getMonth());
   };
 
-  const goPrevYear = () => setViewYear((y) => addYears(y, -1));
-  const goNextYear = () => setViewYear((y) => addYears(y, 1));
-  const goTodayYear = () => setViewYear(new Date().getFullYear());
+  const goPrevYear = () => {
+    setNavDir("left");
+    setViewYear((y) => addYears(y, -1));
+  };
+  const goNextYear = () => {
+    setNavDir("right");
+    setViewYear((y) => addYears(y, 1));
+  };
+  const goTodayYear = () => {
+    setNavDir(null);
+    setViewYear(new Date().getFullYear());
+  };
   const yearMonths = useMemo(() => getYearMonths(viewYear), [viewYear]);
   const yearMonthCells = useMemo(
     () => yearMonths.map((m) => getMonthDayCells(m.getFullYear(), m.getMonth())),
@@ -183,7 +197,22 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
             {viewMode === "month" && (
             <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
               {/* 月历 */}
-              <section className={tokens.viewPanel}>
+              <section
+                key={`${viewYear}-${viewMonth}`}
+                onAnimationEnd={(e) => {
+                  if (e.target === e.currentTarget) setNavDir(null);
+                }}
+                className={[
+                  tokens.viewPanel,
+                  navDir === "left"
+                    ? "anim-slide-in-left"
+                    : navDir === "right"
+                      ? "anim-slide-in-right"
+                      : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className={tokens.sectionTitle}>{formatMonthTitle(viewYear, viewMonth)}</h2>
                   <div className="flex gap-2">
@@ -435,7 +464,22 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
               </section>
             )}
             {viewMode === "year" && (
-              <section className={tokens.viewPanel}>
+              <section
+                key={viewYear}
+                onAnimationEnd={(e) => {
+                  if (e.target === e.currentTarget) setNavDir(null);
+                }}
+                className={[
+                  tokens.viewPanel,
+                  navDir === "left"
+                    ? "anim-slide-in-left"
+                    : navDir === "right"
+                      ? "anim-slide-in-right"
+                      : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className={tokens.sectionTitle}>{formatYearTitle(viewYear)}</h2>
                   <div className="flex gap-2">

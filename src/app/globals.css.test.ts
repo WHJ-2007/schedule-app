@@ -13,6 +13,14 @@ describe("globals.css", () => {
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
   });
 
+  it("翻页动画 keyframes 定义齐全", () => {
+    const css = readFileSync("src/app/globals.css", "utf-8");
+    expect(css).toContain("@keyframes slide-in-left");
+    expect(css).toContain("@keyframes slide-in-right");
+    expect(css).toContain(".anim-slide-in-left");
+    expect(css).toContain(".anim-slide-in-right");
+  });
+
   it("全局按钮反馈动画存在且排除禁用态", () => {
     const css = readFileSync("src/app/globals.css", "utf-8");
     expect(css).toContain("button:hover:not(:disabled) { transform: scale(1.02); }");

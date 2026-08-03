@@ -34,6 +34,16 @@ body {
 .anim-fade-in { animation: fade-in 180ms ease-out both; }
 .anim-scale-in { animation: scale-in 200ms ease-out both; }
 .anim-slide-up { animation: slide-up 220ms ease-out both; }
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.anim-slide-in-left { animation: slide-in-left 220ms ease-out both; }
+.anim-slide-in-right { animation: slide-in-right 220ms ease-out both; }
 
 /* 全局按钮反馈动画：悬停轻微放大、按下收缩 */
 button {

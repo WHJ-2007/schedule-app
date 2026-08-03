@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 
 type Pos = { x: number; y: number; w: number; h: number };
 
@@ -38,7 +38,9 @@ export default function SelectionBubble({
     );
   }, [gridRef]);
 
-  useLayoutEffect(() => {
+  // 用被动 effect 而非 layout effect：React 先跑叶子组件的 layout effect，
+  // 此时父网格的 ref 尚未挂上（翻月 remount 时必现），measure 会拿不到 grid。
+  useEffect(() => {
     measure();
   });
 

@@ -2,7 +2,16 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import ScheduleApp from "./schedule-app";
 import { THEME_TOKENS } from "./theme-tokens";
-import { getMonthGrid, isSameMonth, formatDayLabel, getWeekDates, addDays, formatMonthTitle } from "@/lib/date";
+import {
+  getMonthGrid,
+  isSameMonth,
+  formatDayLabel,
+  getWeekDates,
+  addDays,
+  formatMonthTitle,
+  formatYearTitle,
+  addMonths,
+} from "@/lib/date";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -224,17 +233,72 @@ describe("ScheduleApp (selection bubble)", () => {
 
   it("选中日期不在当月网格时泡泡隐藏，回当月后恢复", async () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
-    const bubble = screen.getByTestId("selection-bubble");
     const now = new Date();
-    await waitFor(() => expect(bubble.style.visibility).toBe("visible"));
+    await waitFor(() =>
+      expect(screen.getByTestId("selection-bubble").style.visibility).toBe("visible")
+    );
     // 连翻两个月，让选中的今天彻底离开网格（相邻月补格仍包含它，需翻两个月）
     fireEvent.click(screen.getByRole("button", { name: /上月/ }));
     fireEvent.click(screen.getByRole("button", { name: /上月/ }));
-    await waitFor(() => expect(bubble.style.visibility).toBe("hidden"));
+    await waitFor(() =>
+      expect(screen.getByTestId("selection-bubble").style.visibility).toBe("hidden")
+    );
     fireEvent.click(screen.getByRole("button", { name: /下月/ }));
     fireEvent.click(screen.getByRole("button", { name: /下月/ }));
     await waitFor(() =>
-      expect(bubble.style.transform).toBe(`translate(${now.getDate() * 10}px, 40px)`)
+      expect(screen.getByTestId("selection-bubble").style.transform).toBe(
+        `translate(${now.getDate() * 10}px, 40px)`
+      )
     );
+  });
+});
+
+describe("ScheduleApp (page-turn animation)", () => {
+  const sectionOf = (title: string) => screen.getByText(title).closest("section")!;
+
+  it("月视图：下月从右滑入、上月从左滑入", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    const now = new Date();
+    fireEvent.click(screen.getByRole("button", { name: /下月/ }));
+    const next = addMonths(now.getFullYear(), now.getMonth(), 1);
+    expect(sectionOf(formatMonthTitle(next.year, next.monthIndex)).className).toContain(
+      "anim-slide-in-right"
+    );
+    fireEvent.click(screen.getByRole("button", { name: /上月/ }));
+    expect(sectionOf(formatMonthTitle(now.getFullYear(), now.getMonth())).className).toContain(
+      "anim-slide-in-left"
+    );
+  });
+
+  it("年视图：下一年从右滑入、上一年从左滑入（与月视图一致）", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "年" }));
+    const year = new Date().getFullYear();
+    fireEvent.click(screen.getByRole("button", { name: /下一年/ }));
+    expect(sectionOf(formatYearTitle(year + 1)).className).toContain("anim-slide-in-right");
+    fireEvent.click(screen.getByRole("button", { name: /上一年/ }));
+    expect(sectionOf(formatYearTitle(year)).className).toContain("anim-slide-in-left");
+  });
+
+  it.each([1, 6])("主题 %i 翻月动画与功能一致", (n) => {
+    render(<ScheduleApp tokens={THEME_TOKENS[n]} />);
+    const now = new Date();
+    fireEvent.click(screen.getByRole("button", { name: /下月/ }));
+    const next = addMonths(now.getFullYear(), now.getMonth(), 1);
+    expect(sectionOf(formatMonthTitle(next.year, next.monthIndex)).className).toContain(
+      "anim-slide-in-right"
+    );
+    // 功能一致：翻月后日期可点选
+    const grid = getMonthGrid(next.year, next.monthIndex);
+    const counts = new Map<number, number>();
+    for (const d of grid) counts.set(d.getDate(), (counts.get(d.getDate()) ?? 0) + 1);
+    const target = grid.find(
+      (d) =>
+        isSameMonth(d, next.year, next.monthIndex) && counts.get(d.getDate()) === 1
+    )!;
+    fireEvent.click(
+      screen.getByRole("button", { name: `${target.getMonth() + 1}月${target.getDate()}日` })
+    );
+    expect(screen.getByText(formatDayLabel(target))).toBeInTheDocument();
   });
 });
