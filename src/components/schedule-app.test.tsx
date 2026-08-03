@@ -57,6 +57,32 @@ describe("ScheduleApp (month view)", () => {
 });
 
 describe("ScheduleApp (switcher & week view)", () => {
+  // jsdom 不计算布局：模拟周视图 7 列矩形（每列 100px 宽、top 0）
+  beforeEach(() => {
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const col = this.closest("[data-date]") as HTMLElement | null;
+        if (col) {
+          const idx = Array.from(document.querySelectorAll("[data-date]")).indexOf(col);
+          // DOMRect 的 right/bottom 是原型上的访问器，plain 对象必须显式带上
+          return {
+            left: idx * 100,
+            top: 0,
+            width: 100,
+            height: 0,
+            right: (idx + 1) * 100,
+            bottom: 0,
+          } as DOMRect;
+        }
+        return { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 } as DOMRect;
+      }
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("渲染 周/月/年 切换器", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
     expect(screen.getByRole("button", { name: "周" })).toBeInTheDocument();
@@ -153,15 +179,31 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.click(screen.getByRole("button", { name: /展开凌晨时段/ }));
     const col = document.querySelector(`[data-date="${toDateKey(getWeekDates(new Date())[0])}"]`)!;
     // 96px → 2:00，144px → 3:00
-    fireEvent.mouseDown(col, { clientY: 96 });
-    fireEvent.mouseMove(col, { clientY: 144 });
+    fireEvent.mouseDown(col, { clientX: 50, clientY: 96 });
+    fireEvent.mouseMove(col, { clientX: 50, clientY: 144 });
     fireEvent.mouseUp(col);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText(/开始时间/)).toHaveValue("02:00");
     expect(screen.getByLabelText(/结束时间/)).toHaveValue("03:00");
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "拖选新建" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
-    expect(screen.getByRole("button", { name: /编辑 拖选新建/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /日程 拖选新建/ })).toBeInTheDocument();
+  });
+
+  it("横向拖拽跨多天批量创建日程", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.click(screen.getByRole("button", { name: /展开凌晨时段/ }));
+    const week = getWeekDates(new Date());
+    const col0 = document.querySelector(`[data-date="${toDateKey(week[0])}"]`)!;
+    fireEvent.mouseDown(col0, { clientX: 50, clientY: 96 }); // 2:00
+    fireEvent.mouseMove(col0, { clientX: 250, clientY: 144 }); // 拖到第 3 列 → 3:00
+    fireEvent.mouseUp(col0);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText(/将同时添加到 3 天：/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "晚间练习" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    expect(screen.getAllByRole("button", { name: "日程 晚间练习" })).toHaveLength(3);
   });
 
   it("周视图时间轴事件块点击打开编辑弹窗并回填结束时间", () => {
@@ -172,6 +214,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:30" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.click(screen.getByRole("button", { name: /日程 时间段事件/ }));
     fireEvent.click(screen.getByRole("button", { name: /编辑 时间段事件/ }));
     expect(screen.getByLabelText(/开始时间/)).toHaveValue("10:00");
     expect(screen.getByLabelText(/结束时间/)).toHaveValue("11:30");

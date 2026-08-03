@@ -31,15 +31,15 @@ import WeekTimeline from "./week-timeline";
 
 type FormState = {
   id: string | null;
-  date: string;
+  dates: string[]; // 新建时可同时添加到多个日期（横向拖拽）
   title: string;
   time: string;
   endTime: string;
   description: string;
 };
 
-function emptyForm(date: string): FormState {
-  return { id: null, date, title: "", time: "", endTime: "", description: "" };
+function emptyForm(dates: string[]): FormState {
+  return { id: null, dates, title: "", time: "", endTime: "", description: "" };
 }
 
 function sortByTime(list: ScheduleEvent[]): ScheduleEvent[] {
@@ -155,12 +155,14 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     [yearMonths]
   );
 
-  const openAdd = (dateKey: string, time?: string, endTime?: string) =>
-    setForm({ ...emptyForm(dateKey), time: time ?? "", endTime: endTime ?? "" });
+  const openAdd = (dateKey: string | string[], time?: string, endTime?: string) => {
+    const list = Array.isArray(dateKey) ? dateKey : [dateKey];
+    return setForm({ ...emptyForm(list), time: time ?? "", endTime: endTime ?? "" });
+  };
   const openEdit = (e: ScheduleEvent) =>
     setForm({
       id: e.id,
-      date: e.date,
+      dates: [e.date],
       title: e.title,
       time: e.time,
       endTime: e.endTime ?? "",
@@ -179,14 +181,16 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
         description: form.description,
       });
     } else {
-      addEvent({
-        title,
-        date: form.date,
-        time: form.time,
-        endTime: form.endTime || undefined,
-        description: form.description,
-      });
-      setSelectedDateKey(form.date);
+      for (const d of form.dates) {
+        addEvent({
+          title,
+          date: d,
+          time: form.time,
+          endTime: form.endTime || undefined,
+          description: form.description,
+        });
+      }
+      setSelectedDateKey(form.dates[0]);
     }
     setForm(null);
   };
@@ -432,6 +436,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                     onEdit={openEdit}
                     onToggleDone={toggleDone}
                     onDelete={deleteEvent}
+                    onMove={(id, patch) => updateEvent(id, patch)}
                   />
                 </div>
               </section>
@@ -535,6 +540,14 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
             {tokens.dialog.decor}
             <div className={tokens.dialog.bodyClass}>
               <h3 className={tokens.dialog.title}>{form.id ? "编辑日程" : "添加日程"}</h3>
+              {form.dates.length > 1 && (
+                <p className={tokens.dialog.inputLabel + " mt-2"}>
+                  将同时添加到 {form.dates.length} 天：{form.dates
+                    .map(parseDateKey)
+                    .map((d) => `${d.getMonth() + 1}月${d.getDate()}日`)
+                    .join("、")}
+                </p>
+              )}
               <div className="mt-4 space-y-4">
                 <label htmlFor="title" className="block">
                   <span className={tokens.dialog.inputLabel}>标题</span>
