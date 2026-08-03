@@ -28,4 +28,58 @@ describe("theme tokens", () => {
     expect(String(THEME_TOKENS[6].header.title)).toContain("手账");
     expect(String(THEME_TOKENS[7].header.title)).toContain("渐变");
   });
+
+  it("主题 2 的可选令牌与页面结构一致", () => {
+    expect(THEME_TOKENS[2].viewPanel).toBeDefined();
+    expect(THEME_TOKENS[2].cell.indicatorPills).toBe(true);
+    expect(THEME_TOKENS[2].cell.indicatorCap).toBe(2);
+    expect(THEME_TOKENS[2].cell.selectedOnCell).toBe(true);
+    expect(THEME_TOKENS[2].cell.selected).toBe("bg-white/30 hover:bg-white/40");
+    expect(THEME_TOKENS[2].dialog.bodyClass).toBeTruthy();
+  });
+
+  it("主题 5 的可选令牌与页面结构一致", () => {
+    expect(THEME_TOKENS[5].sidebar).toBeDefined();
+    expect(THEME_TOKENS[5].contentClass).toBe("lg:pl-16");
+    expect(THEME_TOKENS[5].cellGridGap).toBe("");
+    expect(THEME_TOKENS[5].dayListSpacing).toBe("mt-5 space-y-4");
+    expect(THEME_TOKENS[5].dialog.bodyClass).toBeTruthy();
+  });
+
+  it("主题 6 的可选令牌与页面结构一致", () => {
+    expect(THEME_TOKENS[6].itemDecor).toBeDefined();
+    expect(THEME_TOKENS[6].dotColors).toHaveLength(3);
+    expect(THEME_TOKENS[6].header.tagline).toBeDefined();
+    expect(THEME_TOKENS[6].dialog.decor).toBeDefined();
+    expect(THEME_TOKENS[6].card).toContain("rotate-[0.5deg]");
+    expect(THEME_TOKENS[6].card).not.toContain("-rotate-[0.5deg]");
+    expect(THEME_TOKENS[6].dayListSpacing).toBe("mt-5 space-y-4");
+    expect(THEME_TOKENS[6].dialog.bodyClass).toBeTruthy();
+  });
+
+  it("主题 7 的可选令牌与页面结构一致", () => {
+    expect(THEME_TOKENS[7].cell.todayWins).toBe(true);
+    expect(THEME_TOKENS[7].dotColors).toHaveLength(5);
+    expect(THEME_TOKENS[7].itemColors).toHaveLength(4);
+    expect(THEME_TOKENS[7].dialog.decor).toBeDefined();
+    expect(THEME_TOKENS[7].dialog.bodyClass).toBeTruthy();
+  });
+
+  it.each([1, 2, 5, 6, 7])("主题 %i 的弹窗 bodyClass 非空", (n) => {
+    expect(THEME_TOKENS[n].dialog.bodyClass, `tokens[${n}].dialog.bodyClass`).toBeTruthy();
+  });
+
+  it("style-1 关键字符串精确匹配（防 typo/回归）", () => {
+    expect(THEME_TOKENS[1].main).toBe("min-h-screen bg-[#fafafa]");
+    expect(THEME_TOKENS[1].button.primary).toBe(
+      "rounded-md bg-blue-600 px-4 py-2 text-sm text-white transition hover:bg-blue-700",
+    );
+    expect(THEME_TOKENS[1].cell.today).toBe("border-2 border-blue-600 text-neutral-900");
+    expect(THEME_TOKENS[1].cell.selected).toBe("bg-blue-600 text-white");
+    expect(THEME_TOKENS[1].viewTab.active).toBe(
+      "rounded-full bg-neutral-900 px-4 py-1.5 text-sm text-white",
+    );
+    expect(THEME_TOKENS[1].dialog.bodyClass).toBe("p-6");
+    expect(THEME_TOKENS[1].dayList.title).toBe("truncate text-sm text-neutral-900");
+  });
 });

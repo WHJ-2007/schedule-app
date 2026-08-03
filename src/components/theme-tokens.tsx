@@ -3,24 +3,32 @@ import type { ReactNode } from "react";
 export type ThemeTokens = {
   main: string;                          // 主体（背景/字体），如 style-6 含 paper-lines font-kai
   decorations?: ReactNode;               // 主题装饰 JSX（绝对定位，无交互）
-  header: { eyebrow: ReactNode; eyebrowClass: string; title: ReactNode; titleClass: string };
+  header: { eyebrow: ReactNode; eyebrowClass: string; title: ReactNode; titleClass: string; tagline?: ReactNode };
   sectionTitle: string;                  // 月历/周视图标题 h2
   weekdayHeader: string;                 // 周一~周日表头
   navButton: string;                     // 上月/今天/下月 等导航按钮
   card: string;                          // 当日日程白卡片
   button: { primary: string };           // "＋ 添加日程"（使用处拼 w-full）
-  cell: { base: string; hover: string; num: string; plain: string; outside: string; today: string; selected: string };
+  cell: { base: string; hover: string; num: string; plain: string; outside: string; today: string; selected: string;
+          indicatorCap?: number;          // 事件指示器上限（默认 3）
+          indicatorPills?: boolean;       // true = 用时间药丸而非空圆点
+          selectedOnCell?: boolean;       // true = selected 高亮作用于整个格子按钮而非数字圈
+          todayWins?: boolean };          // true = 今天样式优先于选中样式
   dot: string;                           // 事件数量圆点
   dotMore: string;                       // "+N" 文字
   todayMark: string;                     // 周视图列头"今"标记色
   dayList: { dateLabel: string; itemRow: string; checkbox: string; editButton: string;
              time: string; title: string; doneTitle: string; desc: string; delete: string; empty: string };
-  dialog: { overlay: string; panel: string; title: string; inputLabel: string; input: string; cancel: string; save: string };
+  dialog: { overlay: string; panel: string; title: string; inputLabel: string; input: string; cancel: string; save: string;
+            decor?: ReactNode;           // 弹窗顶部装饰 JSX
+            bodyClass?: string };        // 弹窗内容内边距
   viewTab: { active: string; inactive: string };
   weekView: { column: string; columnHighlight: string; columnHeader: string; addDay: string; eventRow: string };
   yearView: { monthCard: string; monthTitle: string; miniCell: string; miniDot: string };
   viewPanel?: string;      // 月历/周视图/年视图 section 的面板容器类（style-1 无 → 不填）
   contentClass?: string;   // 内容容器额外类（style-5 的 lg:pl-16）
+  cellGridGap?: string;    // 月历网格间距类（默认 "gap-1.5"）
+  dayListSpacing?: string; // 当日日程 ul 间距类（默认 "mt-4 space-y-3"）
   sidebar?: ReactNode;     // 固定定位的侧栏 JSX（style-5 的左侧品牌导航）
   dotColors?: string[];    // 月历事件数量点颜色轮换（style-6/7 有）
   itemColors?: string[];   // 当日日程条目左边框颜色轮换（style-6/7 有）
@@ -68,7 +76,8 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
     },
     dialog: {
       overlay: "fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm",
-      panel: "w-full max-w-sm rounded-lg border border-neutral-200 bg-white p-6 shadow-sm",
+      panel: "w-full max-w-sm rounded-lg border border-neutral-200 bg-white shadow-sm",
+      bodyClass: "p-6",
       title: "text-lg font-light text-neutral-900",
       inputLabel: "text-sm text-neutral-600",
       input: "mt-1 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-blue-600 focus:outline-none",
@@ -125,7 +134,10 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       plain: "text-white",
       outside: "text-white/30",
       today: "ring-2 ring-white/90",
-      selected: "bg-white/30",
+      selected: "bg-white/30 hover:bg-white/40",
+      indicatorPills: true,
+      indicatorCap: 2,
+      selectedOnCell: true,
     },
     dot: "truncate rounded-full bg-white/60 px-1.5 py-0.5 text-[10px] text-purple-900",
     dotMore: "shrink-0 text-[10px] text-white",
@@ -135,7 +147,7 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       itemRow: "group flex items-center gap-3 border-b border-white/15 pb-3 last:border-b-0 last:pb-0",
       checkbox: "accent-purple-200",
       editButton: "min-w-0 flex-1 text-left",
-      time: "rounded-full bg-white/60 px-2 py-0.5 text-[10px] text-purple-900 tabular-nums",
+      time: "rounded-full bg-white/60 px-2 py-0.5 text-purple-900",
       title: "truncate text-sm text-white",
       doneTitle: "truncate text-sm text-white/70 line-through",
       desc: "truncate text-xs text-white/70",
@@ -144,7 +156,8 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
     },
     dialog: {
       overlay: "fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm",
-      panel: "w-full max-w-sm rounded-2xl border border-white/30 bg-white/20 p-6 shadow-lg shadow-purple-900/20 backdrop-blur-xl",
+      panel: "w-full max-w-sm rounded-2xl border border-white/30 bg-white/20 shadow-lg shadow-purple-900/20 backdrop-blur-xl",
+      bodyClass: "p-6",
       title: "text-lg font-semibold text-white",
       inputLabel: "text-sm text-white/70",
       input: "mt-1 w-full rounded-lg border border-white/30 bg-white/20 px-3 py-2 text-white placeholder-white/50 focus:ring-2 focus:ring-white/60 focus:outline-none",
@@ -175,6 +188,8 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
     main: "min-h-screen bg-[#f5f7fa]",
     viewPanel: "rounded-md border border-neutral-200 bg-white p-5 shadow-sm",
     contentClass: "lg:pl-16",
+    cellGridGap: "",
+    dayListSpacing: "mt-5 space-y-4",
     sidebar: (
       <aside className="fixed left-0 top-0 z-20 hidden h-screen w-16 flex-col items-center bg-[#1e3a5f] py-6 lg:flex">
         <div className="flex h-9 w-9 items-center justify-center rounded bg-[#c9a961] font-serif text-lg font-bold text-white">
@@ -224,7 +239,8 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
     },
     dialog: {
       overlay: "fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40",
-      panel: "w-full max-w-sm rounded-md border-t-2 border-[#c9a961] bg-white p-6 shadow-lg",
+      panel: "w-full max-w-sm rounded-md border-t-2 border-[#c9a961] bg-white shadow-lg",
+      bodyClass: "p-6",
       title: "text-lg font-semibold text-[#1e3a5f]",
       inputLabel: "text-sm font-medium text-neutral-600",
       input: "mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-800 placeholder-neutral-300 focus:border-[#1e3a5f] focus:outline-none",
@@ -254,6 +270,7 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
   6: {
     main: "paper-lines font-kai relative min-h-screen overflow-hidden bg-[#fbf6e9] text-[#4a3f35]",
     viewPanel: "-rotate-[0.5deg] rounded-lg border border-[#e5dcc8] bg-[#fffdf5] p-5 shadow-sm transition",
+    dayListSpacing: "mt-5 space-y-4",
     dotColors: ["#e05a5a", "#4a7bb5", "#e8c96a"],
     itemColors: ["#e05a5a", "#4a7bb5", "#e8c96a"],
     itemDecor: (
@@ -280,11 +297,12 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       eyebrowClass: "font-hand text-sm text-[#b3947c]",
       title: "手账日程",
       titleClass: "font-hand -rotate-2 text-4xl text-[#4a3f35]",
+      tagline: <span className="font-hand rotate-3 text-lg text-[#e05a5a]">今天也要加油呀 ✎</span>,
     },
     sectionTitle: "font-hand text-lg text-[#4a3f35]",
     weekdayHeader: "font-kai py-1 text-center text-xs text-neutral-500",
     navButton: "rounded-lg border border-[#d8cba8] px-3 py-1.5 font-kai text-[#4a3f35] transition hover:bg-[#f5edda]",
-    card: "-rotate-[0.5deg] rounded-lg border border-[#e5dcc8] bg-[#fffdf5] p-5 shadow-sm transition",
+    card: "rotate-[0.5deg] rounded-lg border border-[#e5dcc8] bg-[#fffdf5] p-5 shadow-sm transition",
     button: { primary: "font-hand -rotate-1 rounded-lg bg-[#e05a5a] px-5 py-2 text-white shadow-md transition hover:rotate-0" },
     cell: {
       base: "flex h-24 flex-col items-center rounded-md border border-dashed border-[#dfd3b8] pt-2 transition",
@@ -312,7 +330,14 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
     },
     dialog: {
       overlay: "fixed inset-0 z-50 flex items-center justify-center bg-[#4a3f35]/30",
-      panel: "relative -rotate-[0.5deg] w-full max-w-sm rounded-lg border border-[#e5dcc8] bg-[#fffdf5] p-6 shadow-xl",
+      panel: "relative -rotate-[0.5deg] w-full max-w-sm rounded-lg border border-[#e5dcc8] bg-[#fffdf5] shadow-xl",
+      bodyClass: "p-6",
+      decor: (
+        <span
+          aria-hidden
+          className="absolute -top-2 left-1/2 h-4 w-24 -translate-x-1/2 rotate-1 rounded-sm bg-[#e8c96a]/70"
+        />
+      ),
       title: "font-hand text-lg text-[#4a3f35]",
       inputLabel: "font-kai text-sm text-[#8a7a66]",
       input: "font-kai mt-1 w-full rounded-lg border-2 border-dashed border-[#d8cba8] bg-white/60 px-3 py-2 text-[#4a3f35] focus:border-[#4a7bb5] focus:outline-none",
@@ -379,6 +404,7 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       outside: "text-neutral-300",
       today: "animate-gradient-move bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-fuchsia-200",
       selected: "bg-violet-50 text-neutral-900 ring-2 ring-violet-400",
+      todayWins: true,
     },
     dot: "h-2 w-2 rounded-full bg-[#8b5cf6]",
     dotMore: "text-[10px] font-bold text-violet-500",
@@ -398,6 +424,13 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
     dialog: {
       overlay: "fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/30 backdrop-blur-sm",
       panel: "w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl",
+      bodyClass: "p-6",
+      decor: (
+        <div
+          aria-hidden
+          className="h-1.5 w-full rounded-t-2xl bg-gradient-to-r from-violet-500 via-fuchsia-500 to-amber-400"
+        />
+      ),
       title: "text-lg font-bold text-neutral-900",
       inputLabel: "text-sm font-semibold text-neutral-600",
       input: "mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-violet-400",
