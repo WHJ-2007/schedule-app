@@ -154,7 +154,7 @@ export default function Style1() {
                     type="button"
                     onClick={() => setSelectedDateKey(key)}
                     aria-label={`${d.getMonth() + 1}月${d.getDate()}日`}
-                    className="flex h-24 flex-col items-center rounded-lg pt-2 transition hover:bg-neutral-50"
+                    className="flex h-24 flex-col items-center rounded-lg pt-2 transition hover:bg-neutral-100"
                   >
                     <span
                       className={
@@ -195,7 +195,7 @@ export default function Style1() {
               </button>
 
               {dayEvents.length === 0 ? (
-                <p className="mt-6 text-sm text-neutral-400">今天没有日程</p>
+                <p className="mt-6 text-sm text-neutral-400">这一天没有日程</p>
               ) : (
                 <ul className="mt-4 space-y-3">
                   {dayEvents.map((e) => (
