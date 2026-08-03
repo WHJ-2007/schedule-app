@@ -19,6 +19,12 @@ export type ThemeTokens = {
   viewTab: { active: string; inactive: string };
   weekView: { column: string; columnHighlight: string; columnHeader: string; addDay: string; eventRow: string };
   yearView: { monthCard: string; monthTitle: string; miniCell: string; miniDot: string };
+  viewPanel?: string;      // 月历/周视图/年视图 section 的面板容器类（style-1 无 → 不填）
+  contentClass?: string;   // 内容容器额外类（style-5 的 lg:pl-16）
+  sidebar?: ReactNode;     // 固定定位的侧栏 JSX（style-5 的左侧品牌导航）
+  dotColors?: string[];    // 月历事件数量点颜色轮换（style-6/7 有）
+  itemColors?: string[];   // 当日日程条目左边框颜色轮换（style-6/7 有）
+  itemDecor?: ReactNode;   // 日程条目内装饰 JSX（style-6 的纸胶带 span）
 };
 
 export const THEME_TOKENS: Record<number, ThemeTokens> = {
@@ -91,6 +97,7 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
   // 主题 2：玻璃拟态
   2: {
     main: "animate-gradient-move relative min-h-screen overflow-hidden bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500",
+    viewPanel: "rounded-2xl border border-white/30 bg-white/15 p-5 shadow-lg shadow-purple-900/10 backdrop-blur-xl",
     decorations: (
       <>
         <div aria-hidden className="pointer-events-none absolute inset-0">
@@ -166,6 +173,20 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
   // 主题 5：商务专业
   5: {
     main: "min-h-screen bg-[#f5f7fa]",
+    viewPanel: "rounded-md border border-neutral-200 bg-white p-5 shadow-sm",
+    contentClass: "lg:pl-16",
+    sidebar: (
+      <aside className="fixed left-0 top-0 z-20 hidden h-screen w-16 flex-col items-center bg-[#1e3a5f] py-6 lg:flex">
+        <div className="flex h-9 w-9 items-center justify-center rounded bg-[#c9a961] font-serif text-lg font-bold text-white">
+          S
+        </div>
+        <div className="mt-8 flex flex-col items-center gap-8">
+          <span className="text-[10px] tracking-widest text-[#c9a961]">日历</span>
+          <span className="text-[10px] tracking-widest text-[#8fa3bd]">设置</span>
+          <span className="text-[10px] tracking-widest text-[#8fa3bd]">报表</span>
+        </div>
+      </aside>
+    ),
     header: {
       eyebrow: <>SCHEDULE · {new Date().getFullYear()}</>,
       eyebrowClass: "text-[10px] font-semibold uppercase tracking-widest text-[#c9a961]",
@@ -232,6 +253,12 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
   // 主题 6：手账笔记本
   6: {
     main: "paper-lines font-kai relative min-h-screen overflow-hidden bg-[#fbf6e9] text-[#4a3f35]",
+    viewPanel: "-rotate-[0.5deg] rounded-lg border border-[#e5dcc8] bg-[#fffdf5] p-5 shadow-sm transition",
+    dotColors: ["#e05a5a", "#4a7bb5", "#e8c96a"],
+    itemColors: ["#e05a5a", "#4a7bb5", "#e8c96a"],
+    itemDecor: (
+      <span aria-hidden className="absolute -top-1.5 left-2 h-3 w-10 rotate-2 rounded-sm bg-[#e8c96a]/70" />
+    ),
     decorations: (
       <>
         <div
@@ -314,6 +341,9 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
   // 主题 7：现代渐变
   7: {
     main: "relative min-h-screen overflow-hidden bg-white",
+    viewPanel: "rounded-2xl border border-neutral-200 bg-white/80 p-5 shadow-xl shadow-neutral-200/50 backdrop-blur",
+    dotColors: ["#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#0ea5e9"],
+    itemColors: ["#8b5cf6", "#ec4899", "#f59e0b", "#10b981"],
     decorations: (
       <>
         <div
