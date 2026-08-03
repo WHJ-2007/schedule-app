@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useEvents } from "@/lib/use-events";
 import {
   WEEKDAY_NAMES,
@@ -26,6 +26,7 @@ import type { ScheduleEvent } from "@/lib/events";
 import { getSavedView, saveView, type ViewMode } from "@/lib/views";
 import type { ThemeTokens } from "./theme-tokens";
 import Settings from "./settings";
+import SelectionBubble from "./selection-bubble";
 
 type FormState = {
   id: string | null;
@@ -54,6 +55,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const [selectedDateKey, setSelectedDateKey] = useState(() => todayKey());
   const [form, setForm] = useState<FormState | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(() => getSavedView());
+  const gridRef = useRef<HTMLDivElement | null>(null);
 
   const byDay = useMemo(() => {
     const m = new Map<string, ScheduleEvent[]>();
@@ -205,7 +207,10 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                   ))}
                 </div>
 
-                <div className={"grid grid-cols-7 " + (tokens.cellGridGap ?? "gap-1.5")}>
+                <div
+                  ref={gridRef}
+                  className={"relative grid grid-cols-7 " + (tokens.cellGridGap ?? "gap-1.5")}
+                >
                   {grid.map((d) => {
                     const key = toDateKey(d);
                     const inMonth = isSameMonth(d, viewYear, viewMonth);
@@ -216,24 +221,8 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                     const numClass =
                       tokens.cell.num +
                       " " +
-                      (selectedOnCell
-                        ? (isToday ? tokens.cell.today + " " : "") +
-                          (inMonth ? tokens.cell.plain : tokens.cell.outside)
-                        : tokens.cell.todayWins
-                          ? isToday
-                            ? tokens.cell.today
-                            : isSelected
-                              ? tokens.cell.selected
-                              : inMonth
-                                ? tokens.cell.plain
-                                : tokens.cell.outside
-                          : isSelected
-                            ? tokens.cell.selected
-                            : isToday
-                              ? tokens.cell.today
-                              : inMonth
-                                ? tokens.cell.plain
-                                : tokens.cell.outside);
+                      (isToday ? tokens.cell.today + " " : "") +
+                      (inMonth ? tokens.cell.plain : tokens.cell.outside);
                     return (
                       <button
                         key={key}
@@ -246,7 +235,9 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                           (selectedOnCell && isSelected ? tokens.cell.selected : tokens.cell.hover)
                         }
                       >
-                        <span className={numClass}>{d.getDate()}</span>
+                        <span data-selected={isSelected ? "" : undefined} className={numClass}>
+                          {d.getDate()}
+                        </span>
                         <span className={indicatorArea}>
                           {tokens.cell.indicatorPills
                             ? Array.from({ length: Math.min(n, indicatorCap) }).map((_, i) => {
@@ -275,6 +266,11 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                       </button>
                     );
                   })}
+                  <SelectionBubble
+                    gridRef={gridRef}
+                    className={tokens.cell.num + " " + tokens.cell.selected}
+                    label={selectedDate.getDate()}
+                  />
                 </div>
               </section>
 

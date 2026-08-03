@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import ScheduleApp from "./schedule-app";
 import { THEME_TOKENS } from "./theme-tokens";
 import { getMonthGrid, isSameMonth, formatDayLabel, getWeekDates, addDays, formatMonthTitle } from "@/lib/date";
@@ -176,5 +176,65 @@ describe("ScheduleApp (year view)", () => {
     const label = `${d.getMonth() + 1}月${d.getDate()}日`;
     fireEvent.click(screen.getByRole("button", { name: label }));
     expect(screen.getByText(formatDayLabel(d))).toBeInTheDocument();
+  });
+});
+
+describe("ScheduleApp (selection bubble)", () => {
+  let rectSpy: ReturnType<typeof vi.spyOn>;
+
+  // jsdom 不计算布局：按 aria-label 中的日期号模拟坐标（第 N 日 → left=N*10, top=40, 28x28）
+  beforeEach(() => {
+    rectSpy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const label = this.closest("[aria-label]")?.getAttribute("aria-label") ?? "";
+        const m = /^(\d+)月(\d+)日/.exec(label);
+        if (!m) return { left: 0, top: 0, width: 0, height: 0 } as DOMRect;
+        return { left: Number(m[2]) * 10, top: 40, width: 28, height: 28 } as DOMRect;
+      }
+    );
+  });
+
+  afterEach(() => {
+    rectSpy.mockRestore();
+  });
+
+  it("切换日期时选中泡泡滑到新位置", async () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    const bubble = screen.getByTestId("selection-bubble");
+    const now = new Date();
+    await waitFor(() =>
+      expect(bubble.style.transform).toBe(`translate(${now.getDate() * 10}px, 40px)`)
+    );
+    const grid = getMonthGrid(now.getFullYear(), now.getMonth());
+    const counts = new Map<number, number>();
+    for (const d of grid) counts.set(d.getDate(), (counts.get(d.getDate()) ?? 0) + 1);
+    const target = grid.find(
+      (d) =>
+        isSameMonth(d, now.getFullYear(), now.getMonth()) &&
+        d.getDate() !== now.getDate() &&
+        counts.get(d.getDate()) === 1
+    )!;
+    fireEvent.click(
+      screen.getByRole("button", { name: `${target.getMonth() + 1}月${target.getDate()}日` })
+    );
+    await waitFor(() =>
+      expect(bubble.style.transform).toBe(`translate(${target.getDate() * 10}px, 40px)`)
+    );
+  });
+
+  it("选中日期不在当月网格时泡泡隐藏，回当月后恢复", async () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    const bubble = screen.getByTestId("selection-bubble");
+    const now = new Date();
+    await waitFor(() => expect(bubble.style.visibility).toBe("visible"));
+    // 连翻两个月，让选中的今天彻底离开网格（相邻月补格仍包含它，需翻两个月）
+    fireEvent.click(screen.getByRole("button", { name: /上月/ }));
+    fireEvent.click(screen.getByRole("button", { name: /上月/ }));
+    await waitFor(() => expect(bubble.style.visibility).toBe("hidden"));
+    fireEvent.click(screen.getByRole("button", { name: /下月/ }));
+    fireEvent.click(screen.getByRole("button", { name: /下月/ }));
+    await waitFor(() =>
+      expect(bubble.style.transform).toBe(`translate(${now.getDate() * 10}px, 40px)`)
+    );
   });
 });
