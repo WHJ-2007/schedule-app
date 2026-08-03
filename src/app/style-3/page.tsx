@@ -110,7 +110,7 @@ export default function Style3() {
           className="absolute inset-0"
           style={{
             backgroundImage:
-              "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)",
+              "linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)",
             backgroundSize: "32px 32px",
           }}
         />
@@ -158,7 +158,7 @@ export default function Style3() {
 
             <div className="mb-1.5 grid grid-cols-7 gap-1.5">
               {WEEKDAY_NAMES.map((w) => (
-                <div key={w} className="py-1 text-center text-xs text-neutral-600">
+                <div key={w} className="py-1 text-center text-xs text-neutral-500">
                   {w}
                 </div>
               ))}
@@ -264,7 +264,7 @@ export default function Style3() {
                       type="button"
                       onClick={() => deleteEvent(e.id)}
                       aria-label="删除"
-                      className="shrink-0 text-neutral-600 transition hover:text-red-400"
+                      className="shrink-0 text-neutral-500 transition hover:text-red-400"
                     >
                       ✕
                     </button>
