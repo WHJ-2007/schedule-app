@@ -35,3 +35,29 @@ body {
   50% { transform: translateY(-10px); }
 }
 .animate-float-slow { animation: float-slow 7s ease-in-out infinite; }
+
+/* 全局适度动画 */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.anim-fade-in { animation: fade-in 180ms ease-out both; }
+.anim-scale-in { animation: scale-in 200ms ease-out both; }
+.anim-slide-up { animation: slide-up 220ms ease-out both; }
+
+/* 系统减弱动态效果：全部动画/过渡压到不可感知 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
