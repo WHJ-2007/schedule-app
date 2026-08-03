@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import Style6 from "./page";
 import { getMonthGrid, isSameMonth, formatDayLabel } from "@/lib/date";
+import { STORAGE_KEY } from "@/lib/events";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -41,5 +42,16 @@ describe("style-6 page", () => {
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "手账补记" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     expect(screen.getByText("手账补记")).toBeInTheDocument();
+  });
+
+  it("日程条目左边框颜色按主题色轮换", () => {
+    // 清空事件存储，避免样本数据/前序用例污染：保证新增条目是当天第一条
+    localStorage.setItem(STORAGE_KEY, "[]");
+    render(<Style6 />);
+    fireEvent.click(screen.getByRole("button", { name: /添加日程/ }));
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "手账条目" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    const li = screen.getByText("手账条目").closest("li");
+    expect(li?.getAttribute("style")).toMatch(/rgb\(224, 90, 90\)/);
   });
 });

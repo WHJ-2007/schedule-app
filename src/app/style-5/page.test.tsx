@@ -42,4 +42,12 @@ describe("style-5 page", () => {
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     expect(screen.getByText("项目评审会")).toBeInTheDocument();
   });
+
+  it("渲染左侧品牌导航栏", () => {
+    render(<Style5 />);
+    expect(screen.getByText("S")).toBeInTheDocument();
+    expect(screen.getByText("日历")).toBeInTheDocument();
+    expect(screen.getByText("设置")).toBeInTheDocument();
+    expect(screen.getByText("报表")).toBeInTheDocument();
+  });
 });

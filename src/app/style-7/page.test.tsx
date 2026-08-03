@@ -42,4 +42,13 @@ describe("style-7 page", () => {
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     expect(screen.getByText("设计评审会")).toBeInTheDocument();
   });
+
+  it("今天的数字圈优先显示今天样式（todayWins）", () => {
+    render(<Style7 />);
+    const now = new Date();
+    const label = `${now.getMonth() + 1}月${now.getDate()}日`;
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    const cell = screen.getByRole("button", { name: label });
+    expect(cell.querySelector("span")).toHaveClass("from-violet-500");
+  });
 });

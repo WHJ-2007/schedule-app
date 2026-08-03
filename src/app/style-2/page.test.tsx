@@ -42,4 +42,18 @@ describe("style-2 page", () => {
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     expect(screen.getByText("测试日程")).toBeInTheDocument();
   });
+
+  it("选中日期时整个格子高亮（selectedOnCell）", () => {
+    render(<Style2 />);
+    const now = new Date();
+    const grid = getMonthGrid(now.getFullYear(), now.getMonth());
+    const counts = new Map<number, number>();
+    for (const d of grid) counts.set(d.getDate(), (counts.get(d.getDate()) ?? 0) + 1);
+    const target = grid.find(
+      (d) => isSameMonth(d, now.getFullYear(), now.getMonth()) && counts.get(d.getDate()) === 1
+    )!;
+    const label = `${target.getMonth() + 1}月${target.getDate()}日`;
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    expect(screen.getByRole("button", { name: label })).toHaveClass("bg-white/30");
+  });
 });
