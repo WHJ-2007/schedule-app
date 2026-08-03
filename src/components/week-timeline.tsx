@@ -76,7 +76,10 @@ export default function WeekTimeline({
     const up = () => {
       const d = dragRef.current;
       if (!d) return;
-      onAddDayRef.current(d.dateKey, minutesToTime(d.start), minutesToTime(d.end));
+      // 只有实际拖动覆盖超过一个槽位才创建；原地单击只取消高亮
+      if (d.end - d.start > SNAP_MIN) {
+        onAddDayRef.current(d.dateKey, minutesToTime(d.start), minutesToTime(d.end));
+      }
       dragRef.current = null;
       setDrag(null);
     };

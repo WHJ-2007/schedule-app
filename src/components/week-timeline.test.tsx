@@ -135,13 +135,25 @@ describe("WeekTimeline", () => {
     expect(col.querySelector('[data-testid="drag-select"]')).toBeNull();
   });
 
-  it("拖选最小时长 30 分钟（原地按下松开）", () => {
+  it("原地单击不触发创建，仅清除高亮", () => {
     const onAddDay = vi.fn();
     renderTimeline(emptyWeek, { onAddDay });
     const col = document.querySelector('[data-date="2026-08-03"]')!;
     fireEvent.mouseDown(col, { clientY: 96 }); // 2:00
+    expect(col.querySelector('[data-testid="drag-select"]')).not.toBeNull();
     fireEvent.mouseUp(col);
-    expect(onAddDay).toHaveBeenCalledWith("2026-08-03", "02:00", "02:30");
+    expect(onAddDay).not.toHaveBeenCalled();
+    expect(col.querySelector('[data-testid="drag-select"]')).toBeNull();
+  });
+
+  it("拖动不足一个槽位不触发（移动 15 分钟仍吸附回起点）", () => {
+    const onAddDay = vi.fn();
+    renderTimeline(emptyWeek, { onAddDay });
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    fireEvent.mouseDown(col, { clientY: 96 }); // 2:00
+    fireEvent.mouseMove(col, { clientY: 108 }); // 2:15，仍吸附 2:00
+    fireEvent.mouseUp(col);
+    expect(onAddDay).not.toHaveBeenCalled();
   });
 
   it("点击事件块触发编辑", () => {
