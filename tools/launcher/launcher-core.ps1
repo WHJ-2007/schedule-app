@@ -124,13 +124,13 @@ function Initialize-SessionLog {
         $n++
     }
     $script:SessionLogPath = $path
-    New-Item -ItemType File -Path $path -Force | Out-Null
+    New-Item -ItemType File -Path $path | Out-Null
     return $path
 }
 
 function Append-SessionLog([string]$text) {
-    if (-not $script:SessionLogPath) { Initialize-SessionLog | Out-Null }
     try {
+        if (-not $script:SessionLogPath) { Initialize-SessionLog | Out-Null }
         Add-Content -Path $script:SessionLogPath -Value $text -Encoding utf8 -ErrorAction Stop
     } catch {
         # 写入失败降级：仅窗口显示，不崩溃

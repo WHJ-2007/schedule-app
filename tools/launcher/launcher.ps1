@@ -187,6 +187,22 @@ function Build-LauncherForm {
     $timer.Start()
     $script:StatusTimer = $timer
 
+    $notify = New-Object System.Windows.Forms.NotifyIcon
+    $notify.Icon = [System.Drawing.SystemIcons]::Application
+    $notify.Text = "日程系统启动器"
+    $menu = New-Object System.Windows.Forms.ContextMenuStrip
+    $miShow = $menu.Items.Add("显示窗口")
+    $miShow.Add_Click({ Show-MainWindow })
+    $miExit = $menu.Items.Add("退出")
+    $miExit.Add_Click({ Exit-Launcher })
+    $notify.ContextMenuStrip = $menu
+    $notify.Add_MouseDoubleClick({
+        param($sender, $e)
+        if ($e.Button -eq [System.Windows.Forms.MouseButtons]::Left) { Show-MainWindow }
+    })
+    $notify.Visible = $true
+    $script:NotifyIcon = $notify
+
     $form.Add_FormClosing({
         param($sender, $e)
         if (-not $script:Exiting) {
@@ -197,6 +213,37 @@ function Build-LauncherForm {
 
     Update-Status
     return $form
+}
+
+function Show-MainWindow {
+    $form = $script:MainForm
+    if ($form) {
+        $form.Show()
+        $form.WindowState = [System.Windows.Forms.FormWindowState]::Normal
+        $form.Activate()
+    }
+}
+
+function Exit-Launcher {
+    if ((Get-DevServerStatus) -ne "stopped") {
+        $r = [System.Windows.Forms.MessageBox]::Show(
+            "服务仍在运行。`n是否先关闭服务再退出？",
+            "确认退出",
+            [System.Windows.Forms.MessageBoxButtons]::YesNoCancel,
+            [System.Windows.Forms.MessageBoxIcon]::Question)
+        if ($r -eq [System.Windows.Forms.DialogResult]::Cancel) { return }
+        if ($r -eq [System.Windows.Forms.DialogResult]::Yes) {
+            Append-Log "退出前正在关闭服务…"
+            Stop-DevServer | Out-Null
+            Append-Log "服务已关闭，启动器退出"
+        }
+    }
+    $script:Exiting = $true
+    if ($script:StatusTimer) { $script:StatusTimer.Stop(); $script:StatusTimer.Dispose() }
+    if ($script:NotifyIcon) { $script:NotifyIcon.Visible = $false; $script:NotifyIcon.Dispose() }
+    $form = $script:MainForm
+    if ($form) { $form.Dispose() }
+    [Environment]::Exit(0)
 }
 
 function Show-LauncherWindow {
