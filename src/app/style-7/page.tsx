@@ -291,7 +291,10 @@ export default function Style7() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/30 backdrop-blur-sm"
           onMouseDown={() => setForm(null)}
         >
-          <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div
+            className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
             <div
               aria-hidden
               className="h-1.5 w-full rounded-t-2xl bg-gradient-to-r from-violet-500 via-fuchsia-500 to-amber-400"
@@ -301,7 +304,6 @@ export default function Style7() {
                 e.preventDefault();
                 handleSave();
               }}
-              onMouseDown={(e) => e.stopPropagation()}
               className="p-6"
             >
               <h3 className="text-lg font-bold text-neutral-900">
