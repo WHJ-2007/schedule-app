@@ -48,7 +48,15 @@ Assert-True "当前进程存活检测" (Is-ProcessAlive $PID)
 Assert-False "不存在进程检测" (Is-ProcessAlive 99999999)
 Assert-False "PID 0 检测" (Is-ProcessAlive 0)
 
-# 端口检测（测试前提：3000 空闲）
-Assert-False "端口 3000 空闲" (Get-PortInUse)
+# 端口检测（自包含：临时监听端口正例 + 空闲端口负例）
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+$listener.Start()
+$tempPort = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
+Assert-True "临时监听端口检测为占用" (Get-PortInUse -port $tempPort)
+$listener.Stop()
+# 用从未监听的端口做负例：在 4000-4049 中找第一个空闲端口，保证确定性
+$freePort = 4000
+while (Get-PortInUse -port $freePort) { $freePort++ }
+Assert-False "空闲端口检测为空闲" (Get-PortInUse -port $freePort)
 
 Test-Done

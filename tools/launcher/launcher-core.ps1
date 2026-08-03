@@ -13,11 +13,7 @@ function Get-ProjectRoot {
 
 function Get-RuntimeDir { return (Join-Path $script:CoreDir ".runtime") }
 
-function Get-LogsDir {
-    $d = Join-Path (Get-RuntimeDir) "logs"
-    if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d | Out-Null }
-    return $d
-}
+function Get-LogsDir { return (Join-Path (Get-RuntimeDir) "logs") }
 
 function Ensure-RuntimeDir {
     $dir = Get-RuntimeDir
@@ -41,8 +37,10 @@ function Save-PidFile([int]$pidValue) {
 function Load-PidFile {
     $f = Get-PidFilePath
     if (-not (Test-Path $f)) { return $null }
-    $v = (Get-Content $f -Raw).Trim()
-    if ($v -match '^\d+$') { return [int]$v }
+    $raw = Get-Content $f -Raw
+    if (-not $raw) { Remove-PidFile; return $null }
+    $v = $raw.Trim()
+    if ($v -match '^\d{1,8}$') { return [int]$v }
     Remove-PidFile
     return $null
 }
@@ -57,7 +55,7 @@ function Is-ProcessAlive([int]$processId) {
     return [bool](Get-Process -Id $processId -ErrorAction SilentlyContinue)
 }
 
-function Get-PortInUse([int]$port = 3000) {
+function Get-PortInUse([int]$port = $script:Port) {
     $conn = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
     return [bool]$conn
 }
