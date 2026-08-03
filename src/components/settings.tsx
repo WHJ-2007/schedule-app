@@ -39,11 +39,11 @@ export default function Settings() {
         <div
           role="dialog"
           aria-label="设置"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm anim-fade-in"
           onMouseDown={() => setOpen(false)}
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl max-h-[75vh] overflow-y-auto"
+            className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl max-h-[75vh] overflow-y-auto anim-scale-in"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
