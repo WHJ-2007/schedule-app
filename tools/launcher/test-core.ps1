@@ -116,4 +116,16 @@ if ($started) {
     }
 }
 
+# —— 会话日志 ——
+$log1 = Initialize-SessionLog
+$log2 = Initialize-SessionLog
+Assert-True "连续两次初始化路径不同" ($log1 -ne $log2)
+Assert-True "会话文件创建" (Test-Path $log2)
+Append-SessionLog "hello 日程"
+Append-SessionLog "world"
+$logText = Get-SessionLogText
+Assert-True "日志读回包含两行" (($logText -match "hello 日程") -and ($logText -match "world"))
+Remove-Item $log1 -Force
+Remove-Item $log2 -Force
+
 Test-Done

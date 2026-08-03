@@ -110,3 +110,34 @@ function Wait-PortReady([int]$timeoutSeconds = 15) {
     }
     return (Get-PortInUse)
 }
+
+$script:SessionLogPath = $null
+
+function Initialize-SessionLog {
+    Ensure-RuntimeDir | Out-Null
+    $dir = Get-LogsDir
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $path = Join-Path $dir ("session-" + $stamp + ".log")
+    $n = 2
+    while (Test-Path $path) {
+        $path = Join-Path $dir ("session-" + $stamp + "-" + $n + ".log")
+        $n++
+    }
+    $script:SessionLogPath = $path
+    New-Item -ItemType File -Path $path -Force | Out-Null
+    return $path
+}
+
+function Append-SessionLog([string]$text) {
+    if (-not $script:SessionLogPath) { Initialize-SessionLog | Out-Null }
+    try {
+        Add-Content -Path $script:SessionLogPath -Value $text -Encoding utf8 -ErrorAction Stop
+    } catch {
+        # 写入失败降级：仅窗口显示，不崩溃
+    }
+}
+
+function Get-SessionLogText {
+    if (-not $script:SessionLogPath -or -not (Test-Path $script:SessionLogPath)) { return "" }
+    try { return (Get-Content -Path $script:SessionLogPath -Raw -Encoding utf8) } catch { return "" }
+}

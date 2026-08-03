@@ -94,6 +94,25 @@ function Open-Website {
     Append-Log ("已打开网站 " + (Get-ServerUrl))
 }
 
+function Copy-SessionLogClick {
+    $text = Get-SessionLogText
+    if (-not $text) { $text = "(本次会话暂无日志)" }
+    try {
+        Set-Clipboard -Value $text -ErrorAction Stop
+        $script:BtnCopy.Text = "已复制 ✓"
+        $restore = New-Object System.Windows.Forms.Timer
+        $restore.Interval = 1500
+        $restore.Add_Tick({
+            $script:BtnCopy.Text = "📋 复制日志"
+            $restore.Stop()
+            $restore.Dispose()
+        })
+        $restore.Start()
+    } catch {
+        Append-Log ("复制失败：" + $_.Exception.Message)
+    }
+}
+
 function Build-LauncherForm {
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "日程系统启动器"
