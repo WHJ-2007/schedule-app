@@ -9,6 +9,12 @@ import {
   formatMonthTitle,
   formatDayLabel,
   WEEKDAY_NAMES,
+  addDays,
+  getWeekDates,
+  formatWeekTitle,
+  getYearMonths,
+  addYears,
+  getMonthDayCells,
 } from "./date";
 
 describe("toDateKey / parseDateKey", () => {
@@ -81,5 +87,69 @@ describe("formatting", () => {
 
   it("weekday names start from Monday", () => {
     expect(WEEKDAY_NAMES).toEqual(["一", "二", "三", "四", "五", "六", "日"]);
+  });
+});
+
+describe("week/year helpers", () => {
+  it("addDays 跨月", () => {
+    const d = addDays(2026, 7, 31, 1); // 8月31日 + 1 天 = 9月1日
+    expect(d.getFullYear()).toBe(2026);
+    expect(d.getMonth()).toBe(8);
+    expect(d.getDate()).toBe(1);
+  });
+
+  it("addDays 跨年", () => {
+    const d = addDays(2026, 11, 31, 1);
+    expect(d.getFullYear()).toBe(2027);
+    expect(d.getMonth()).toBe(0);
+    expect(d.getDate()).toBe(1);
+  });
+
+  it("getWeekDates 周一开头且 7 天", () => {
+    const week = getWeekDates(new Date(2026, 7, 15)); // 2026-08-15 周六
+    expect(week.length).toBe(7);
+    expect(week[0].getDay()).toBe(1);
+    expect(week[0].getDate()).toBe(10);
+    expect(week[6].getDate()).toBe(16);
+  });
+
+  it("getWeekDates 跨月周", () => {
+    const week = getWeekDates(new Date(2026, 7, 1)); // 2026-08-01 周六
+    expect(week[0].getMonth()).toBe(6); // 7月27日
+    expect(week[0].getDate()).toBe(27);
+  });
+
+  it("formatWeekTitle 同月", () => {
+    expect(formatWeekTitle(getWeekDates(new Date(2026, 7, 15)))).toBe("8月10日 – 8月16日");
+  });
+
+  it("formatWeekTitle 跨月", () => {
+    expect(formatWeekTitle(getWeekDates(new Date(2026, 7, 1)))).toBe("7月27日 – 8月2日");
+  });
+
+  it("getYearMonths 恰 12 个月首日", () => {
+    const months = getYearMonths(2026);
+    expect(months.length).toBe(12);
+    expect(months[0]).toEqual(new Date(2026, 0, 1));
+    expect(months[11]).toEqual(new Date(2026, 11, 1));
+  });
+
+  it("addYears", () => {
+    expect(addYears(2026, 1)).toBe(2027);
+    expect(addYears(2026, -1)).toBe(2025);
+  });
+
+  it("getMonthDayCells 前置偏移且无尾随", () => {
+    const cells = getMonthDayCells(2026, 7); // 8月：周六开头 → 5 个 null
+    expect(cells.length).toBe(5 + 31);
+    expect(cells[0]).toBeNull();
+    const days = cells.filter((c) => c !== null) as Date[];
+    expect(days.length).toBe(31);
+    expect(days.every((d) => d.getMonth() === 7)).toBe(true);
+  });
+
+  it("getMonthDayCells 非周一开头的月份有偏移", () => {
+    const cells = getMonthDayCells(2026, 0); // 2026-01-01 是周四 → 3 个 null
+    expect(cells.length).toBe(3 + 31);
   });
 });

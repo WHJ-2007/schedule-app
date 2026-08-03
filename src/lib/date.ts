@@ -56,3 +56,44 @@ export function formatDayLabel(date: Date): string {
 export function formatEventTime(time: string): string {
   return time || "全天";
 }
+
+export function addDays(year: number, monthIndex: number, day: number, delta: number): Date {
+  return new Date(year, monthIndex, day + delta);
+}
+
+export function getWeekDates(anchor: Date): Date[] {
+  const mondayOffset = (anchor.getDay() + 6) % 7;
+  const start = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() - mondayOffset);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    return d;
+  });
+}
+
+export function formatWeekTitle(week: Date[]): string {
+  const first = week[0];
+  const last = week[6];
+  const fmt = (d: Date) => `${d.getMonth() + 1}月${d.getDate()}日`;
+  return `${fmt(first)} – ${fmt(last)}`;
+}
+
+export function getYearMonths(year: number): Date[] {
+  return Array.from({ length: 12 }, (_, i) => new Date(year, i, 1));
+}
+
+export function formatYearTitle(year: number): string {
+  return `${year}年`;
+}
+
+export function addYears(year: number, delta: number): number {
+  return new Date(year + delta, 0, 1).getFullYear();
+}
+
+export function getMonthDayCells(year: number, monthIndex: number): (Date | null)[] {
+  const first = new Date(year, monthIndex, 1);
+  const mondayOffset = (first.getDay() + 6) % 7;
+  const days = new Date(year, monthIndex + 1, 0).getDate();
+  const cells: (Date | null)[] = Array.from({ length: mondayOffset }, () => null);
+  for (let i = 1; i <= days; i++) cells.push(new Date(year, monthIndex, i));
+  return cells;
+}
