@@ -1,7 +1,11 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import Style1 from "./page";
 import { getMonthGrid, isSameMonth, formatDayLabel } from "@/lib/date";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 // 项目未配置全局自动 cleanup（vitest 未开 globals），多次 render 需手动清理
 afterEach(() => {

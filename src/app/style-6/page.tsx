@@ -16,6 +16,7 @@ import {
   formatEventTime,
 } from "@/lib/date";
 import type { ScheduleEvent } from "@/lib/events";
+import Settings from "@/components/settings";
 
 type FormState = {
   id: string | null;
@@ -357,6 +358,7 @@ export default function Style6() {
           </form>
         </div>
       )}
+      <Settings />
     </main>
   );
 }
