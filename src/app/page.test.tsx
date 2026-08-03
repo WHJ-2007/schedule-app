@@ -1,15 +1,35 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { render, cleanup, waitFor } from "@testing-library/react";
 import Home from "./page";
+import { THEME_STORAGE_KEY, DEFAULT_THEME_PATH } from "@/lib/themes";
+
+const replaceMock = vi.fn();
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: replaceMock }),
+}));
+
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+  replaceMock.mockClear();
+});
 
 describe("home page", () => {
-  it("links to all 7 style pages", () => {
+  it("未保存时重定向默认主题", async () => {
     render(<Home />);
-    for (const n of [1, 2, 3, 4, 5, 6, 7]) {
-      expect(screen.getByRole("link", { name: new RegExp(`style-${n}`) })).toHaveAttribute(
-        "href",
-        `/style-${n}`
-      );
-    }
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith(DEFAULT_THEME_PATH));
+  });
+
+  it("保存过时重定向到保存的主题", async () => {
+    localStorage.setItem(THEME_STORAGE_KEY, "/style-7");
+    render(<Home />);
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/style-7"));
+  });
+
+  it("已删除主题回退默认", async () => {
+    localStorage.setItem(THEME_STORAGE_KEY, "/style-3");
+    render(<Home />);
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith(DEFAULT_THEME_PATH));
   });
 });
