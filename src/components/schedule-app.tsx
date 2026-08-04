@@ -23,6 +23,7 @@ import {
   addYears,
 } from "@/lib/date";
 import { expandEventDates, type RepeatFreq, type ScheduleEvent } from "@/lib/events";
+import type { EventMovePatch } from "@/lib/use-events";
 import { getSavedView, saveView, type ViewMode } from "@/lib/views";
 import type { ThemeTokens } from "./theme-tokens";
 import Settings from "./settings";
@@ -31,6 +32,87 @@ import WeekTimeline from "./week-timeline";
 import EventPanel, { emptyForm, type FormState } from "./event-panel";
 import UndoToast from "./undo-toast";
 import VersionPlayer from "./version-player";
+
+// 单日看板：日期标签 +（编辑时）内嵌表单 + 单日时间轴同屏。
+// 必须在模块顶层定义：ScheduleApp 内定义会随父重渲染换函数身份，导致 WeekTimeline 重挂载丢失状态
+function DayPanel({
+  tokens,
+  dateKey,
+  dayEvents,
+  today,
+  form,
+  onFormChange,
+  onSave,
+  onDelete,
+  onClose,
+  onAddDay,
+  onEdit,
+  onToggleDone,
+  onMoveAll,
+  onBatchColor,
+  onSelectionChange,
+}: {
+  tokens: ThemeTokens;
+  dateKey: string;
+  dayEvents: ScheduleEvent[];
+  today: Date;
+  form: FormState | null;
+  onFormChange: (f: FormState) => void;
+  onSave: () => void;
+  onDelete: (id: string) => void;
+  onClose: () => void;
+  onAddDay: (dates: string[], time?: string, endTime?: string) => void;
+  onEdit: (e: ScheduleEvent) => void;
+  onToggleDone: (id: string) => void;
+  onMoveAll: (patches: EventMovePatch[]) => void;
+  onBatchColor: (ids: string[], color: string) => void;
+  onSelectionChange: (ids: string[]) => void;
+}) {
+  // dates 数组必须稳定引用：WeekTimeline 的「翻周清空选中」effect 依赖它，
+  // 每次新建引用会导致清空选中 → 父层联动关闭编辑表单
+  const dayDates = useMemo(() => [parseDateKey(dateKey)], [dateKey]);
+  return (
+    <section className={tokens.card + " flex flex-col"}>
+      <p className={tokens.dayList.dateLabel}>{formatDayLabel(parseDateKey(dateKey))}</p>
+      <div className="mt-4 flex min-h-0 flex-1 flex-col gap-4">
+        {form && form.dates[0] === dateKey && (
+          <div className="anim-fade-in flex max-h-[55%] min-h-0 flex-col">
+            <EventPanel
+              inline
+              form={form}
+              tokens={tokens}
+              onChange={onFormChange}
+              onSave={onSave}
+              onDelete={onDelete}
+              onClose={onClose}
+            />
+          </div>
+        )}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <WeekTimeline
+            tokens={tokens}
+            dates={dayDates}
+            eventsByDay={[dayEvents]}
+            anchorKey={dateKey}
+            today={today}
+            onJumpToMonth={() => {}}
+            onAddDay={onAddDay}
+            onEdit={onEdit}
+            onToggleDone={onToggleDone}
+            onDelete={onDelete}
+            onMoveAll={onMoveAll}
+            onBatchColor={onBatchColor}
+            onSelectionChange={onSelectionChange}
+            cols={1}
+            rootClass="min-h-0 flex-1"
+            scrollClass="min-h-0 flex-1"
+            scrollMaxHeight="none"
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function sortByTime(list: ScheduleEvent[]): ScheduleEvent[] {
   return [...list].sort((a, b) => {
@@ -202,8 +284,10 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     const wrap = viewWrapRef.current;
     if (!wrap) return;
     const node = wrap.cloneNode(true) as HTMLElement;
-    // 残影只是视觉快照：移除测试钩子（含自身），避免克隆副本干扰 getByTestId 等查询
+    // 残影只是视觉快照：移除测试钩子（含自身），避免克隆副本干扰 getByTestId 等查询；
+    // 视图主体圈定标记（view-anim）换成 data-ghost-anim 保留，供测试区分 7 列与看板位
     for (const el of [node, ...Array.from(node.querySelectorAll("[data-testid]"))]) {
+      if (el.getAttribute("data-testid") === "view-anim") el.setAttribute("data-ghost-anim", "");
       el.removeAttribute("data-testid");
     }
     // 交互辅助层（月历选中高亮等）不属于内容：残影缩放时剔除，避免异常残留
@@ -212,11 +296,15 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     const r = wrap.getBoundingClientRect();
     let src: { ax: number; ay: number; aw: number; ah: number } | null = null;
     if (anchor) {
+      // 锚点只在视图主体（view-anim）内查：看板位（DayPanel）也有 data-date，
+      // 混入并集会拉偏残影终点/缩放中心
       const sel =
         anchor.kind === "week"
-          ? (days ?? weekDates).map((d) => `[data-date="${toDateKey(d)}"]`).join(",")
+          ? (days ?? weekDates)
+              .map((d) => `[data-testid="view-anim"] [data-date="${toDateKey(d)}"]`)
+              .join(",")
           : anchor.kind === "date"
-            ? `[data-date="${anchor.key}"]`
+            ? `[data-testid="view-anim"] [data-date="${anchor.key}"]`
             : `[data-ym="${anchor.key}"]`;
       const els = wrap.querySelectorAll(sel);
       if (els.length > 0) {
@@ -488,8 +576,11 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
           : g
       );
     } else {
+      // 同样限定 view-anim：避开看板位里同 key 的 data-date
       const el = wrap.querySelector<HTMLElement>(
-        a.kind === "date" ? `[data-date="${a.key}"]` : `[data-ym="${a.key}"]`
+        a.kind === "date"
+          ? `[data-testid="view-anim"] [data-date="${a.key}"]`
+          : `[data-ym="${a.key}"]`
       );
       if (el) {
         const wr = wrap.getBoundingClientRect();
@@ -583,21 +674,27 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
 
   const openAdd = (dateKey: string | string[], time?: string, endTime?: string) => {
     const list = Array.isArray(dateKey) ? dateKey : [dateKey];
+    // 看板位内嵌编辑：新建表单显示在起始日看板（周视图列头 ＋ /拖选新建时看板跟随）
+    setSelectedDateKey(list[0]);
     return setForm({ ...emptyForm(list), time: time ?? "", endTime: endTime ?? "" });
   };
-  const openEdit = (e: ScheduleEvent) =>
-    setForm({
+  const openEdit = (e: ScheduleEvent) => {
+    // 看板位内嵌编辑：表单与单日时间轴同屏，先把看板切到事件所在日
+    setSelectedDateKey(e.date);
+    return setForm({
       id: e.id,
       dates: [e.date],
       title: e.title,
       time: e.time,
       endTime: e.endTime ?? "",
+      endDate: e.endDate ?? "",
       description: e.description,
       repeat: e.repeat
         ? { on: true, freq: e.repeat.freq, until: e.repeat.until ?? "" }
         : { on: false, freq: "", until: "" },
       color: e.color ?? "",
     });
+  };
 
   const handleSave = () => {
     if (!form) return;
@@ -615,6 +712,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
         date: form.dates[0], // 编辑时"重复开始"改动会迁移整组起始日
         time: form.time,
         endTime: form.endTime || undefined,
+        endDate: form.time ? undefined : form.endDate || undefined, // 定时事件不跨天
         description: form.description,
         repeat,
         color: form.color || undefined,
@@ -626,6 +724,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
           date: d,
           time: form.time,
           endTime: form.endTime || undefined,
+          endDate: form.time ? undefined : form.endDate || undefined,
           description: form.description,
           repeat,
           color: form.color || undefined,
@@ -840,31 +939,71 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                 </div>
               </section>
 
-              {/* 当日日程：单列时间轴，交互与周视图一致；编辑时原位换成内嵌表单（看板式 UI） */}
-              <section className={tokens.card + " flex flex-col"}>
-                <p className={tokens.dayList.dateLabel}>{formatDayLabel(selectedDate)}</p>
-                <div className="mt-4 flex min-h-0 flex-1 flex-col">
-                  {form ? (
-                    <EventPanel
-                      inline
-                      form={form}
-                      tokens={tokens}
-                      onChange={setForm}
-                      onSave={handleSave}
-                      onDelete={(id) => {
-                        deleteEvent(id);
-                        setForm(null);
-                      }}
-                      onClose={() => setForm(null)}
-                    />
-                  ) : (
+              {/* 当日日程看板：单列时间轴 + 编辑时内嵌表单（表单与时间轴同屏） */}
+              <DayPanel
+                tokens={tokens}
+                dateKey={selectedDateKey}
+                dayEvents={dayEvents}
+                today={today}
+                form={form}
+                onFormChange={setForm}
+                onSave={handleSave}
+                onDelete={(id) => {
+                  deleteEvent(id);
+                  setForm(null);
+                }}
+                onClose={() => setForm(null)}
+                onAddDay={openAdd}
+                onEdit={openEdit}
+                onToggleDone={toggleDone}
+                onMoveAll={applyMoveAll}
+                onBatchColor={setEventColors}
+                onSelectionChange={setSelectedIds}
+              />
+            </div>
+            )}
+            {viewMode === "week" && (
+              <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+                <section className="flex flex-col">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h2 className={tokens.sectionTitle}>{formatWeekTitle(weekDates)}</h2>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={goPrevWeek} className={tokens.navButton}>
+                        上一周
+                      </button>
+                      <button type="button" onClick={goTodayWeek} className={tokens.navButton}>
+                        今天
+                      </button>
+                      <button type="button" onClick={goNextWeek} className={tokens.navButton}>
+                        下一周
+                      </button>
+                    </div>
+                  </div>
+
+                  <div
+                    data-testid="view-anim"
+                    onAnimationEnd={(e) => {
+                      if (e.target === e.currentTarget) setNavDir(null);
+                    }}
+                    className={[
+                      navDir === "left"
+                        ? "anim-slide-in-left"
+                        : navDir === "right"
+                          ? "anim-slide-in-right"
+                          : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
                     <WeekTimeline
                       tokens={tokens}
-                      dates={[selectedDate]}
-                      eventsByDay={[dayEvents]}
+                      dates={weekDates}
+                      eventsByDay={weekEvents}
                       anchorKey={selectedDateKey}
                       today={today}
-                      onJumpToMonth={() => {}}
+                      onJumpToMonth={jumpToMonth}
+                      onSelectDate={setSelectedDateKey}
+                      selectedDate={selectedDateKey}
                       onAddDay={openAdd}
                       onEdit={openEdit}
                       onToggleDone={toggleDone}
@@ -872,67 +1011,31 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                       onMoveAll={applyMoveAll}
                       onBatchColor={setEventColors}
                       onSelectionChange={setSelectedIds}
-                      cols={1}
-                      rootClass="min-h-0 flex-1"
-                      scrollClass="min-h-0 flex-1"
-                      scrollMaxHeight="none"
                     />
-                  )}
-                </div>
-              </section>
-            </div>
-            )}
-            {viewMode === "week" && (
-              <section className="flex flex-col">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className={tokens.sectionTitle}>{formatWeekTitle(weekDates)}</h2>
-                  <div className="flex gap-2">
-                    <button type="button" onClick={goPrevWeek} className={tokens.navButton}>
-                      上一周
-                    </button>
-                    <button type="button" onClick={goTodayWeek} className={tokens.navButton}>
-                      今天
-                    </button>
-                    <button type="button" onClick={goNextWeek} className={tokens.navButton}>
-                      下一周
-                    </button>
                   </div>
-                </div>
-
-                <div
-                  data-testid="view-anim"
-                  onAnimationEnd={(e) => {
-                    if (e.target === e.currentTarget) setNavDir(null);
+                </section>
+                {/* 选中日的单日看板：编辑时表单内嵌，与月视图一致 */}
+                <DayPanel
+                  tokens={tokens}
+                  dateKey={selectedDateKey}
+                  dayEvents={sortByTime(byDay.get(selectedDateKey) ?? [])}
+                  today={today}
+                  form={form}
+                  onFormChange={setForm}
+                  onSave={handleSave}
+                  onDelete={(id) => {
+                    deleteEvent(id);
+                    setForm(null);
                   }}
-                  className={[
-                    navDir === "left"
-                      ? "anim-slide-in-left"
-                      : navDir === "right"
-                        ? "anim-slide-in-right"
-                        : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                >
-                  <WeekTimeline
-                    tokens={tokens}
-                    dates={weekDates}
-                    eventsByDay={weekEvents}
-                    anchorKey={selectedDateKey}
-                    today={today}
-                    onJumpToMonth={jumpToMonth}
-                    onSelectDate={setSelectedDateKey}
-                    selectedDate={selectedDateKey}
-                    onAddDay={openAdd}
-                    onEdit={openEdit}
-                    onToggleDone={toggleDone}
-                    onDelete={deleteEvent}
-                    onMoveAll={applyMoveAll}
-                    onBatchColor={setEventColors}
-                    onSelectionChange={setSelectedIds}
-                  />
-                </div>
-              </section>
+                  onClose={() => setForm(null)}
+                  onAddDay={openAdd}
+                  onEdit={openEdit}
+                  onToggleDone={toggleDone}
+                  onMoveAll={applyMoveAll}
+                  onBatchColor={setEventColors}
+                  onSelectionChange={setSelectedIds}
+                />
+              </div>
             )}
             {viewMode === "year" && (
               <section className={tokens.viewPanel}>
@@ -1048,20 +1151,6 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
         </div>
       </div>
 
-      {/* 编辑面板：月视图内嵌在看板位（上方渲染）；其余视图右侧滑入 */}
-      {form && viewMode !== "month" && (
-        <EventPanel
-          form={form}
-          tokens={tokens}
-          onChange={setForm}
-          onSave={handleSave}
-          onDelete={(id) => {
-            deleteEvent(id);
-            setForm(null);
-          }}
-          onClose={() => setForm(null)}
-        />
-      )}
       <Settings events={events} onImport={replaceEvents} />
       {toast && (
         <UndoToast

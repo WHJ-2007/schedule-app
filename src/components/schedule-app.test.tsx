@@ -159,7 +159,7 @@ describe("ScheduleApp (month view)", () => {
     expect(screen.queryByLabelText("版本时间轴")).toBeNull();
   });
 
-  it("月视图编辑日程内嵌在看板位：替换看板而非右侧滑出", () => {
+  it("月视图编辑日程内嵌在看板位：表单与时间轴同屏，不再右侧滑出", () => {
     const now = new Date();
     localStorage.setItem(
       "schedule-demo-events",
@@ -175,14 +175,14 @@ describe("ScheduleApp (month view)", () => {
     expect(dialog.className).not.toContain("anim-panel-in");
     expect(dialog.className).not.toContain("fixed");
     expect(screen.getByLabelText(/标题/)).toHaveValue("内嵌测试");
-    // 看板被替换：列头 ＋ 按钮消失
+    // 看板未被替换：列头 ＋ 按钮仍在（表单与单日时间轴共存）
     const addBtn = `在${now.getMonth() + 1}月${now.getDate()}日添加日程`;
-    expect(screen.queryByRole("button", { name: addBtn })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     expect(screen.getByRole("button", { name: addBtn })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("周视图编辑日程仍是右侧滑出面板", () => {
+  it("周视图编辑日程同样内嵌在看板位（与月视图一致）", () => {
     const now = new Date();
     localStorage.setItem(
       "schedule-demo-events",
@@ -192,10 +192,11 @@ describe("ScheduleApp (month view)", () => {
     );
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
-    fireEvent.click(screen.getByRole("button", { name: "日程 浮动面板" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "日程 浮动面板" })[0]);
     const dialog = screen.getByRole("dialog", { name: "编辑日程" });
-    expect(dialog.className).toContain("anim-panel-in");
-    expect(dialog.className).toContain("fixed");
+    expect(dialog.className).toContain("anim-fade-in");
+    expect(dialog.className).not.toContain("anim-panel-in");
+    expect(dialog.className).not.toContain("fixed");
     expect(screen.getByLabelText(/标题/)).toHaveValue("浮动面板");
   });
 
@@ -284,9 +285,11 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const now = new Date();
     const week = getWeekDates(now);
+    // 7 列在 view-anim 内；右侧看板位也有选中日的列头按钮（同类 aria）
+    const view = within(screen.getByTestId("view-anim"));
     for (const d of week) {
       expect(
-        screen.getByRole("button", { name: `选择${d.getMonth() + 1}月${d.getDate()}日` })
+        view.getByRole("button", { name: `选择${d.getMonth() + 1}月${d.getDate()}日` })
       ).toBeInTheDocument();
     }
     expect(localStorage.getItem("schedule-view")).toBe("week");
@@ -315,7 +318,8 @@ describe("ScheduleApp (switcher & week view)", () => {
     const week = getWeekDates(now);
     const target = week[2];
     const targetKey = toDateKey(target);
-    const btn = screen.getByRole("button", {
+    const view = within(screen.getByTestId("view-anim"));
+    const btn = view.getByRole("button", {
       name: `选择${target.getMonth() + 1}月${target.getDate()}日`,
     });
     // 单击：选中该天，仍在周视图（该列出现浅蓝竖条高亮）
@@ -323,10 +327,10 @@ describe("ScheduleApp (switcher & week view)", () => {
     const col = document.querySelector(`[data-date="${targetKey}"]`)!;
     expect(col.className).toContain("border-blue-200");
     expect(screen.getByRole("button", { name: "月" })).toHaveAttribute("aria-pressed", "false");
-    // 双击：切到月视图并选中那天
+    // 双击：切到月视图并选中那天（残影克隆里也有旧看板标题，用 getAll）
     fireEvent.doubleClick(btn);
     expect(screen.getByRole("button", { name: "月" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText(formatDayLabel(target))).toBeInTheDocument();
+    expect(screen.getAllByText(formatDayLabel(target)).length).toBeGreaterThan(0);
   });
 
   it("周视图点事件直接打开编辑弹窗", () => {
@@ -338,7 +342,8 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "周视图事件" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
-    fireEvent.click(screen.getByRole("button", { name: /编辑 周视图事件/ }));
+    // 今天的事件在 7 列与右侧看板位各有一条全天胶囊
+    fireEvent.click(screen.getAllByRole("button", { name: /编辑 周视图事件/ })[0]);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText(/标题/)).toHaveValue("周视图事件");
   });
@@ -352,7 +357,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "全天条目" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
-    fireEvent.click(screen.getByRole("button", { name: /编辑 全天条目/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: /编辑 全天条目/ })[0]);
     expect(screen.getByRole("dialog", { name: "编辑日程" })).toBeInTheDocument();
     expect(screen.getByLabelText(/标题/)).toHaveValue("全天条目");
   });
@@ -369,7 +374,12 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "该日新增" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
-    fireEvent.doubleClick(screen.getByRole("button", { name: `选择${target.getMonth() + 1}月${target.getDate()}日` }));
+    // 看板位已跟随到该日，列头按钮在 7 列与看板位各一个
+    fireEvent.doubleClick(
+      within(screen.getByTestId("view-anim")).getByRole("button", {
+        name: `选择${target.getMonth() + 1}月${target.getDate()}日`,
+      })
+    );
     // 残影层克隆了旧周视图（aria-hidden 被 getByRole 忽略），用 role 查询当日日程条目
     expect(screen.getByRole("button", { name: /编辑 该日新增/ })).toBeInTheDocument();
   });
@@ -391,7 +401,8 @@ describe("ScheduleApp (switcher & week view)", () => {
   it("周视图拖选时间段：弹窗预填起止时间，保存后时间轴出现事件块", () => {
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
-    fireEvent.click(screen.getByRole("button", { name: /展开凌晨时段/ }));
+    // 折叠条在 7 列与看板位各一个（看板位跟随选中日），展开 7 列那个
+    fireEvent.click(within(screen.getByTestId("view-anim")).getByRole("button", { name: /展开凌晨时段/ }));
     const col = document.querySelector(`[data-date="${toDateKey(getWeekDates(new Date())[0])}"]`)!;
     // 60px → 2:00，90px → 3:00
     fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 60 });
@@ -402,13 +413,16 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(screen.getByLabelText(/结束时间/)).toHaveValue("03:00");
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "拖选新建" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
-    expect(screen.getByRole("button", { name: /日程 拖选新建/ })).toBeInTheDocument();
+    // 看板位跟随起始日：7 列与单日看板各一个事件块
+    expect(
+      within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 拖选新建/ })
+    ).toBeInTheDocument();
   });
 
   it("横向拖拽跨多天批量创建日程", () => {
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
-    fireEvent.click(screen.getByRole("button", { name: /展开凌晨时段/ }));
+    fireEvent.click(within(screen.getByTestId("view-anim")).getByRole("button", { name: /展开凌晨时段/ }));
     const week = getWeekDates(new Date());
     const col0 = document.querySelector(`[data-date="${toDateKey(week[0])}"]`)!;
     fireEvent.pointerDown(col0, { pointerId: 1, clientX: 50, clientY: 60 }); // 2:00
@@ -418,7 +432,10 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(screen.getByText(/将同时添加到 3 天：/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "晚间练习" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
-    expect(screen.getAllByRole("button", { name: "日程 晚间练习" })).toHaveLength(3);
+    // 7 列各一条；右侧看板位（起始日）另有同一条
+    expect(
+      within(screen.getByTestId("view-anim")).getAllByRole("button", { name: "日程 晚间练习" })
+    ).toHaveLength(3);
   });
 
   it("批量设色：框选多个 → 工具条点色点 → 全部变", () => {
@@ -432,9 +449,10 @@ describe("ScheduleApp (switcher & week view)", () => {
       fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     }
     fireEvent.click(screen.getByRole("button", { name: "周" }));
-    fireEvent.click(screen.getByRole("button", { name: /展开凌晨时段/ }));
-    // 从真实事件块反查所在列（残影 ghost 里的月历格会干扰 document 级查询）
-    const todayCol = screen
+    fireEvent.click(within(screen.getByTestId("view-anim")).getByRole("button", { name: /展开凌晨时段/ }));
+    // 从真实事件块反查所在列（残影 ghost 里的月历格会干扰 document 级查询）；
+    // 今天的事件在 7 列与看板位各一块，取 7 列那块
+    const todayCol = within(screen.getByTestId("view-anim"))
       .getByRole("button", { name: /日程 批量A/ })
       .closest("[data-date]")!;
     // 展开态 1px = 2 分钟：250px=07:28、380px=11:48（避开 210–236px 条带，覆盖 09:00–11:00 两块）
@@ -443,8 +461,8 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.pointerUp(todayCol, { pointerId: 1 });
     expect(screen.getByText("已选 2")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "批量颜色 #ef4444" }));
-    const a = screen.getByRole("button", { name: /日程 批量A/ });
-    const b = screen.getByRole("button", { name: /日程 批量B/ });
+    const a = within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 批量A/ });
+    const b = within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 批量B/ });
     expect(a.style.backgroundColor).toMatch(/239, 68, 68/);
     expect(b.style.backgroundColor).toMatch(/239, 68, 68/);
   });
@@ -460,7 +478,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:30" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
-    fireEvent.click(screen.getByRole("button", { name: /日程 时间段事件/ }));
+    fireEvent.click(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 时间段事件/ }));
     expect(screen.getByRole("dialog", { name: "编辑日程" })).toBeInTheDocument();
     expect(screen.getByLabelText(/开始时间/)).toHaveValue("10:00");
     expect(screen.getByLabelText(/结束时间/)).toHaveValue("11:30");
@@ -477,7 +495,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:00" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
-    const block = screen.getByRole("button", { name: /日程 待删除事件/ });
+    const block = within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 待删除事件/ });
     fireEvent.click(block);
     // 面板打开，此时按 Delete
     expect(screen.getByRole("dialog", { name: "编辑日程" })).toBeInTheDocument();
@@ -491,7 +509,8 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     // 点撤销恢复
     fireEvent.click(screen.getByRole("button", { name: "撤销删除" }));
-    expect(screen.getByRole("button", { name: /日程 待删除事件/ })).toBeInTheDocument();
+    // 恢复后 7 列与看板位各有一块，限定 7 列断言
+    expect(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 待删除事件/ })).toBeInTheDocument();
     expect(screen.queryByRole("status")).toBeNull();
   });
 
@@ -506,10 +525,11 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:00" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
-    fireEvent.click(screen.getByRole("button", { name: /日程 不可删事件/ }));
+    fireEvent.click(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 不可删事件/ }));
     const title = screen.getByLabelText(/标题/);
     fireEvent.keyDown(title, { key: "Delete" });
-    expect(screen.getByRole("button", { name: /日程 不可删事件/ })).toBeInTheDocument();
+    // 7 列与看板位各有一块，限定 7 列断言
+    expect(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 不可删事件/ })).toBeInTheDocument();
     expect(screen.queryByRole("status")).toBeNull();
   });
 });
@@ -678,7 +698,10 @@ describe("ScheduleApp (view zoom transition)", () => {
     fireEvent.doubleClick(
       screen.getByRole("button", { name: `选择${week[0].getMonth() + 1}月${week[0].getDate()}日` })
     );
-    expect(screen.getByTestId("view-ghost").querySelectorAll("[data-date]")).toHaveLength(7);
+    // 旧周视图克隆含 7 列时间轴（看板位列在外层，用克隆保留的 view-anim 标记计数）
+    expect(
+      screen.getByTestId("view-ghost").querySelectorAll("[data-ghost-anim] [data-date]")
+    ).toHaveLength(7);
   });
 
   it("仅视图切换产生残影：翻月/翻周等导航不产生", () => {
@@ -1003,10 +1026,12 @@ describe("ScheduleApp (recurring & day timeline)", () => {
     fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "09:00" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
-    // 本周从今天到周日每天一个实例
+    // 本周从今天到周日每天一个实例（7 列内计数；看板位当天另有一个）
     const week = getWeekDates(now);
     const remaining = week.filter((d) => toDateKey(d) >= toDateKey(now)).length;
-    expect(screen.getAllByRole("button", { name: /日程 无限重复/ })).toHaveLength(remaining);
+    expect(
+      within(screen.getByTestId("view-anim")).getAllByRole("button", { name: /日程 无限重复/ })
+    ).toHaveLength(remaining);
     fireEvent.click(screen.getByRole("button", { name: "月" }));
     expect(screen.getAllByText("无限重复").length).toBeGreaterThan(0);
   });
@@ -1025,8 +1050,9 @@ describe("ScheduleApp (recurring & day timeline)", () => {
     );
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
-    expect(screen.getAllByRole("button", { name: /日程 工作日事件/ })).toHaveLength(5);
-    expect(screen.getAllByRole("button", { name: /日程 周末事件/ })).toHaveLength(2);
+    const view = within(screen.getByTestId("view-anim"));
+    expect(view.getAllByRole("button", { name: /日程 工作日事件/ })).toHaveLength(5);
+    expect(view.getAllByRole("button", { name: /日程 周末事件/ })).toHaveLength(2);
   });
 });
 
@@ -1098,9 +1124,11 @@ describe("ScheduleApp (月视图双击跳周)", () => {
       screen.getByRole("button", { name: `${target.getMonth() + 1}月${target.getDate()}日` })
     );
     const targetWeek = getWeekDates(target);
+    // 7 列内计数；右侧看板位也有选中日的 ＋ 按钮（同类 aria）
+    const view = within(screen.getByTestId("view-anim"));
     for (const d of targetWeek) {
       expect(
-        screen.getByRole("button", { name: `在${d.getMonth() + 1}月${d.getDate()}日添加日程` })
+        view.getByRole("button", { name: `在${d.getMonth() + 1}月${d.getDate()}日添加日程` })
       ).toBeInTheDocument();
     }
     // 验证不是简单挪用本周动画：原周里不在目标周的日期不应出现
@@ -1108,7 +1136,7 @@ describe("ScheduleApp (月视图双击跳周)", () => {
     for (const d of currentWeek) {
       if (targetWeek.some((w) => isSameDay(w, d))) continue;
       expect(
-        screen.queryByRole("button", { name: `在${d.getMonth() + 1}月${d.getDate()}日添加日程` })
+        view.queryByRole("button", { name: `在${d.getMonth() + 1}月${d.getDate()}日添加日程` })
       ).toBeNull();
     }
   });
