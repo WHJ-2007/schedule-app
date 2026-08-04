@@ -149,6 +149,31 @@ describe("WeekTimeline", () => {
     fireEvent.pointerUp(blocks[0], { pointerId: 1 });
   });
 
+  it("重复日程整体拖动：提交只动被按的那个实例（其余实例留在原列）", () => {
+    const onMoveAll = vi.fn();
+    renderTimeline(
+      [
+        [ev("r", "重复日程", "09:00", "10:00", 0)],
+        [ev("r", "重复日程", "09:00", "10:00", 1)],
+        ...emptyWeek.slice(2),
+      ],
+      { onMoveAll }
+    );
+    let blocks = screen.getAllByRole("button", { name: /日程 重复日程/ });
+    fireEvent.pointerDown(blocks[0], { pointerId: 1, clientX: 50, clientY: 100 }); // 周一实例 9:00
+    fireEvent.pointerMove(blocks[0], { pointerId: 1, clientX: 150, clientY: 100 }); // 横向 +1 天，纵向不动
+    blocks = screen.getAllByRole("button", { name: /日程 重复日程/ });
+    // 预览：只有被按实例带位移，周二实例不动
+    expect(blocks[0].style.transform).toBe("translate(100px, 0px)");
+    expect(blocks[1].style.transform).toBe("");
+    fireEvent.pointerUp(blocks[0], { pointerId: 1 });
+    // 提交：单条 patch，只含被按实例（旧 bug：find 只找第一个实例 → 同 id 实例集体错动）
+    expect(onMoveAll).toHaveBeenCalledTimes(1);
+    expect(onMoveAll).toHaveBeenCalledWith([
+      { id: "r", date: "2026-08-04", time: "09:00", endTime: "10:00" },
+    ]);
+  });
+
   it("渲染小时刻度（默认折叠凌晨时段）", () => {
     renderTimeline(emptyWeek);
     expect(screen.getByText("7:00")).toBeInTheDocument();
@@ -440,7 +465,7 @@ describe("WeekTimeline (选择与框选)", () => {
     expect(onEdit).toHaveBeenLastCalledWith(b);
   });
 
-  it("拖选空白新建后清除残留选中", () => {
+  it("拖选空白新建：本地清空选中但不上报父层（表单保留不被误关）", () => {
     const onAddDay = vi.fn();
     const onSelectionChange = vi.fn();
     const a = ev("a", "夜跑", "23:00", "23:30");
@@ -452,7 +477,9 @@ describe("WeekTimeline (选择与框选)", () => {
     fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 205 }); // 12:30
     fireEvent.pointerUp(col, { pointerId: 1 });
     expect(onAddDay).toHaveBeenCalled();
-    expect(onSelectionChange).toHaveBeenLastCalledWith([]);
+    // 本地选中清掉（块高亮消失），但父层选中保持：拖选新建的表单刚打开，上报空集会被父层误关
+    expect(onSelectionChange).toHaveBeenLastCalledWith(["a"]);
+    expect(screen.getByRole("button", { name: /日程 夜跑/ }).className).not.toContain("ring-2");
   });
 
   it("选中事件块标题展开显示完整标题，点空白后恢复截断", () => {

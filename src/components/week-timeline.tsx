@@ -68,6 +68,7 @@ type AllDayDrag = {
 // 事件整体挪动：相对按下位置的日/分钟偏移
 type MoveState = {
   pressId: string; // 按下的事件 id（单击未移动时用于打开编辑面板）
+  pressKey: string; // 被按实例身份「id:原日期」：重复事件同 id 多实例，只移动被按的那个
   top: number;
   downCol: number;
   downMin: number;
@@ -251,19 +252,24 @@ export default function WeekTimeline({
 
   // 选中组统一入口：本地 state + 上报父层
   // 内容守卫：同签名不上报也不 setState，避免「父重渲染 → 新 dates → effect 重跑」死循环
+  // report=false：只清本地选中不上报（拖选新建时父层表单刚打开，上报空集会让父层误关表单）
   const lastReportedRef = useRef("");
-  const applySelection = (ids: string[]) => {
+  const applySelection = (ids: string[], report = true) => {
     const sig = ids.length + ":" + ids.join(",");
     if (sig === lastReportedRef.current) return;
     lastReportedRef.current = sig;
     setSelectedIds(ids);
-    onSelectionChangeRef.current?.(ids);
+    if (report) onSelectionChangeRef.current?.(ids);
   };
 
-  // 翻周后选中项已离开可视范围：清空选中
+  // 翻周后选中项已离开可视范围：清空选中（按周内容判断：同周内切换选中日
+  // 只换数组引用，不触发清空，否则父层看板会误以为取消选中而折叠）。
+  // 单日看板（cols=1）日期切换由父层驱动，没有翻周概念，不参与清空
+  const weekKeyStr = weekKeys.join(",");
   useEffect(() => {
+    if (cols === 1) return;
     applySelection([]);
-  }, [dates]);
+  }, [weekKeyStr, cols]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const bandTop = folded ? 0 : 7 * HOUR_PX; // 条带 y：折叠时在顶部（0:00 起），展开时在 6:00 与 7:00 之间
   const bandH = folded ? FOLD_BAND_H : EXPAND_BAND_H;
@@ -372,6 +378,14 @@ export default function WeekTimeline({
   // 未松手就开始播放让位/收缩动画——表现「松手后就这么排」
   const allEvents = eventsByDay.flat();
   const activeMove = move && selectedIds.length > 0 ? move : null;
+  // 本次拖动的移动集：被按实例（重复事件同 id 只动它）+ 其余选中事件；
+  // 未在拖动时（move 为 null）一律不移动——松手后 settle 过渡由其它条件接管
+  const isMoved = (e: ScheduleEvent) =>
+    move
+      ? e.id === move.pressId
+        ? `${e.id}:${e.date}` === move.pressKey
+        : selectedIds.includes(e.id)
+      : false;
   const previewLayouts = activeMove
     ? new Map<number, Map<string, { track: number; tracks: number }>>(
         weekKeys.map((_, dayIdx) => {
@@ -379,7 +393,7 @@ export default function WeekTimeline({
             (e) => e.time && !selectedIds.includes(e.id)
           );
           const incoming = allEvents
-            .filter((e) => e.time && selectedIds.includes(e.id) && !isHidden(e))
+            .filter((e) => e.time && !isHidden(e) && isMoved(e))
             .map((e) => {
               const s = parseTimeToMinutes(e.time);
               const en = e.endTime ? parseTimeToMinutes(e.endTime) : s + 60;
@@ -542,18 +556,21 @@ export default function WeekTimeline({
       if (m.dx !== 0 || m.dy !== 0) {
         const patches: EventMovePatch[] = [];
         for (const id of selectedRef.current) {
-          const ev = eventsRef.current.flat().find((x) => x.id === id);
-          if (!ev || isHidden(ev)) continue;
-          const s = parseTimeToMinutes(ev.time);
-          const day = parseDateKey(ev.date);
-          patches.push({
-            id,
-            date: toDateKey(addDays(day.getFullYear(), day.getMonth(), day.getDate(), m.dx)),
-            time: minutesToTime(s + m.dy),
-            endTime: ev.endTime
-              ? minutesToTime(parseTimeToMinutes(ev.endTime) + m.dy)
-              : undefined,
-          });
+          for (const ev of eventsRef.current.flat()) {
+            if (ev.id !== id || !ev.time || isHidden(ev)) continue;
+            // 重复事件同 id 多实例：只提交被按的那个实例，其余实例留在原列
+            if (id === m.pressId && `${ev.id}:${ev.date}` !== m.pressKey) continue;
+            const s = parseTimeToMinutes(ev.time);
+            const day = parseDateKey(ev.date);
+            patches.push({
+              id,
+              date: toDateKey(addDays(day.getFullYear(), day.getMonth(), day.getDate(), m.dx)),
+              time: minutesToTime(s + m.dy),
+              endTime: ev.endTime
+                ? minutesToTime(parseTimeToMinutes(ev.endTime) + m.dy)
+                : undefined,
+            });
+          }
         }
         // 整组一次提交：撤销/重做按一次操作记录
         onMoveAllRef.current(patches);
@@ -591,7 +608,7 @@ export default function WeekTimeline({
     if (hit.length > 0) {
       applySelection(hit);
     } else {
-      applySelection([]); // 拖选空白新建：清掉残留选中
+      applySelection([], false); // 拖选空白新建：只清本地选中（父层表单刚打开，不上报空集）
       onAddDayRef.current(
         weekKeysRef.current.slice(colMin, colMax + 1),
         minutesToTime(d.start),
@@ -764,6 +781,7 @@ export default function WeekTimeline({
     }
     const m: MoveState = {
       pressId: ev.id,
+      pressKey: `${ev.id}:${ev.date}`,
       top: rects[col].top,
       downCol: col,
       downMin,
@@ -1059,7 +1077,8 @@ export default function WeekTimeline({
                   // 折叠时与凌晨区相交的事件整体收起，仅显示在折叠条计数里
                   if (folded && start < FOLD_END && end > FOLD_START) return null;
                   const isSelected = selectedIds.includes(e.id);
-                  const moving = move != null && isSelected;
+                  // 只有移动集内的块跟手位移：重复事件未被按的实例留在原列不动
+                  const moving = isMoved(e);
                   // 只对被拖的那一个实例做拉伸预览：重复日程多实例同 id，全匹配会一起拉伸
                   const isResizing = resize?.id === e.id && resize.date === e.date;
                   // 正在进行的日程（今天此刻起止区间覆盖当前时间）：描蓝边高亮

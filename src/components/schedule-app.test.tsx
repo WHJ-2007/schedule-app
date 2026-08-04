@@ -391,6 +391,34 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(grid.className).toContain("lg:grid-cols-[1fr_0fr]");
   });
 
+  it("周视图单击非当前日事件：看板切到该日并保持展开（不误折叠）", () => {
+    const now = new Date();
+    const tomorrow = addDays(now.getFullYear(), now.getMonth(), now.getDate(), 1);
+    localStorage.setItem(
+      "schedule-demo-events",
+      JSON.stringify([
+        { id: "a", title: "今日事件", date: toDateKey(now), time: "09:00", endTime: "10:00", description: "", done: false },
+        { id: "b", title: "明日事件", date: toDateKey(tomorrow), time: "09:00", endTime: "10:00", description: "", done: false },
+      ])
+    );
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const grid = screen.getByTestId("week-grid");
+    // 点今日事件 → 看板展开
+    fireEvent.click(
+      within(screen.getByTestId("view-anim")).getByRole("button", { name: "日程 今日事件" })
+    );
+    expect(grid.className).toContain("lg:grid-cols-[2fr_1fr]");
+    // 点明日事件 → 看板切换日期，必须保持展开
+    // （旧 bug：单日看板切日 → 翻周清空选中 effect 误触发 → 父层误关面板 → 又折叠）
+    fireEvent.click(
+      within(screen.getByTestId("view-anim")).getByRole("button", { name: "日程 明日事件" })
+    );
+    expect(grid.className).toContain("lg:grid-cols-[2fr_1fr]");
+    // 看板已切到明日
+    expect(screen.getAllByText(formatDayLabel(tomorrow)).length).toBeGreaterThan(0);
+  });
+
   it("周视图列头＋按钮添加到该日", () => {
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
