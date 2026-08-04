@@ -167,6 +167,30 @@ describe("useEvents", () => {
     });
   });
 
+  it("setEventColors 批量设色一次入栈，撤销恢复", async () => {
+    const { result } = renderHook(() => useEvents());
+    await waitFor(() => {
+      expect(result.current.events.length).toBeGreaterThan(0);
+    });
+    const a = result.current.events[0];
+    const b = result.current.events[1];
+    const historyLen = result.current.history.length;
+    act(() => {
+      result.current.setEventColors([a.id, b.id], "#ef4444");
+    });
+    await waitFor(() => {
+      expect(result.current.events.find((e) => e.id === a.id)?.color).toBe("#ef4444");
+      expect(result.current.events.find((e) => e.id === b.id)?.color).toBe("#ef4444");
+      expect(result.current.history.length).toBe(historyLen + 1);
+    });
+    act(() => {
+      result.current.undo();
+    });
+    await waitFor(() => {
+      expect(result.current.events.find((e) => e.id === a.id)?.color).toBeUndefined();
+    });
+  });
+
   it("persists across remounts", async () => {
     const first = renderHook(() => useEvents());
     await waitFor(() => {

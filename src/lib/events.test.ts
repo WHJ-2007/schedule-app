@@ -151,6 +151,36 @@ describe("expandEventDates", () => {
 });
 
 describe("sanitizeImportedEvents", () => {
+  it("清洗透传合法 color，丢弃非字符串 color", () => {
+    expect(
+      sanitizeImportedEvents([
+        { id: "a", title: "带色", date: "2026-08-03", time: "09:00", color: "#ef4444" },
+        { id: "b", title: "无色", date: "2026-08-03", time: "09:00" },
+        { id: "c", title: "坏色", date: "2026-08-03", time: "09:00", color: 42 },
+      ])
+    ).toEqual([
+      {
+        id: "a", title: "带色", date: "2026-08-03", time: "09:00",
+        endTime: undefined, description: "", done: false, repeat: undefined, color: "#ef4444",
+      },
+      {
+        id: "b", title: "无色", date: "2026-08-03", time: "09:00",
+        endTime: undefined, description: "", done: false, repeat: undefined,
+      },
+      {
+        id: "c", title: "坏色", date: "2026-08-03", time: "09:00",
+        endTime: undefined, description: "", done: false, repeat: undefined,
+      },
+    ]);
+  });
+
+  it("addEventToList 透传 color", () => {
+    const list = addEventToList([], { title: "带色", date: "2026-08-05", color: "#22c55e" });
+    expect(list[0].color).toBe("#22c55e");
+    const plain = addEventToList([], { title: "无色", date: "2026-08-05" });
+    expect(plain[0].color).toBeUndefined();
+  });
+
   it("非数组返回空列表", () => {
     expect(sanitizeImportedEvents("nope")).toEqual([]);
     expect(sanitizeImportedEvents({ id: "a" })).toEqual([]);

@@ -12,6 +12,7 @@ export type ScheduleEvent = {
   description: string;
   done: boolean;
   repeat?: RepeatRule;
+  color?: string; // 自定义颜色（十六进制），缺省跟随主题
 };
 
 export type EventInput = {
@@ -21,6 +22,7 @@ export type EventInput = {
   endTime?: string;
   description?: string;
   repeat?: RepeatRule;
+  color?: string;
 };
 
 export const STORAGE_KEY = "schedule-demo-events";
@@ -113,6 +115,7 @@ export function addEventToList(list: ScheduleEvent[], input: EventInput): Schedu
     description: input.description ?? "",
     done: false,
     repeat: input.repeat,
+    color: input.color || undefined,
   };
   return [...list, event];
 }
@@ -168,6 +171,7 @@ export function sanitizeImportedEvents(raw: unknown): ScheduleEvent[] {
       description: typeof o.description === "string" ? o.description : "",
       done: Boolean(o.done),
       repeat,
+      color: typeof o.color === "string" && o.color ? o.color : undefined,
     });
   }
   return out;
