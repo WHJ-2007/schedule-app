@@ -30,15 +30,17 @@ afterEach(() => {
   pushMock.mockClear();
 });
 
+const renderSettings = () => render(<Settings events={[]} onImport={vi.fn()} />);
+
 describe("settings", () => {
   it("齿轮按钮打开设置弹窗", () => {
-    render(<Settings />);
+    renderSettings();
     fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
     expect(screen.getByRole("dialog", { name: "设置" })).toBeInTheDocument();
   });
 
   it("切换主题：保存并跳转", () => {
-    render(<Settings />);
+    renderSettings();
     fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
     fireEvent.click(screen.getByRole("button", { name: /手账笔记本/ }));
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("/style-6");
@@ -47,13 +49,40 @@ describe("settings", () => {
 
   it("高亮当前主题", () => {
     localStorage.setItem(THEME_STORAGE_KEY, "/style-6");
-    render(<Settings />);
+    renderSettings();
     fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
     expect(screen.getByText("当前")).toBeInTheDocument();
   });
 
+  it("tab 切换：高亮块跟随选中按钮滑动，内容区带缩放动画", () => {
+    renderSettings();
+    fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
+    const pill = screen.getByTestId("tab-pill");
+    // jsdom 不计算布局：注入选中按钮的测量值验证高亮块位置
+    const themeBtn = screen.getByRole("button", { name: "主题" });
+    Object.defineProperty(themeBtn, "offsetLeft", { value: 8, configurable: true });
+    Object.defineProperty(themeBtn, "offsetWidth", { value: 52, configurable: true });
+    const logBtn = screen.getByRole("button", { name: "更新日志" });
+    Object.defineProperty(logBtn, "offsetLeft", { value: 68, configurable: true });
+    Object.defineProperty(logBtn, "offsetWidth", { value: 64, configurable: true });
+    fireEvent.click(logBtn);
+    expect(pill.style.left).toBe("68px");
+    expect(pill.style.width).toBe("64px");
+    fireEvent.click(themeBtn);
+    expect(pill.style.left).toBe("8px");
+    expect(pill.style.width).toBe("52px");
+    const dataBtn = screen.getByRole("button", { name: "数据" });
+    Object.defineProperty(dataBtn, "offsetLeft", { value: 140, configurable: true });
+    Object.defineProperty(dataBtn, "offsetWidth", { value: 56, configurable: true });
+    fireEvent.click(dataBtn);
+    expect(pill.style.left).toBe("140px");
+    expect(pill.style.width).toBe("56px");
+    // 内容区切换带缩放动画
+    expect(screen.getByRole("button", { name: /导出全部日程/ }).closest(".anim-scale-in")).toBeTruthy();
+  });
+
   it("更新日志分页：翻页显示不同条目", () => {
-    render(<Settings />);
+    renderSettings();
     fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
     fireEvent.click(screen.getByRole("button", { name: "更新日志" }));
     expect(screen.getByText("第 1 / 3 页")).toBeInTheDocument();

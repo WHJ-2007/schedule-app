@@ -13,6 +13,7 @@ import {
   addMonths,
   toDateKey,
   formatWeekTitle,
+  isSameDay,
 } from "@/lib/date";
 
 vi.mock("next/navigation", () => ({
@@ -748,5 +749,63 @@ describe("ScheduleApp (设置导出/导入)", () => {
       target: { files: [new File(["{{{not json"], "bad.json", { type: "application/json" })] },
     });
     await waitFor(() => expect(screen.getByText(/导入失败/)).toBeInTheDocument());
+  });
+});
+
+describe("ScheduleApp (月视图双击跳周)", () => {
+  // 找一个当前月网格里不在本周的日期：双击后周视图必须翻到包含该日的那一周
+  const pickOutsideWeekDay = () => {
+    const now = new Date();
+    const grid = getMonthGrid(now.getFullYear(), now.getMonth());
+    const currentWeek = getWeekDates(now);
+    return grid.find((d) => !currentWeek.some((w) => isSameDay(w, d)))!;
+  };
+
+  it("双击日期跳到该日所在周：周视图列头为目标周的 7 天", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    const target = pickOutsideWeekDay();
+    fireEvent.doubleClick(
+      screen.getByRole("button", { name: `${target.getMonth() + 1}月${target.getDate()}日` })
+    );
+    const targetWeek = getWeekDates(target);
+    for (const d of targetWeek) {
+      expect(
+        screen.getByRole("button", { name: `在${d.getMonth() + 1}月${d.getDate()}日添加日程` })
+      ).toBeInTheDocument();
+    }
+    // 验证不是简单挪用本周动画：原周里不在目标周的日期不应出现
+    const currentWeek = getWeekDates(new Date());
+    for (const d of currentWeek) {
+      if (targetWeek.some((w) => isSameDay(w, d))) continue;
+      expect(
+        screen.queryByRole("button", { name: `在${d.getMonth() + 1}月${d.getDate()}日添加日程` })
+      ).toBeNull();
+    }
+  });
+
+  it("双击跳周播放月→周动画：数字飞行轨道出现并包含目标日期", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    const target = pickOutsideWeekDay();
+    fireEvent.doubleClick(
+      screen.getByRole("button", { name: `${target.getMonth() + 1}月${target.getDate()}日` })
+    );
+    const fly = screen.getByTestId("week-num-fly");
+    expect(fly.querySelectorAll('[data-testid="week-num-fly-item"]').length).toBeGreaterThan(0);
+    const targetKey = toDateKey(target);
+    expect(fly.querySelector(`[data-day-num="${targetKey}"]`)).toBeTruthy();
+  });
+
+  it("双击后从周视图切回月视图显示目标日期所在月", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    const target = pickOutsideWeekDay();
+    fireEvent.doubleClick(
+      screen.getByRole("button", { name: `${target.getMonth() + 1}月${target.getDate()}日` })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "月" }));
+    expect(
+      screen.getByRole("heading", {
+        name: new RegExp(formatMonthTitle(target.getFullYear(), target.getMonth())),
+      })
+    ).toBeInTheDocument();
   });
 });

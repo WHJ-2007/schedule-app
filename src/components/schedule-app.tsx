@@ -180,8 +180,9 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
 
   // 切换前克隆旧视图容器：残影固定在原位置；父容器相对坐标（滚动时残影跟随内容）。
   // 锚点优先取源视图坐标（此时旧视图还在 DOM）：月→周=本周 7 格、年→月=被点月卡，
-  // 残影缩向那里、新视图从同一位置展开，两个方向的数字/月卡位置才能对上
-  const captureGhost = (anchor: AnchorSpec | null = null) => {
+  // 残影缩向那里、新视图从同一位置展开，两个方向的数字/月卡位置才能对上。
+  // days 可指定目标周（双击跳周等场景：残影缩向目标周的 7 格，而非当前选中周）
+  const captureGhost = (anchor: AnchorSpec | null = null, days?: Date[]) => {
     const wrap = viewWrapRef.current;
     if (!wrap) return;
     const node = wrap.cloneNode(true) as HTMLElement;
@@ -197,7 +198,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     if (anchor) {
       const sel =
         anchor.kind === "week"
-          ? weekDates.map((d) => `[data-date="${toDateKey(d)}"]`).join(",")
+          ? (days ?? weekDates).map((d) => `[data-date="${toDateKey(d)}"]`).join(",")
           : anchor.kind === "date"
             ? `[data-date="${anchor.key}"]`
             : `[data-ym="${anchor.key}"]`;
@@ -293,13 +294,14 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     return from === "year" ? "in" : "out";
   };
 
-  // 月→周：记录本周 7 个日期数字在月历格里的位置与克隆（相对 wrap 的布局坐标）
-  const captureWeekNumbers = () => {
+  // 月→周：记录目标周 7 个日期数字在月历格里的位置与克隆（相对 wrap 的布局坐标）。
+  // days 缺省为本周；双击跳周时传目标周（跨月边界缺失的格子自动跳过）
+  const captureWeekNumbers = (days: Date[] = weekDates) => {
     const wrap = viewWrapRef.current;
     const grid = gridRef.current;
     if (!wrap || !grid) return;
     const out: { key: string; x: number; y: number; w: number; h: number; node: HTMLElement }[] = [];
-    for (const d of weekDates) {
+    for (const d of days) {
       const key = toDateKey(d);
       const el = grid.querySelector<HTMLElement>(`[data-day-num="${key}"]`);
       if (!el) continue;
@@ -340,6 +342,22 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
       key: v === "year" ? `${viewYear}-${viewMonth}` : toDateKey(selectedDate),
     };
     setViewMode(v);
+  };
+
+  // 月视图双击日期：跳到该日所在周，动画与月→周切换一致。
+  // 捕获阶段旧月视图还显示着，用目标周的 7 天做残影锚点与数字飞行源（跨月缺失的格子自动跳过）
+  const openWeekFromDay = (d: Date) => {
+    const targetKey = toDateKey(d);
+    const targetWeek = getWeekDates(d);
+    captureGhost({ kind: "week" }, targetWeek);
+    weekNumFlyPendingRef.current = true;
+    captureWeekNumbers(targetWeek);
+    saveView("week");
+    setSelectedDateKey(targetKey);
+    setViewYear(d.getFullYear());
+    setViewMonth(d.getMonth());
+    zoomAnchorRef.current = { mode: "in", kind: "date", key: targetKey };
+    setViewMode("week");
   };
 
   const jumpToMonth = (d: Date) => {
@@ -634,6 +652,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                         type="button"
                         data-date={key}
                         onClick={() => setSelectedDateKey(key)}
+                        onDoubleClick={() => openWeekFromDay(d)}
                         aria-label={`${d.getMonth() + 1}月${d.getDate()}日`}
                         className={
                           tokens.cell.base +

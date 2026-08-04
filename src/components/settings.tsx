@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { THEMES, saveThemePath, getSavedThemePath } from "@/lib/themes";
 import { getChangelogPage, getChangelogPageCount } from "@/lib/changelog";
@@ -22,6 +22,16 @@ export default function Settings({
   const [page, setPage] = useState(1);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  // tab 切换：高亮块跟随选中按钮滑动（同月视图选中泡泡逻辑），内容区带缩放动画
+  const tabBarRef = useRef<HTMLDivElement | null>(null);
+  const [pill, setPill] = useState({ left: 0, width: 0 });
+  useEffect(() => {
+    const bar = tabBarRef.current;
+    if (!bar) return;
+    const el = bar.querySelector<HTMLElement>(`[data-tab="${tab}"]`);
+    if (!el) return;
+    setPill({ left: el.offsetLeft, width: el.offsetWidth });
+  }, [tab, open]);
 
   // 一键导出：全部日程序列化为 JSON 文件下载
   const exportAll = () => {
@@ -104,45 +114,52 @@ export default function Settings({
                 ✕
               </button>
             </div>
-            <div className="mt-4 flex gap-2 border-b border-neutral-100 pb-3">
+            <div
+              ref={tabBarRef}
+              className="relative mt-4 flex gap-2 border-b border-neutral-100 pb-3"
+            >
+              <div
+                aria-hidden
+                data-testid="tab-pill"
+                className="absolute bottom-0 top-0 rounded-full bg-neutral-900 transition-all duration-200 ease-out"
+                style={{ left: pill.left, width: pill.width, opacity: pill.width ? 1 : 0 }}
+              />
               <button
                 type="button"
+                data-tab="theme"
                 onClick={() => setTab("theme")}
                 className={
-                  "rounded-full px-4 py-1.5 text-sm transition " +
-                  (tab === "theme"
-                    ? "bg-neutral-900 text-white"
-                    : "text-neutral-500 hover:bg-neutral-100")
+                  "relative z-10 rounded-full px-4 py-1.5 text-sm transition " +
+                  (tab === "theme" ? "text-white" : "text-neutral-500 hover:bg-neutral-100")
                 }
               >
                 主题
               </button>
               <button
                 type="button"
+                data-tab="log"
                 onClick={() => setTab("log")}
                 className={
-                  "rounded-full px-4 py-1.5 text-sm transition " +
-                  (tab === "log"
-                    ? "bg-neutral-900 text-white"
-                    : "text-neutral-500 hover:bg-neutral-100")
+                  "relative z-10 rounded-full px-4 py-1.5 text-sm transition " +
+                  (tab === "log" ? "text-white" : "text-neutral-500 hover:bg-neutral-100")
                 }
               >
                 更新日志
               </button>
               <button
                 type="button"
+                data-tab="data"
                 onClick={() => setTab("data")}
                 className={
-                  "rounded-full px-4 py-1.5 text-sm transition " +
-                  (tab === "data"
-                    ? "bg-neutral-900 text-white"
-                    : "text-neutral-500 hover:bg-neutral-100")
+                  "relative z-10 rounded-full px-4 py-1.5 text-sm transition " +
+                  (tab === "data" ? "text-white" : "text-neutral-500 hover:bg-neutral-100")
                 }
               >
                 数据
               </button>
             </div>
 
+            <div key={tab} className="anim-scale-in">
             {tab === "theme" ? (
               <ul className="mt-4 space-y-2">
                 {THEMES.map((t) => {
@@ -260,6 +277,7 @@ export default function Settings({
                 {importMsg && <p className="text-xs text-neutral-500">{importMsg}</p>}
               </div>
             )}
+            </div>
           </div>
         </div>
       )}
