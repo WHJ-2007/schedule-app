@@ -179,9 +179,9 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.click(screen.getByRole("button", { name: /展开凌晨时段/ }));
     const col = document.querySelector(`[data-date="${toDateKey(getWeekDates(new Date())[0])}"]`)!;
     // 96px → 2:00，144px → 3:00
-    fireEvent.mouseDown(col, { clientX: 50, clientY: 96 });
-    fireEvent.mouseMove(col, { clientX: 50, clientY: 144 });
-    fireEvent.mouseUp(col);
+    fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 96 });
+    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 144 });
+    fireEvent.pointerUp(col, { pointerId: 1 });
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText(/开始时间/)).toHaveValue("02:00");
     expect(screen.getByLabelText(/结束时间/)).toHaveValue("03:00");
@@ -196,9 +196,9 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.click(screen.getByRole("button", { name: /展开凌晨时段/ }));
     const week = getWeekDates(new Date());
     const col0 = document.querySelector(`[data-date="${toDateKey(week[0])}"]`)!;
-    fireEvent.mouseDown(col0, { clientX: 50, clientY: 96 }); // 2:00
-    fireEvent.mouseMove(col0, { clientX: 250, clientY: 144 }); // 拖到第 3 列 → 3:00
-    fireEvent.mouseUp(col0);
+    fireEvent.pointerDown(col0, { pointerId: 1, clientX: 50, clientY: 96 }); // 2:00
+    fireEvent.pointerMove(col0, { pointerId: 1, clientX: 250, clientY: 144 }); // 拖到第 3 列 → 3:00
+    fireEvent.pointerUp(col0, { pointerId: 1 });
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText(/将同时添加到 3 天：/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "晚间练习" } });

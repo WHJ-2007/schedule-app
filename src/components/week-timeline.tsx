@@ -168,136 +168,142 @@ export default function WeekTimeline({
     return parseTimeToMinutes(e.time) < FOLD_END;
   };
 
-  // 拖选/挪动期间在 window 上监听，鼠标移出列外仍持续
-  useEffect(() => {
-    const handleMove = (e: MouseEvent) => {
-      const rect = timelineRef.current?.getBoundingClientRect();
-      const m = moveRef.current;
-      if (m) {
-        const dx = Math.max(m.dxMin, Math.min(m.dxMax, colFromX(e.clientX, m.colRects) - m.downCol));
-        const curMin = minutesAtY(e.clientY - m.top);
-        const dy = curMin == null ? m.dy : Math.max(m.dyMin, Math.min(m.dyMax, curMin - m.downMin));
-        const next = { ...m, dx, dy };
-        moveRef.current = next;
-        setMove(next);
-        if (rect) {
-          const first = selectedRef.current
-            .map((id) => eventsRef.current.flat().find((x) => x.id === id))
-            .find((x) => x && x.time && !isHidden(x));
-          if (first) {
-            const s = parseTimeToMinutes(first.time);
-            const en = first.endTime ? parseTimeToMinutes(first.endTime) : s + 60;
-            const day = parseDateKey(first.date);
-            const nd = addDays(day.getFullYear(), day.getMonth(), day.getDate(), next.dx);
-            setTip({
-              x: e.clientX - rect.left,
-              y: e.clientY - rect.top,
-              text: `${nd.getMonth() + 1}月${nd.getDate()}日 ${minutesToTime(s + next.dy)}–${minutesToTime(en + next.dy)}`,
-            });
-          }
-        }
-        return;
-      }
-      const d = dragRef.current;
-      if (!d) return;
-      const curCol = colFromX(e.clientX, d.colRects);
-      const curMin = minutesAtY(e.clientY - d.top);
-      if (curMin == null) {
-        dragRef.current = { ...d, curCol };
-        setDrag({ ...d, curCol });
-        return;
-      }
-      const start = Math.min(d.down, curMin);
-      const end = Math.max(d.down, curMin);
-      const next = { ...d, curCol, start, end: end === start ? end + SNAP_MIN : end };
-      dragRef.current = next;
-      setDrag(next);
+  // 指针捕获：按下即捕获，指针移出窗口/在窗外松手也持续收到事件，释放可靠
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rect = timelineRef.current?.getBoundingClientRect();
+    const m = moveRef.current;
+    if (m) {
+      const dx = Math.max(m.dxMin, Math.min(m.dxMax, colFromX(e.clientX, m.colRects) - m.downCol));
+      const curMin = minutesAtY(e.clientY - m.top);
+      const dy = curMin == null ? m.dy : Math.max(m.dyMin, Math.min(m.dyMax, curMin - m.downMin));
+      const next = { ...m, dx, dy };
+      moveRef.current = next;
+      setMove(next);
       if (rect) {
-        const colMin = Math.min(next.startCol, next.curCol);
-        const colMax = Math.max(next.startCol, next.curCol);
-        const range = `${minutesToTime(next.start)}–${minutesToTime(next.end)}`;
-        const sd = parseDateKey(weekKeysRef.current[colMin]);
-        const ed = parseDateKey(weekKeysRef.current[colMax]);
-        setTip({
-          x: e.clientX - rect.left,
-          y: e.clientY - rect.top,
-          text:
-            colMin === colMax
-              ? range
-              : `${sd.getMonth() + 1}月${sd.getDate()}日–${ed.getMonth() + 1}月${ed.getDate()}日 ${range}`,
-        });
-      }
-    };
-    const up = (e: MouseEvent) => {
-      // 事件挪动提交
-      const m = moveRef.current;
-      if (m) {
-        if (m.dx !== 0 || m.dy !== 0) {
-          for (const id of selectedRef.current) {
-            const ev = eventsRef.current.flat().find((x) => x.id === id);
-            if (!ev || isHidden(ev)) continue;
-            const s = parseTimeToMinutes(ev.time);
-            const day = parseDateKey(ev.date);
-            onMoveRef.current(id, {
-              date: toDateKey(addDays(day.getFullYear(), day.getMonth(), day.getDate(), m.dx)),
-              time: minutesToTime(s + m.dy),
-              endTime: ev.endTime
-                ? minutesToTime(parseTimeToMinutes(ev.endTime) + m.dy)
-                : undefined,
-            });
-          }
+        const first = selectedRef.current
+          .map((id) => eventsRef.current.flat().find((x) => x.id === id))
+          .find((x) => x && x.time && !isHidden(x));
+        if (first) {
+          const s = parseTimeToMinutes(first.time);
+          const en = first.endTime ? parseTimeToMinutes(first.endTime) : s + 60;
+          const day = parseDateKey(first.date);
+          const nd = addDays(day.getFullYear(), day.getMonth(), day.getDate(), next.dx);
+          setTip({
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top,
+            text: `${nd.getMonth() + 1}月${nd.getDate()}日 ${minutesToTime(s + next.dy)}–${minutesToTime(en + next.dy)}`,
+          });
         }
-        moveRef.current = null;
-        setMove(null);
-        setTip(null);
-        // 挪动（或点击选中）结束后编辑按钮弹出在光标旁
-        const r = timelineRef.current?.getBoundingClientRect();
-        setEditAnchor({ x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) });
-        return;
       }
-      // 空白拖拽提交：矩形内有日程 → 框选；否则批量新建（横向跨几天）
-      const d = dragRef.current;
-      if (!d) return;
+      return;
+    }
+    const d = dragRef.current;
+    if (!d) return;
+    const curCol = colFromX(e.clientX, d.colRects);
+    const curMin = minutesAtY(e.clientY - d.top);
+    if (curMin == null) {
+      dragRef.current = { ...d, curCol };
+      setDrag({ ...d, curCol });
+      return;
+    }
+    const start = Math.min(d.down, curMin);
+    const end = Math.max(d.down, curMin);
+    const next = { ...d, curCol, start, end: end === start ? end + SNAP_MIN : end };
+    dragRef.current = next;
+    setDrag(next);
+    if (rect) {
+      const colMin = Math.min(next.startCol, next.curCol);
+      const colMax = Math.max(next.startCol, next.curCol);
+      const range = `${minutesToTime(next.start)}–${minutesToTime(next.end)}`;
+      const sd = parseDateKey(weekKeysRef.current[colMin]);
+      const ed = parseDateKey(weekKeysRef.current[colMax]);
+      setTip({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+        text:
+          colMin === colMax
+            ? range
+            : `${sd.getMonth() + 1}月${sd.getDate()}日–${ed.getMonth() + 1}月${ed.getDate()}日 ${range}`,
+      });
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    // 事件挪动提交
+    const m = moveRef.current;
+    if (m) {
+      if (m.dx !== 0 || m.dy !== 0) {
+        for (const id of selectedRef.current) {
+          const ev = eventsRef.current.flat().find((x) => x.id === id);
+          if (!ev || isHidden(ev)) continue;
+          const s = parseTimeToMinutes(ev.time);
+          const day = parseDateKey(ev.date);
+          onMoveRef.current(id, {
+            date: toDateKey(addDays(day.getFullYear(), day.getMonth(), day.getDate(), m.dx)),
+            time: minutesToTime(s + m.dy),
+            endTime: ev.endTime
+              ? minutesToTime(parseTimeToMinutes(ev.endTime) + m.dy)
+              : undefined,
+          });
+        }
+      }
+      moveRef.current = null;
+      setMove(null);
+      setTip(null);
+      // 挪动（或点击选中）结束后编辑按钮弹出在光标旁
+      const r = timelineRef.current?.getBoundingClientRect();
+      setEditAnchor({ x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) });
+      return;
+    }
+    // 空白拖拽提交：矩形内有日程 → 框选；否则批量新建（横向跨几天）
+    const d = dragRef.current;
+    if (!d) return;
+    dragRef.current = null;
+    setDrag(null);
+    setTip(null);
+    if (d.end - d.start <= SNAP_MIN) {
+      setSelectedIds([]); // 空白单击：取消选中
+      setEditAnchor(null);
+      return;
+    }
+    const colMin = Math.min(d.startCol, d.curCol);
+    const colMax = Math.max(d.startCol, d.curCol);
+    const hit: string[] = [];
+    for (let c = colMin; c <= colMax; c++) {
+      for (const ev of eventsRef.current[c] ?? []) {
+        if (!ev.time || isHidden(ev)) continue;
+        const s = parseTimeToMinutes(ev.time);
+        const en = ev.endTime ? parseTimeToMinutes(ev.endTime) : s + 60;
+        if (s < d.end && en > d.start) hit.push(ev.id);
+      }
+    }
+    if (hit.length > 0) {
+      setSelectedIds(hit);
+      const r = timelineRef.current?.getBoundingClientRect();
+      setEditAnchor({ x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) });
+    } else {
+      setSelectedIds([]); // 拖选空白新建：清掉残留选中
+      setEditAnchor(null);
+      onAddDayRef.current(
+        weekKeysRef.current.slice(colMin, colMax + 1),
+        minutesToTime(d.start),
+        minutesToTime(d.end)
+      );
+    }
+  };
+
+  // 指针中断（如触摸滚动接管）：清空拖拽状态但不提交
+  const handlePointerCancel = () => {
+    if (moveRef.current) {
+      moveRef.current = null;
+      setMove(null);
+    }
+    if (dragRef.current) {
       dragRef.current = null;
       setDrag(null);
-      setTip(null);
-      if (d.end - d.start <= SNAP_MIN) {
-        setSelectedIds([]); // 空白单击：取消选中
-        setEditAnchor(null);
-        return;
-      }
-      const colMin = Math.min(d.startCol, d.curCol);
-      const colMax = Math.max(d.startCol, d.curCol);
-      const hit: string[] = [];
-      for (let c = colMin; c <= colMax; c++) {
-        for (const ev of eventsRef.current[c] ?? []) {
-          if (!ev.time || isHidden(ev)) continue;
-          const s = parseTimeToMinutes(ev.time);
-          const en = ev.endTime ? parseTimeToMinutes(ev.endTime) : s + 60;
-          if (s < d.end && en > d.start) hit.push(ev.id);
-        }
-      }
-      if (hit.length > 0) {
-        setSelectedIds(hit);
-        const r = timelineRef.current?.getBoundingClientRect();
-        setEditAnchor({ x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) });
-      } else {
-        setSelectedIds([]); // 拖选空白新建：清掉残留选中
-        setEditAnchor(null);
-        onAddDayRef.current(
-          weekKeysRef.current.slice(colMin, colMax + 1),
-          minutesToTime(d.start),
-          minutesToTime(d.end)
-        );
-      }
-    };
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", up);
-    return () => {
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", up);
-    };
-  }, []);
+    }
+    setTip(null);
+  };
 
   // 悬停高亮：鼠标位置的日期列与小时刻度跟随变化；拖拽/挪动期间不更新
   const handleTimelineMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -308,12 +314,14 @@ export default function WeekTimeline({
     setHover((prev) => (prev && prev.col === col && prev.min === min ? prev : { col, min }));
   };
 
-  const handleColumnDown = (e: React.MouseEvent<HTMLDivElement>, col: number) => {
+  const handleColumnDown = (e: React.PointerEvent<HTMLDivElement>, col: number) => {
+    e.preventDefault(); // 阻止文本选择与系统原生拖拽
     setHover(null);
     const rects = colRects();
     const top = rects[col].top;
     const down = minutesAtY(e.clientY - top);
     if (down == null) return; // 在条带上按下：交给条带按钮处理
+    e.currentTarget.setPointerCapture(e.pointerId); // 捕获后拖出窗口仍可靠释放
     const d: RegionState = {
       top,
       down,
@@ -327,12 +335,14 @@ export default function WeekTimeline({
     setDrag(d);
   };
 
-  const handleBlockDown = (e: React.MouseEvent, ev: ScheduleEvent, col: number) => {
+  const handleBlockDown = (e: React.PointerEvent, ev: ScheduleEvent, col: number) => {
     e.stopPropagation(); // 不触发空白拖选
+    e.preventDefault();
     setHover(null);
     const rects = colRects();
     const downMin = minutesAtY(e.clientY - rects[col].top);
     if (downMin == null) return;
+    (e.currentTarget as HTMLElement).closest("[data-date]")?.setPointerCapture(e.pointerId);
     // 未选中 → 只挪这一个；已选中 → 挪整个选中组
     const ids = selectedIds.includes(ev.id) ? selectedIds : [ev.id];
     if (!selectedIds.includes(ev.id)) setSelectedIds(ids);
@@ -449,10 +459,11 @@ export default function WeekTimeline({
 
       {/* 滚动区：左侧小时刻度 ＋ 右侧 7 列时间轴 ＋ 凌晨折叠条 */}
       <div
-        className="relative flex overflow-y-auto"
+        className="relative flex select-none touch-none overflow-y-auto"
         style={{ maxHeight: 560 }}
         onMouseMove={handleTimelineMove}
         onMouseLeave={() => setHover(null)}
+        onDragStart={(e) => e.preventDefault()}
       >
         <div className="anim-fold relative shrink-0" style={{ width: GUTTER, height: dayHeight }}>
           {visibleHours.map((h) => (
@@ -488,7 +499,10 @@ export default function WeekTimeline({
                       ? tokens.weekView.columnHover
                       : "")
                 }
-                onMouseDown={(e) => handleColumnDown(e, i)}
+                onPointerDown={(e) => handleColumnDown(e, i)}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerCancel}
               >
                 {lineHours.map(({ h, y }) => (
                   <div key={h} className={"anim-fold " + tokens.weekView.gridLine} style={{ top: y }} />
@@ -525,7 +539,8 @@ export default function WeekTimeline({
                         const r = timelineRef.current?.getBoundingClientRect();
                         setEditAnchor({ x: ev.clientX - (r?.left ?? 0), y: ev.clientY - (r?.top ?? 0) });
                       }}
-                      onMouseDown={(ev) => handleBlockDown(ev, e, i)}
+                      draggable={false}
+                      onPointerDown={(ev) => handleBlockDown(ev, e, i)}
                       className={
                         "anim-fold " +
                         tokens.weekView.eventBlock +
