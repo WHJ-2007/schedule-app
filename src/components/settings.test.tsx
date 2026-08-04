@@ -127,4 +127,31 @@ describe("settings", () => {
     fireEvent.click(screen.getByRole("button", { name: "‹ 上一页" }));
     expect(screen.getByText("第 1 / 3 页")).toBeInTheDocument();
   });
+
+  it("翻页横向滚动动画：下一页从右滑入、上一页从左滑入", () => {
+    renderSettings();
+    fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
+    // 下一页 → 内容带 anim-slide-in-right
+    fireEvent.click(screen.getByRole("button", { name: "下一页 ›" }));
+    expect(screen.getByText("版本 6").closest(".anim-slide-in-right")).toBeTruthy();
+    // 上一页 → 内容带 anim-slide-in-left
+    fireEvent.click(screen.getByRole("button", { name: "‹ 上一页" }));
+    expect(screen.getByText("版本 1").closest(".anim-slide-in-left")).toBeTruthy();
+    // 切 tab 回到缩放动画
+    fireEvent.click(screen.getByRole("button", { name: "数据" }));
+    fireEvent.click(screen.getByRole("button", { name: "更新日志" }));
+    expect(screen.getByText("版本 1").closest(".anim-scale-in")).toBeTruthy();
+  });
+
+  it("面板高度按内容拉伸：翻页后过渡到新内容高度", () => {
+    renderSettings();
+    fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
+    const dialog = screen.getByRole("dialog", { name: "设置" });
+    const panel = dialog.querySelector(".max-w-md") as HTMLElement;
+    expect(panel.style.height).toBe(""); // jsdom 无布局：不强制高度
+    const inner = panel.firstElementChild as HTMLElement;
+    Object.defineProperty(inner, "offsetHeight", { value: 480, configurable: true });
+    fireEvent.click(screen.getByRole("button", { name: "下一页 ›" }));
+    expect(panel.style.height).toBe("480px"); // 测量后写入，配合 transition-[height] 拉伸
+  });
 });

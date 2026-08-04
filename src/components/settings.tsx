@@ -18,8 +18,13 @@ export default function Settings({
   const [closing, setClosing] = useState(false);
   const [tab, setTab] = useState<Tab>("log");
   const [page, setPage] = useState(1);
+  // 翻页方向：驱动日志内容的横向滑动动画（右 = 下一页滑入、左 = 上一页滑入）
+  const [pageAnim, setPageAnim] = useState<{ key: number; dir: "left" | "right" } | null>(null);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  // 面板高度拉伸：内容变长/变短时按实际内容高度过渡，配合不同页面的长度
+  const innerRef = useRef<HTMLDivElement | null>(null);
+  const [panelH, setPanelH] = useState<number | null>(null);
   // tab 切换：高亮块跟随选中按钮滑动（同月视图选中泡泡逻辑），内容区带缩放动画
   const tabBarRef = useRef<HTMLDivElement | null>(null);
   const [pill, setPill] = useState({ left: 0, width: 0 });
@@ -30,6 +35,33 @@ export default function Settings({
     if (!el) return;
     setPill({ left: el.offsetLeft, width: el.offsetWidth });
   }, [tab, open]);
+
+  // 测量内容实际高度 → 面板 height 过渡；jsdom 无布局（offsetHeight 0）不设置
+  useEffect(() => {
+    if (!open) {
+      setPanelH(null);
+      return;
+    }
+    const el = innerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const h = el.offsetHeight;
+      if (h > 0) setPanelH(h);
+    };
+    if (typeof ResizeObserver === "undefined") {
+      measure();
+      return;
+    }
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    measure();
+    return () => ro.disconnect();
+  }, [open, tab, page]);
+
+  const goPage = (p: number, dir: "left" | "right") => {
+    setPage(p);
+    setPageAnim({ key: p, dir });
+  };
 
   // 一键导出：全部日程序列化为 JSON 文件下载
   const exportAll = () => {
@@ -83,6 +115,7 @@ export default function Settings({
           setOpen(true);
           setClosing(false);
           setPage(1);
+          setPageAnim(null);
         }}
         className="fixed bottom-6 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-black/10 bg-white/70 text-xl shadow-lg backdrop-blur transition hover:bg-white"
       >
@@ -106,11 +139,13 @@ export default function Settings({
         >
           <div
             className={
-              "w-full max-w-md rounded-2xl border border-white/40 bg-white/70 p-6 shadow-xl max-h-[90vh] overflow-y-auto backdrop-blur-xl " +
+              "w-full max-w-md rounded-2xl border border-white/40 bg-white/85 p-6 shadow-xl max-h-[90vh] overflow-y-auto backdrop-blur-xl transition-[height] duration-300 ease-out " +
               (closing ? "anim-scale-out" : "anim-scale-in")
             }
+            style={panelH != null ? { height: panelH } : undefined}
             onMouseDown={(e) => e.stopPropagation()}
           >
+            <div ref={innerRef}>
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-neutral-900">设置</h2>
               <button
@@ -135,7 +170,10 @@ export default function Settings({
               <button
                 type="button"
                 data-tab="log"
-                onClick={() => setTab("log")}
+                onClick={() => {
+                  setTab("log");
+                  setPageAnim(null);
+                }}
                 className={
                   "relative z-10 rounded-full px-4 py-1.5 text-sm transition " +
                   (tab === "log" ? "text-white" : "text-neutral-500 hover:bg-neutral-100")
@@ -146,7 +184,10 @@ export default function Settings({
               <button
                 type="button"
                 data-tab="data"
-                onClick={() => setTab("data")}
+                onClick={() => {
+                  setTab("data");
+                  setPageAnim(null);
+                }}
                 className={
                   "relative z-10 rounded-full px-4 py-1.5 text-sm transition " +
                   (tab === "data" ? "text-white" : "text-neutral-500 hover:bg-neutral-100")
@@ -156,7 +197,16 @@ export default function Settings({
               </button>
             </div>
 
-            <div key={tab} className="anim-scale-in">
+            <div
+              key={tab === "log" && pageAnim ? `log-${pageAnim.key}-${pageAnim.dir}` : tab}
+              className={
+                tab === "log" && pageAnim
+                  ? pageAnim.dir === "right"
+                    ? "anim-slide-in-right"
+                    : "anim-slide-in-left"
+                  : "anim-scale-in"
+              }
+            >
             {tab === "log" ? (
               <div className="mt-4">
                 {entries.length === 0 ? (
@@ -183,7 +233,7 @@ export default function Settings({
                   <button
                     type="button"
                     disabled={page <= 1}
-                    onClick={() => setPage(page - 1)}
+                    onClick={() => goPage(page - 1, "left")}
                     className="text-neutral-600 transition hover:text-neutral-900 disabled:text-neutral-300"
                   >
                     ‹ 上一页
@@ -194,7 +244,7 @@ export default function Settings({
                   <button
                     type="button"
                     disabled={page >= pageCount}
-                    onClick={() => setPage(page + 1)}
+                    onClick={() => goPage(page + 1, "right")}
                     className="text-neutral-600 transition hover:text-neutral-900 disabled:text-neutral-300"
                   >
                     下一页 ›
@@ -237,6 +287,7 @@ export default function Settings({
                 {importMsg && <p className="text-xs text-neutral-500">{importMsg}</p>}
               </div>
             )}
+            </div>
             </div>
           </div>
         </div>
