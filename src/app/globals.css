@@ -90,22 +90,8 @@ button {
 }
 button:active:not(:disabled) { transform: scale(0.96); }
 
-/* 可触发项悬停毛玻璃浮现：白色磨砂覆盖 + 背景模糊，仿佛从玻璃后浮现 */
+/* 可触发项保留定位钩子（供块内绝对定位元素使用）；悬停不再叠加磨砂遮罩，内容保持清晰 */
 .glass-hover { position: relative; }
-.glass-hover::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: rgba(255, 255, 255, 0);
-  backdrop-filter: blur(0);
-  transition: background-color 200ms ease-out, backdrop-filter 200ms ease-out;
-  pointer-events: none;
-}
-.glass-hover:hover::after {
-  background: rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(3px);
-}
 
 /* 周视图折叠条展开/收起：刻度/网格线/事件块/条带随布局平滑过渡（不含 transform，避免拖拽预览延迟） */
 .anim-fold {
