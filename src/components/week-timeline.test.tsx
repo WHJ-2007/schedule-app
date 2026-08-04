@@ -174,13 +174,14 @@ describe("WeekTimeline", () => {
     expect(onAddDay).not.toHaveBeenCalled();
   });
 
-  it("点击事件块选中后出现编辑按钮，点击编辑触发回调", () => {
+  it("点击事件块直接触发编辑回调并上报选中", () => {
     const onEdit = vi.fn();
+    const onSelectionChange = vi.fn();
     const a = ev("d", "评审", "14:00", "15:00");
-    renderTimeline([[a], ...emptyWeek.slice(1)], { onEdit });
+    renderTimeline([[a], ...emptyWeek.slice(1)], { onEdit, onSelectionChange });
     fireEvent.click(screen.getByRole("button", { name: /日程 评审/ }));
-    fireEvent.click(screen.getByRole("button", { name: /编辑 评审/ }));
     expect(onEdit).toHaveBeenCalledWith(a);
+    expect(onSelectionChange).toHaveBeenCalledWith(["d"]);
   });
 
   it("列头跳月视图与 ＋ 添加", () => {
@@ -261,42 +262,43 @@ describe("WeekTimeline (凌晨折叠)", () => {
 });
 
 describe("WeekTimeline (选择与框选)", () => {
-  it("单击选中出现编辑按钮，再点另一事件替换，点空白清除", () => {
+  it("单击选中并上报，再点另一事件替换，点空白清除", () => {
+    const onSelectionChange = vi.fn();
     const a = ev("a", "晨会", "09:00", "10:00");
     const b = ev("b", "评审", "11:00", "12:00");
-    renderTimeline([[a, b], ...emptyWeek.slice(1)]);
+    renderTimeline([[a, b], ...emptyWeek.slice(1)], { onSelectionChange });
     fireEvent.click(screen.getByRole("button", { name: /日程 晨会/ }));
-    expect(screen.getByRole("button", { name: /编辑 晨会/ })).toBeInTheDocument();
+    expect(onSelectionChange).toHaveBeenLastCalledWith(["a"]);
     fireEvent.click(screen.getByRole("button", { name: /日程 评审/ }));
-    expect(screen.getByRole("button", { name: /编辑 评审/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /编辑 晨会/ })).toBeNull();
+    expect(onSelectionChange).toHaveBeenLastCalledWith(["b"]);
     const col = document.querySelector('[data-date="2026-08-03"]')!;
     fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 70 }); // 8:00 空白处
     fireEvent.pointerUp(col, { pointerId: 1 });
-    expect(screen.queryByRole("button", { name: /编辑 评审/ })).toBeNull();
+    expect(onSelectionChange).toHaveBeenLastCalledWith([]);
   });
 
-  it("框选覆盖多事件：松开变为选中而非新建，且不弹编辑按钮", () => {
+  it("框选覆盖多事件：松开变为选中而非新建", () => {
     const onAddDay = vi.fn();
+    const onSelectionChange = vi.fn();
     const a = ev("a", "晨会", "09:00", "10:00");
     const b = ev("b", "评审", "11:00", "12:00");
-    renderTimeline([[a, b], ...emptyWeek.slice(1)], { onAddDay });
+    renderTimeline([[a, b], ...emptyWeek.slice(1)], { onAddDay, onSelectionChange });
     const col = document.querySelector('[data-date="2026-08-03"]')!;
     fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 70 }); // 8:00
     fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 205 }); // 12:30
     fireEvent.pointerUp(col, { pointerId: 1 });
     expect(onAddDay).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: /编辑 晨会/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /编辑 评审/ })).toBeNull();
+    expect(onSelectionChange).toHaveBeenLastCalledWith(["a", "b"]);
   });
 
-  it("横向框选跨列选中两列事件，不弹编辑按钮", () => {
+  it("横向框选跨列选中两列事件", () => {
+    const onSelectionChange = vi.fn();
     const a = ev("a", "晨会", "09:00", "10:00", 0);
     const b = ev("b", "评审", "11:00", "12:00", 1);
     const days = [...emptyWeek];
     days[0] = [a];
     days[1] = [b];
-    renderTimeline(days);
+    renderTimeline(days, { onSelectionChange });
     fireEvent.pointerDown(document.querySelector('[data-date="2026-08-03"]')!, {
       pointerId: 1,
       clientX: 50,
@@ -308,7 +310,7 @@ describe("WeekTimeline (选择与框选)", () => {
       clientY: 205,
     });
     fireEvent.pointerUp(document.querySelector('[data-date="2026-08-04"]')!, { pointerId: 1 });
-    expect(screen.queryByRole("button", { name: /编辑 晨会/ })).toBeNull();
+    expect(onSelectionChange).toHaveBeenLastCalledWith(["a", "b"]);
   });
 
   it("横向拖拽空白区批量创建（同时间段多天）", () => {
@@ -326,38 +328,60 @@ describe("WeekTimeline (选择与框选)", () => {
     );
   });
 
-  it("编辑按钮弹出在光标旁，点击其他事件跟随切换", () => {
+  it("点击事件块直接触发编辑，再点另一事件替换编辑目标", () => {
+    const onEdit = vi.fn();
     const a = ev("a", "晨会", "09:00", "10:00");
     const b = ev("b", "评审", "11:00", "12:00");
-    renderTimeline([[a, b], ...emptyWeek.slice(1)]);
-    fireEvent.click(screen.getByRole("button", { name: /日程 晨会/ }), {
-      clientX: 120,
-      clientY: 160,
-    });
-    const btn = screen.getByRole("button", { name: /编辑 晨会/ });
-    expect(btn.style.left).toBe("120px"); // 按钮弹出在光标旁
-    expect(btn.style.top).toBe("160px");
-    fireEvent.click(screen.getByRole("button", { name: /日程 评审/ }), {
-      clientX: 130,
-      clientY: 170,
-    });
-    const btn2 = screen.getByRole("button", { name: /编辑 评审/ });
-    expect(btn2.style.left).toBe("130px");
-    expect(screen.queryByRole("button", { name: /编辑 晨会/ })).toBeNull();
+    renderTimeline([[a, b], ...emptyWeek.slice(1)], { onEdit });
+    fireEvent.click(screen.getByRole("button", { name: /日程 晨会/ }));
+    expect(onEdit).toHaveBeenLastCalledWith(a);
+    fireEvent.click(screen.getByRole("button", { name: /日程 评审/ }));
+    expect(onEdit).toHaveBeenLastCalledWith(b);
   });
 
-  it("拖选空白新建后清除残留选中与编辑按钮", () => {
+  it("拖选空白新建后清除残留选中", () => {
     const onAddDay = vi.fn();
+    const onSelectionChange = vi.fn();
     const a = ev("a", "夜跑", "23:00", "23:30");
-    renderTimeline([[a], ...emptyWeek.slice(1)], { onAddDay });
+    renderTimeline([[a], ...emptyWeek.slice(1)], { onAddDay, onSelectionChange });
     fireEvent.click(screen.getByRole("button", { name: /日程 夜跑/ }));
-    expect(screen.getByRole("button", { name: /编辑 夜跑/ })).toBeInTheDocument();
+    expect(onSelectionChange).toHaveBeenLastCalledWith(["a"]);
     const col = document.querySelector('[data-date="2026-08-03"]')!;
     fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 70 }); // 8:00 空白（夜跑在 23:00，矩形外）
     fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 205 }); // 12:30
     fireEvent.pointerUp(col, { pointerId: 1 });
     expect(onAddDay).toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: /编辑 夜跑/ })).toBeNull();
+    expect(onSelectionChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it("选中事件块标题展开显示完整标题，点空白后恢复截断", () => {
+    const a = ev("a", "晨会", "09:00", "10:00");
+    renderTimeline([[a], ...emptyWeek.slice(1)]);
+    const block = screen.getByRole("button", { name: /日程 晨会/ });
+    const title = block.querySelector("span")!;
+    expect(title.className).toContain("truncate");
+    expect(title.className).not.toContain("max-h-16");
+    fireEvent.click(block);
+    expect(title.className).toContain("max-h-16");
+    expect(title.className).not.toContain("truncate");
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 70 }); // 8:00 空白处
+    fireEvent.pointerUp(col, { pointerId: 1 });
+    expect(title.className).toContain("truncate");
+  });
+
+  it("拖动事件松手后不触发编辑（抑制随后的 click）", () => {
+    const onEdit = vi.fn();
+    const onMoveAll = vi.fn();
+    const a = ev("a", "晨会", "09:00", "10:00");
+    renderTimeline([[a], ...emptyWeek.slice(1)], { onEdit, onMoveAll });
+    const block = screen.getByRole("button", { name: /日程 晨会/ });
+    fireEvent.pointerDown(block, { pointerId: 1, clientX: 50, clientY: 100 });
+    fireEvent.pointerMove(block, { pointerId: 1, clientX: 150, clientY: 140 });
+    fireEvent.pointerUp(block, { pointerId: 1 });
+    fireEvent.click(block); // 模拟拖拽后浏览器仍派发 click
+    expect(onMoveAll).toHaveBeenCalled();
+    expect(onEdit).not.toHaveBeenCalled();
   });
 });
 

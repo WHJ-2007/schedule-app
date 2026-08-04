@@ -28,20 +28,7 @@ import type { ThemeTokens } from "./theme-tokens";
 import Settings from "./settings";
 import SelectionBubble from "./selection-bubble";
 import WeekTimeline from "./week-timeline";
-
-type FormState = {
-  id: string | null;
-  dates: string[]; // 新建时可同时添加到多个日期（横向拖拽）
-  title: string;
-  time: string;
-  endTime: string;
-  description: string;
-  repeat: { freq: RepeatFreq | ""; until: string }; // 重复规则；freq 空 = 不重复
-};
-
-function emptyForm(dates: string[]): FormState {
-  return { id: null, dates, title: "", time: "", endTime: "", description: "", repeat: { freq: "", until: "" } };
-}
+import EventPanel, { emptyForm, type FormState } from "./event-panel";
 
 function sortByTime(list: ScheduleEvent[]): ScheduleEvent[] {
   return [...list].sort((a, b) => {
@@ -139,6 +126,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
   const [selectedDateKey, setSelectedDateKey] = useState(() => todayKey());
   const [form, setForm] = useState<FormState | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]); // 周视图选中组（Delete 键删除用）
   const [playerOpen, setPlayerOpen] = useState(false); // 版本播放条开关
   // 初始恒为 month：SSR 无 localStorage，直接读保存视图会导致服务端 HTML 与客户端首帧不一致而水合失败
   const [viewMode, setViewMode] = useState<ViewMode>("month");
@@ -253,6 +241,11 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   useEffect(() => {
     setViewMode(getSavedView());
   }, []);
+
+  // 选中为空（点空白折叠）时关闭编辑面板
+  useEffect(() => {
+    if (selectedIds.length === 0) setForm(null);
+  }, [selectedIds]);
 
   const grid = useMemo(() => getMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
   const today = new Date();
@@ -534,8 +527,8 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
       endTime: e.endTime ?? "",
       description: e.description,
       repeat: e.repeat
-        ? { freq: e.repeat.freq, until: e.repeat.until ?? "" }
-        : { freq: "", until: "" },
+        ? { on: true, freq: e.repeat.freq, until: e.repeat.until ?? "" }
+        : { on: false, freq: "", until: "" },
     });
 
   const handleSave = () => {
@@ -544,9 +537,10 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     if (!title) return;
     // 重复规则：频率空 → 不重复；重复开始即事件日期（表单"重复开始"可改）；
     // 重复至留空 = 无限重复（展开时由视图范围兜底）
-    const repeat = form.repeat.freq
-      ? { freq: form.repeat.freq as RepeatFreq, until: form.repeat.until || undefined }
-      : undefined;
+    const repeat =
+      form.repeat.on && form.repeat.freq
+        ? { freq: form.repeat.freq as RepeatFreq, until: form.repeat.until || undefined }
+        : undefined;
     if (form.id) {
       updateEvent(form.id, {
         title,
@@ -760,6 +754,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                     onToggleDone={toggleDone}
                     onDelete={deleteEvent}
                     onMoveAll={applyMoveAll}
+                    onSelectionChange={setSelectedIds}
                     cols={1}
                     rootClass="min-h-0 flex-1"
                     scrollClass="min-h-0 flex-1"
@@ -813,6 +808,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                     onToggleDone={toggleDone}
                     onDelete={deleteEvent}
                     onMoveAll={applyMoveAll}
+                    onSelectionChange={setSelectedIds}
                   />
                 </div>
               </section>
@@ -931,156 +927,19 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
         </div>
       </div>
 
-      {/* 表单弹层 */}
+      {/* 右侧滑入编辑面板：新建/编辑统一入口 */}
       {form && (
-        <div
-          role="dialog"
-          aria-label={form.id ? "编辑日程" : "添加日程"}
-          className={tokens.dialog.overlay + " anim-fade-in"}
-          onMouseDown={() => setForm(null)}
-        >
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSave();
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            className={"anim-scale-in " + tokens.dialog.panel}
-          >
-            {tokens.dialog.decor}
-            <div className={tokens.dialog.bodyClass}>
-              <h3 className={tokens.dialog.title}>{form.id ? "编辑日程" : "添加日程"}</h3>
-              {form.dates.length > 1 && (
-                <p className={tokens.dialog.inputLabel + " mt-2"}>
-                  将同时添加到 {form.dates.length} 天：{form.dates
-                    .map(parseDateKey)
-                    .map((d) => `${d.getMonth() + 1}月${d.getDate()}日`)
-                    .join("、")}
-                </p>
-              )}
-              <div className="mt-4 space-y-4">
-                <label htmlFor="title" className="block">
-                  <span className={tokens.dialog.inputLabel}>标题</span>
-                  <input
-                    id="title"
-                    autoFocus
-                    value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    placeholder="日程标题"
-                    className={tokens.dialog.input}
-                  />
-                </label>
-                <label htmlFor="time" className="block">
-                  <span className={tokens.dialog.inputLabel}>开始时间</span>
-                  <input
-                    id="time"
-                    type="time"
-                    value={form.time}
-                    onChange={(e) => setForm({ ...form, time: e.target.value })}
-                    className={tokens.dialog.input}
-                  />
-                </label>
-                <label htmlFor="endTime" className="block">
-                  <span className={tokens.dialog.inputLabel}>结束时间</span>
-                  <input
-                    id="endTime"
-                    type="time"
-                    value={form.endTime}
-                    onChange={(e) => setForm({ ...form, endTime: e.target.value })}
-                    className={tokens.dialog.input}
-                  />
-                </label>
-                <label htmlFor="description" className="block">
-                  <span className={tokens.dialog.inputLabel}>描述</span>
-                  <textarea
-                    id="description"
-                    value={form.description}
-                    onChange={(e) => setForm({ ...form, description: e.target.value })}
-                    rows={3}
-                    className={tokens.dialog.input + " resize-none"}
-                  />
-                </label>
-                <label htmlFor="repeatFreq" className="block">
-                  <span className={tokens.dialog.inputLabel}>重复</span>
-                  <select
-                    id="repeatFreq"
-                    value={form.repeat.freq}
-                    onChange={(e) =>
-                      setForm({ ...form, repeat: { ...form.repeat, freq: e.target.value as RepeatFreq | "" } })
-                    }
-                    className={tokens.dialog.input}
-                  >
-                    <option value="">不重复</option>
-                    <option value="daily">每天</option>
-                    <option value="weekly">每周</option>
-                    <option value="monthly">每月</option>
-                    <option value="weekday">工作日（周一至周五）</option>
-                    <option value="weekend">周末（周六、周日）</option>
-                  </select>
-                </label>
-                {form.repeat.freq !== "" && (
-                  <>
-                    <div className="flex gap-3">
-                      <label htmlFor="repeatStart" className="block flex-1">
-                        <span className={tokens.dialog.inputLabel}>重复开始</span>
-                        <input
-                          id="repeatStart"
-                          type="date"
-                          value={form.dates[0]}
-                          onChange={(e) =>
-                            setForm({ ...form, dates: [e.target.value, ...form.dates.slice(1)] })
-                          }
-                          className={tokens.dialog.input}
-                        />
-                      </label>
-                      <label htmlFor="repeatUntil" className="block flex-1">
-                        <span className={tokens.dialog.inputLabel}>重复至</span>
-                        <input
-                          id="repeatUntil"
-                          type="date"
-                          value={form.repeat.until}
-                          onChange={(e) =>
-                            setForm({ ...form, repeat: { ...form.repeat, until: e.target.value } })
-                          }
-                          className={tokens.dialog.input}
-                        />
-                      </label>
-                    </div>
-                    <p className="text-xs text-neutral-400">重复开始默认为所选卡片的开始日期；重复至留空表示无限重复</p>
-                  </>
-                )}
-              </div>
-              <div className="mt-6 flex items-center justify-between gap-3">
-                {form.id ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (form.id) deleteEvent(form.id);
-                      setForm(null);
-                    }}
-                    className="text-sm text-red-500 transition hover:text-red-700"
-                  >
-                    删除
-                  </button>
-                ) : (
-                  <span />
-                )}
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setForm(null)}
-                    className={tokens.dialog.cancel}
-                  >
-                    取消
-                  </button>
-                  <button type="submit" className={tokens.dialog.save}>
-                    保存
-                  </button>
-                </div>
-              </div>
-            </div>
-          </form>
-        </div>
+        <EventPanel
+          form={form}
+          tokens={tokens}
+          onChange={setForm}
+          onSave={handleSave}
+          onDelete={(id) => {
+            deleteEvent(id);
+            setForm(null);
+          }}
+          onClose={() => setForm(null)}
+        />
       )}
       <Settings events={events} onImport={replaceEvents} />
     </main>

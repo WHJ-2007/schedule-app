@@ -194,6 +194,20 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(screen.getByLabelText(/标题/)).toHaveValue("周视图事件");
   });
 
+  it("周视图全天条目编辑按钮直接打开编辑面板", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    const now = new Date();
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
+    );
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "全天条目" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.click(screen.getByRole("button", { name: /编辑 全天条目/ }));
+    expect(screen.getByRole("dialog", { name: "编辑日程" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/标题/)).toHaveValue("全天条目");
+  });
+
   it("周视图列头＋按钮添加到该日", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
@@ -258,7 +272,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(screen.getAllByRole("button", { name: "日程 晚间练习" })).toHaveLength(3);
   });
 
-  it("周视图时间轴事件块点击打开编辑弹窗并回填结束时间", () => {
+  it("周视图时间轴事件块点击直接打开编辑面板并回填结束时间", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
     const now = new Date();
     fireEvent.click(
@@ -270,7 +284,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     fireEvent.click(screen.getByRole("button", { name: /日程 时间段事件/ }));
-    fireEvent.click(screen.getByRole("button", { name: /编辑 时间段事件/ }));
+    expect(screen.getByRole("dialog", { name: "编辑日程" })).toBeInTheDocument();
     expect(screen.getByLabelText(/开始时间/)).toHaveValue("10:00");
     expect(screen.getByLabelText(/结束时间/)).toHaveValue("11:30");
   });
@@ -649,7 +663,7 @@ describe("ScheduleApp (recurring & day timeline)", () => {
       screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
     );
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "每日冥想" } });
-    fireEvent.change(screen.getByLabelText("重复"), { target: { value: "daily" } });
+    fireEvent.click(screen.getByLabelText("重复")); // 重复开关：勾选后展开频率/重复开始/重复至
     const until = toDateKey(addDays(now.getFullYear(), now.getMonth(), now.getDate(), 5));
     fireEvent.change(screen.getByLabelText(/重复至/), { target: { value: until } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
@@ -657,8 +671,9 @@ describe("ScheduleApp (recurring & day timeline)", () => {
     // 展开后本周内至少出现 2 个实例（含今天）
     expect(screen.getAllByRole("button", { name: /编辑 每日冥想/ }).length).toBeGreaterThanOrEqual(2);
     fireEvent.click(screen.getAllByRole("button", { name: /编辑 每日冥想/ })[0]);
-    // 弹窗打开后"重复"与"重复至"两个 label 同时存在，需精确匹配
-    expect(screen.getByLabelText("重复")).toHaveValue("daily");
+    // 面板打开后重复开关已勾选，频率默认每天、重复至回填
+    expect(screen.getByLabelText("重复")).toBeChecked();
+    expect(screen.getByLabelText("频率")).toHaveValue("daily");
     expect(screen.getByLabelText("重复至")).toHaveValue(until);
   });
 
@@ -669,13 +684,14 @@ describe("ScheduleApp (recurring & day timeline)", () => {
       screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
     );
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "待删除" } });
-    fireEvent.change(screen.getByLabelText("重复"), { target: { value: "weekly" } });
+    fireEvent.click(screen.getByLabelText("重复")); // 打开重复开关
+    fireEvent.change(screen.getByLabelText("频率"), { target: { value: "weekly" } });
     const until = toDateKey(addDays(now.getFullYear(), now.getMonth(), now.getDate(), 14));
     fireEvent.change(screen.getByLabelText(/重复至/), { target: { value: until } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     fireEvent.click(screen.getAllByRole("button", { name: /编辑 待删除/ })[0]);
-    // 弹窗内的删除按钮（时间轴全天条目也有 aria-label="删除" 的 ✕ 按钮，需限定在弹窗内）
+    // 面板内的删除按钮（时间轴全天条目也有 aria-label="删除" 的 ✕ 按钮，需限定在面板内）
     fireEvent.click(within(screen.getByRole("dialog", { name: "编辑日程" })).getByRole("button", { name: "删除" }));
     expect(screen.queryByRole("button", { name: /编辑 待删除/ })).toBeNull();
   });
@@ -712,7 +728,7 @@ describe("ScheduleApp (recurring & day timeline)", () => {
       screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
     );
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "无限重复" } });
-    fireEvent.change(screen.getByLabelText("重复"), { target: { value: "daily" } });
+    fireEvent.click(screen.getByLabelText("重复")); // 勾选重复：默认频率每天
     fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "09:00" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
