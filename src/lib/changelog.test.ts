@@ -44,4 +44,11 @@ describe("changelog", () => {
     expect(getChangelogPage(getChangelogPageCount() + 1)).toEqual([]);
     expect(getChangelogPage(0)).toEqual([]);
   });
+
+  it("每页恰好一个版本", () => {
+    expect(LOG_PAGE_SIZE).toBe(1);
+    for (let p = 1; p <= getChangelogPageCount(); p++) {
+      expect(getChangelogPage(p)).toHaveLength(1);
+    }
+  });
 });

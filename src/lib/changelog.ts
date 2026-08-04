@@ -7,6 +7,19 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "20260804-2000",
+    date: "2026-08-04",
+    title: "周视图交互打磨与视图缩放动画",
+    changes: [
+      "周视图光标横线与时刻标签：鼠标悬停位置横向高亮当前时刻，左侧刻度栏显示精确分钟（如 14:35）",
+      "周视图拖拽改用指针捕获：拖出窗口或窗外松手也能可靠释放，阻止文本选择与系统原生拖拽干扰，拖拽预览实时跟随鼠标",
+      "极简主题拖拽时间气泡改为白底黑字",
+      "更新日志改为每页一个版本：每次大更新独占一页，翻页浏览",
+      "周视图编辑按钮改为深色工具风格，与日程颜色明显区分",
+      "周/月/年切换改为锚点缩放动画：年→月/月→周从对应位置放大进入，周→月/月→年缩小退出，切换连续不突兀",
+    ],
+  },
+  {
     version: "20260803-2153",
     date: "2026-08-03",
     title: "周/月/年视图与全局动画",
@@ -54,7 +67,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
 ];
 
-export const LOG_PAGE_SIZE = 5;
+export const LOG_PAGE_SIZE = 1; // 每页一个版本：每次大更新独占一页
 
 export function getChangelogPageCount(): number {
   return Math.max(1, Math.ceil(CHANGELOG.length / LOG_PAGE_SIZE));
