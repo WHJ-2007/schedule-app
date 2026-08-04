@@ -505,6 +505,34 @@ describe("ScheduleApp (view zoom transition)", () => {
     spy.mockRestore();
   });
 
+  it("周→月残影缩向本周 7 列合并区域中心（与月→周对称）", () => {
+    const spy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        if (this.getAttribute("data-date")) {
+          // 本周 7 列同位置（mock 下并集退化为单矩形）
+          return { left: 300, top: 200, width: 28, height: 28 } as DOMRect;
+        }
+        return { left: 0, top: 0, width: 800, height: 600 } as DOMRect;
+      }
+    );
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.animationEnd(wrap());
+    fireEvent.click(screen.getByRole("button", { name: "月" }));
+    const ghost = screen.getByTestId("view-ghost");
+    expect(ghost.className).toContain("anim-ghost-morph");
+    // 残影中心 (400,300) → 本周 7 列合并区域中心 (314,214)：平移 -86/-86，缩放 28/800
+    expect(ghost.style.getPropertyValue("--g-tx")).toBe("-86px");
+    expect(ghost.style.getPropertyValue("--g-ty")).toBe("-86px");
+    expect(ghost.style.getPropertyValue("--g-s")).toBe("0.035");
+    // 新月视图从周区域展开（像素 origin），方向为缩小退出
+    expect(wrap().style.transformOrigin).toBe("314px 214px");
+    expect(wrap().className).toContain("view-zoom-out");
+    fireEvent.animationEnd(ghost);
+    expect(screen.queryByTestId("view-ghost")).toBeNull();
+    spy.mockRestore();
+  });
+
   it("视图切换动画期间选中高亮泡泡隐藏，动画结束后恢复", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
     expect(screen.getByTestId("selection-bubble")).toBeInTheDocument();

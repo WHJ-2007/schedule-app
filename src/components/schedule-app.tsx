@@ -328,6 +328,9 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
       captureWeekNumbers();
     } else if (from === "year" && v === "month") {
       anchor = { kind: "month", key: `${viewYear}-${viewMonth}` };
+    } else if (from === "week" && v === "month") {
+      // 周视图残影缩向本周 7 列区域，与月→周对称
+      anchor = { kind: "week" };
     }
     captureGhost(anchor);
     saveView(v);
