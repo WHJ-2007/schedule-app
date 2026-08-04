@@ -38,6 +38,8 @@ export type ThemeTokens = {
     eventSelected: string;   // 选中日程的描边
     eventEdit: string;       // 选中后弹出在光标旁的编辑按钮（配合 left/top 内联样式）
     dragTip: string;         // 拖选/挪动时的时间气泡（配合 left/top 内联样式）
+    cursorLine: string;      // 悬停光标横线（absolute inset-x-0，top 内联）
+    cursorLabel: string;     // 悬停时刻标签（absolute，top 内联）
   };
   yearView: { monthCard: string; monthTitle: string; miniCell: string; miniDot: string };
   viewPanel?: string;      // 月历/周视图/年视图 section 的面板容器类（style-1 无 → 不填）
