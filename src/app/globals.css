@@ -58,12 +58,13 @@ body {
 .view-zoom-in { animation: view-zoom-in 450ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 .view-zoom-out { animation: view-zoom-out 450ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 
-/* 视图切换残影：旧视图快照停在被点击元素的原位淡出，新视图从该位置缩放进入 */
-@keyframes ghost-fade {
-  from { opacity: 1; }
-  to { opacity: 0; }
+/* 视图切换残影：旧视图快照缩小移动到锚点元素（月卡/日期格）的位置并淡出，
+   与同一锚点缩放的新视图收束：能看出"月缩小变成了年里的那张月卡" */
+@keyframes ghost-morph {
+  from { transform: translate(0, 0) scale(1); opacity: 1; }
+  to { transform: translate(var(--g-tx), var(--g-ty)) scale(var(--g-s)); opacity: 0; }
 }
-.anim-ghost-fade { animation: ghost-fade 340ms ease-out both; }
+.anim-ghost-morph { animation: ghost-morph 420ms cubic-bezier(0.4, 0, 0.2, 1) both; }
 
 /* 全局按钮反馈动画：悬停轻微放大、按下收缩 */
 button {

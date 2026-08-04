@@ -50,12 +50,21 @@ function sortByTime(list: ScheduleEvent[]): ScheduleEvent[] {
   });
 }
 
-// 旧视图快照残影：把克隆的 DOM 放入原位容器，淡出后清除
+// 旧视图快照残影：把克隆的 DOM 放入原位容器，缩小移动到锚点元素位置后淡出
 function GhostLayer({
   ghost,
   onDone,
 }: {
-  ghost: { node: HTMLElement; x: number; y: number; w: number; h: number };
+  ghost: {
+    node: HTMLElement;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    tx: number;
+    ty: number;
+    s: number;
+  };
   onDone: () => void;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -67,8 +76,19 @@ function GhostLayer({
       ref={ref}
       data-testid="view-ghost"
       aria-hidden
-      className="pointer-events-none absolute z-40 overflow-hidden anim-ghost-fade"
-      style={{ left: ghost.x, top: ghost.y, width: ghost.w, height: ghost.h }}
+      className="pointer-events-none absolute z-40 overflow-hidden anim-ghost-morph"
+      style={
+        {
+          left: ghost.x,
+          top: ghost.y,
+          width: ghost.w,
+          height: ghost.h,
+          transformOrigin: "center",
+          "--g-tx": `${ghost.tx}px`,
+          "--g-ty": `${ghost.ty}px`,
+          "--g-s": `${ghost.s}`,
+        } as React.CSSProperties
+      }
       onAnimationEnd={onDone}
     />
   );
@@ -90,11 +110,22 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const zoomAnchorRef = useRef<ZoomAnchor>(null);
   const viewWrapRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
-  // 视图切换残影：旧视图 DOM 快照原位淡出，新视图从锚点缩放进入（能看出元素缩小放在了哪）
-  type Ghost = { node: HTMLElement; x: number; y: number; w: number; h: number } | null;
+  // 视图切换残影：旧视图 DOM 快照缩小移动到锚点元素位置并淡出，新视图从同一锚点缩放
+  type Ghost = {
+    node: HTMLElement;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    cx: number;
+    cy: number;
+    tx: number;
+    ty: number;
+    s: number;
+  } | null;
   const [ghost, setGhost] = useState<Ghost>(null);
 
-  // 切换前克隆旧视图容器：残影固定在原位置淡出；父容器相对坐标（滚动时残影跟随内容）
+  // 切换前克隆旧视图容器：残影固定在原位置；父容器相对坐标（滚动时残影跟随内容）
   const captureGhost = () => {
     const wrap = viewWrapRef.current;
     if (!wrap) return;
@@ -111,6 +142,11 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
       y: r.top - (pr?.top ?? 0),
       w: r.width,
       h: r.height,
+      cx: r.left + r.width / 2,
+      cy: r.top + r.height / 2,
+      tx: 0,
+      ty: 0,
+      s: 0.4,
     });
   };
 
@@ -215,6 +251,17 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
       if (wr.width > 0 && wr.height > 0 && (r.width > 0 || r.height > 0)) {
         ox = ((r.left + r.width / 2 - wr.left) / wr.width) * 100;
         oy = ((r.top + r.height / 2 - wr.top) / wr.height) * 100;
+        // 残影缩向锚点元素：中心对齐、缩到锚点宽度比例（旧视图"缩小放进那个位置"）
+        setGhost((g) =>
+          g
+            ? {
+                ...g,
+                tx: r.left + r.width / 2 - g.cx,
+                ty: r.top + r.height / 2 - g.cy,
+                s: r.width / g.w,
+              }
+            : g
+        );
       }
     }
     setViewZoom({ mode: a.mode, ox, oy });

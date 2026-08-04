@@ -398,6 +398,27 @@ describe("ScheduleApp (view zoom transition)", () => {
     fireEvent.click(screen.getByRole("button", { name: /下一周/ }));
     expect(screen.queryByTestId("view-ghost")).toBeNull();
   });
+
+  it("残影缩小移动到锚点元素：月→周缩向日期格、月→年缩向月卡", () => {
+    const spy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        // 锚点元素（日期格/月卡）有对应 data 属性 → 小矩形；其余（视图容器等）→ 大矩形
+        if (this.getAttribute("data-date") || this.getAttribute("data-ym")) {
+          return { left: 300, top: 200, width: 28, height: 28 } as DOMRect;
+        }
+        return { left: 0, top: 0, width: 800, height: 600 } as DOMRect;
+      }
+    );
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const ghost = screen.getByTestId("view-ghost");
+    // 残影中心 (400,300) → 锚点中心 (314,214)：平移 -86/-86，缩放 28/800
+    expect(ghost.className).toContain("anim-ghost-morph");
+    expect(ghost.style.getPropertyValue("--g-tx")).toBe("-86px");
+    expect(ghost.style.getPropertyValue("--g-ty")).toBe("-86px");
+    expect(ghost.style.getPropertyValue("--g-s")).toBe("0.035");
+    spy.mockRestore();
+  });
 });
 
 describe("ScheduleApp (page-turn animation)", () => {
