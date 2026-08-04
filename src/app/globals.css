@@ -90,8 +90,11 @@ button {
 }
 button:active:not(:disabled) { transform: scale(0.96); }
 
-/* 可触发项保留定位钩子（供块内绝对定位元素使用）；悬停不再叠加磨砂遮罩，内容保持清晰 */
-.glass-hover { position: relative; }
+/* 可触发项保留定位钩子（供块内绝对定位元素使用）；悬停不再叠加磨砂遮罩，内容保持清晰。
+   必须在 components 层内：unlayered 的 position 会覆盖 Tailwind 的 absolute（事件块/折叠条） */
+@layer components {
+  .glass-hover { position: relative; }
+}
 
 /* 周视图折叠条展开/收起：刻度/网格线/事件块/条带随布局平滑过渡（不含 transform，避免拖拽预览延迟） */
 .anim-fold {
