@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
 import WeekTimeline from "./week-timeline";
 import { THEME_TOKENS } from "./theme-tokens";
 import { getWeekDates, toDateKey } from "@/lib/date";
@@ -61,6 +61,37 @@ function expandFold() {
 }
 
 describe("WeekTimeline", () => {
+  it("滚动条出现/消失时占位宽度动态重测（表单开关、内容增减场景）", () => {
+    const roCbs: (() => void)[] = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(cb: () => void) {
+          roCbs.push(cb);
+        }
+        observe() {}
+        disconnect() {}
+      }
+    );
+    renderTimeline(emptyWeek);
+    expect(screen.getByTestId("header-scrollbar-gap")).toHaveStyle({ width: "0px" });
+    const scroller = screen.getByTestId("timeline-scroll") as HTMLElement;
+    // 内容超高出现滚动条：clientWidth 变窄，ResizeObserver 回调触发重测
+    Object.defineProperty(scroller, "offsetWidth", { value: 700, configurable: true });
+    Object.defineProperty(scroller, "clientWidth", { value: 670, configurable: true });
+    act(() => {
+      roCbs[0]();
+    });
+    expect(screen.getByTestId("header-scrollbar-gap")).toHaveStyle({ width: "30px" });
+    // 滚动条消失（如表单收起时间轴区变高）：回到 0
+    Object.defineProperty(scroller, "clientWidth", { value: 700, configurable: true });
+    act(() => {
+      roCbs[0]();
+    });
+    expect(screen.getByTestId("header-scrollbar-gap")).toHaveStyle({ width: "0px" });
+    vi.unstubAllGlobals();
+  });
+
   it("滚动条压缩内部列时，表头行同步留白保持列对齐", () => {
     renderTimeline(emptyWeek);
     const scroller = screen.getByTestId("timeline-scroll") as HTMLElement;

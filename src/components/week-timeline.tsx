@@ -191,13 +191,24 @@ export default function WeekTimeline({
   const [now, setNow] = useState(() => new Date()); // 当前时间：驱动现在线与进行中日程高亮
   const timelineRef = useRef<HTMLDivElement | null>(null);
   // 滚动条占位宽度：滚动区右侧滚动条压缩内部列，表头行同步留白避免列错位
+  // 滚动条出现/消失（表单开关、内容增减）都会改变 clientWidth，用 ResizeObserver
+  // 监听动态重测；jsdom 无 ResizeObserver 时退回仅 dates/folded 变化重测
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [sbWidth, setSbWidth] = useState(0);
   useLayoutEffect(() => {
     const scroller = scrollRef.current;
     if (!scroller) return;
-    const w = scroller.offsetWidth - scroller.clientWidth;
-    setSbWidth((prev) => (prev === w ? prev : w));
+    const measure = () => {
+      const w = scroller.offsetWidth - scroller.clientWidth;
+      setSbWidth((prev) => (prev === w ? prev : w));
+    };
+    measure();
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(measure);
+      ro.observe(scroller);
+      return () => ro.disconnect();
+    }
+    return;
   }, [dates, folded]);
 
   useEffect(() => {

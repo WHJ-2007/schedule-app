@@ -362,6 +362,35 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(screen.getByLabelText(/标题/)).toHaveValue("全天条目");
   });
 
+  it("周视图无选中时右侧看板折叠，选中/新建展开，空白单击再折叠", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const grid = screen.getByTestId("week-grid");
+    expect(grid.className).toContain("lg:grid-cols-[1fr_0fr]"); // 无选中：看板折叠，左侧占满
+    // 列头 ＋ 新建：表单打开 → 展开
+    const now = new Date();
+    fireEvent.click(
+      within(screen.getByTestId("view-anim")).getByRole("button", {
+        name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程`,
+      })
+    );
+    expect(grid.className).toContain("lg:grid-cols-[2fr_1fr]");
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "折叠测试" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    // 保存后未选中 → 折叠
+    expect(grid.className).toContain("lg:grid-cols-[1fr_0fr]");
+    // 点事件块选中 → 展开
+    fireEvent.click(
+      within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 折叠测试/ })
+    );
+    expect(grid.className).toContain("lg:grid-cols-[2fr_1fr]");
+    // 空白单击 → 取消选中 → 折叠
+    const col = screen.getByTestId("view-anim").querySelectorAll("[data-date]")[0];
+    fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 60 });
+    fireEvent.pointerUp(col, { pointerId: 1, clientX: 50, clientY: 60 });
+    expect(grid.className).toContain("lg:grid-cols-[1fr_0fr]");
+  });
+
   it("周视图列头＋按钮添加到该日", () => {
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
