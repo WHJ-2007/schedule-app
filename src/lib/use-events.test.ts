@@ -1,10 +1,19 @@
-import { beforeEach, describe, it, expect } from "vitest";
+import { beforeEach, afterEach, describe, it, expect, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { useEvents } from "./use-events";
 import { STORAGE_KEY } from "./events";
 
+// jsdom 26 自带 fetch 会发真实请求：默认拒绝（走 localStorage 回退），持久化测试内 mock 成功路径
 beforeEach(() => {
   localStorage.clear();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => Promise.reject(new Error("offline")))
+  );
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("useEvents", () => {
@@ -189,6 +198,72 @@ describe("useEvents", () => {
     await waitFor(() => {
       expect(result.current.events.find((e) => e.id === a.id)?.color).toBeUndefined();
     });
+  });
+
+  it("从文件恢复历史栈：停留在保存的 index 位置", async () => {
+    const restored = [
+      {
+        events: [{ id: "a", title: "旧版本", date: "2026-08-03", time: "09:00", description: "", done: false }],
+        at: 1,
+      },
+      {
+        events: [{ id: "b", title: "新版本", date: "2026-08-04", time: "10:00", description: "", done: false }],
+        at: 2,
+      },
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ entries: restored, index: 0 }),
+        } as Response)
+      )
+    );
+    const { result } = renderHook(() => useEvents());
+    await waitFor(() => {
+      expect(result.current.events[0]?.title).toBe("旧版本");
+    });
+    expect(result.current.index).toBe(0); // 撤销过：停留在 index 0，可重做
+    expect(result.current.canUndo).toBe(false);
+    expect(result.current.canRedo).toBe(true);
+    act(() => {
+      result.current.redo();
+    });
+    await waitFor(() => {
+      expect(result.current.events[0]?.title).toBe("新版本");
+    });
+  });
+
+  it("操作后防抖写回文件（含 entries 与 index），undo 也写回", async () => {
+    const fetchMock = vi.fn();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ entries: [], index: 0 }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useEvents());
+    await waitFor(() => {
+      expect(result.current.events.length).toBeGreaterThan(0); // mount 恢复完成
+    });
+    expect(fetchMock).toHaveBeenCalledWith("/api/history"); // mount 时读取
+    act(() => {
+      result.current.addEvent({ title: "待写回", date: "2026-08-05", time: "10:00" });
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 700)); // 防抖 600ms
+    });
+    const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST");
+    expect(post).toBeDefined();
+    expect(JSON.parse(String(post![1].body)).index).toBe(1);
+    act(() => {
+      result.current.undo();
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 700));
+    });
+    const post2 = fetchMock.mock.calls.findLast((c) => c[1]?.method === "POST");
+    expect(JSON.parse(String(post2![1].body)).index).toBe(0);
   });
 
   it("persists across remounts", async () => {

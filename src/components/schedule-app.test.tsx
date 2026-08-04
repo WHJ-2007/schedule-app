@@ -20,9 +20,16 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
+// jsdom 26 自带 fetch 会真实请求 dev server；stub 为 undefined 让版本历史恢复
+// 走同步 localStorage 回退（useEvents 检测 typeof fetch === "undefined"），测试无竞态
+beforeEach(() => {
+  vi.stubGlobal("fetch", undefined);
+});
+
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  vi.unstubAllGlobals();
 });
 
 describe("ScheduleApp (month view)", () => {
@@ -391,7 +398,10 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(screen.getByRole("dialog", { name: "编辑日程" })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "Delete" });
     expect(screen.queryByRole("button", { name: /日程 待删除事件/ })).toBeNull();
-    expect(screen.getByRole("status")).toHaveTextContent("已删除 1 条日程");
+    const toast = screen.getByRole("status");
+    expect(toast).toHaveTextContent("已删除 1 条日程");
+    expect(toast.className).toContain("bg-white"); // 白底黑字
+    expect(toast.className).not.toContain("bg-white/");
     // 删除后面板自动关闭
     expect(screen.queryByRole("dialog")).toBeNull();
     // 点撤销恢复
