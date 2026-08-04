@@ -152,15 +152,15 @@ describe("WeekTimeline", () => {
     expect(onAddDay).toHaveBeenCalledWith(["2026-08-03"], "02:00", "02:15");
   });
 
-  it("拖选非整半点时段按精确分钟提交", () => {
+  it("拖选时间吸附到 5 分钟刻度提交", () => {
     const onAddDay = vi.fn();
     renderTimeline(emptyWeek, { onAddDay });
     expandFold();
     const col = document.querySelector('[data-date="2026-08-03"]')!;
     fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 60 }); // 2:00
-    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 69 }); // 2:18
+    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 69 }); // 2:18 → 吸附 2:20
     fireEvent.pointerUp(col, { pointerId: 1 });
-    expect(onAddDay).toHaveBeenCalledWith(["2026-08-03"], "02:00", "02:18");
+    expect(onAddDay).toHaveBeenCalledWith(["2026-08-03"], "02:00", "02:20");
   });
 
   it("拖动不足 5 分钟视为单击不新建", () => {

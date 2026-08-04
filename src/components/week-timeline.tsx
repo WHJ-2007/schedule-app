@@ -17,6 +17,7 @@ import type { ThemeTokens } from "./theme-tokens";
 const HOUR_PX = 30; // 每小时高度（像素）：一屏能放下所有时间
 const SNAP_MIN = 30; // 拖选初始占位时长（未移动时选区的最小显示宽度）
 const MOVE_SNAP_MIN = 5; // 事件挪动松手落点吸附单位：事件时间本身对齐到 5 分钟倍数（0/5/10 结尾）
+const SELECT_SNAP_MIN = 5; // 拖选新建时间吸附单位：起止时间对齐到 5 分钟倍数
 const MIN_DRAG_MIN = 5; // 拖选新建的最小时长：更短视为单击不误建
 const GUTTER = 48; // 左侧刻度列宽度
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -195,6 +196,9 @@ export default function WeekTimeline({
     return Math.round(((y - bTop - bH) / HOUR_PX) * 60 + FOLD_END);
   };
 
+  // 拖选新建时间吸附到 5 分钟倍数：按下与拖动的选区起止都对齐刻度
+  const snapSelect = (m: number) => Math.round(m / SELECT_SNAP_MIN) * SELECT_SNAP_MIN;
+
   const hourTop = (h: number) => {
     if (h >= 7) return bandTop + bandH + (h - 7) * HOUR_PX;
     return folded ? null : h * HOUR_PX; // 折叠区内刻度（0:00–6:00）
@@ -271,12 +275,13 @@ export default function WeekTimeline({
     const d = dragRef.current;
     if (!d) return;
     const curCol = colFromX(e.clientX, d.colRects);
-    const curMin = rawMinAtY(e.clientY - d.top);
-    if (curMin == null) {
+    const rawMin = rawMinAtY(e.clientY - d.top);
+    if (rawMin == null) {
       dragRef.current = { ...d, curCol };
       setDrag({ ...d, curCol });
       return;
     }
+    const curMin = snapSelect(rawMin); // 起止时间对齐 5 分钟刻度
     const start = Math.min(d.down, curMin);
     const end = Math.max(d.down, curMin);
     const next = {
@@ -405,8 +410,9 @@ export default function WeekTimeline({
     setHover(null);
     const rects = colRects();
     const top = rects[col].top;
-    const down = rawMinAtY(e.clientY - top);
-    if (down == null) return; // 在条带上按下：交给条带按钮处理
+    const raw = rawMinAtY(e.clientY - top);
+    if (raw == null) return; // 在条带上按下：交给条带按钮处理
+    const down = snapSelect(raw); // 新建时间对齐 5 分钟刻度
     e.currentTarget.setPointerCapture(e.pointerId); // 捕获后拖出窗口仍可靠释放
     const d: RegionState = {
       top,
