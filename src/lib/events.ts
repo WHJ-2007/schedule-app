@@ -142,7 +142,7 @@ export function isValidEvent(e: unknown): e is ScheduleEvent {
 // 导入校验：逐条清洗为结构合法的干净日程（未知字段丢弃，重复频率只认合法值）。
 // 兼容两种格式：裸数组，或导出 JSON 的 { version, exportedAt, events } 包装对象
 export function sanitizeImportedEvents(raw: unknown): ScheduleEvent[] {
-  const payload: unknown = Array.isArray(raw)
+  const payload: unknown[] = Array.isArray(raw)
     ? raw
     : typeof raw === "object" &&
         raw !== null &&

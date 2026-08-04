@@ -12,6 +12,7 @@ import {
   parseDateKey,
 } from "@/lib/date";
 import type { ScheduleEvent } from "@/lib/events";
+import type { EventMovePatch } from "@/lib/use-events";
 import type { ThemeTokens } from "./theme-tokens";
 
 const HOUR_PX = 30; // 每小时高度（像素）：一屏能放下所有时间
@@ -52,8 +53,6 @@ type MoveState = {
   colW: number;
   colRects: DOMRect[];
 };
-
-export type EventMovePatch = { date: string; time: string; endTime?: string };
 
 // 同一时段重叠事件并排分列（Google 日历风格）：链式重叠归入同一簇，
 // 簇内按起点贪心分轨道，簇内全部事件宽度 = 100/簇内最大并发轨道数
@@ -120,7 +119,7 @@ export default function WeekTimeline({
   onEdit,
   onToggleDone,
   onDelete,
-  onMove,
+  onMoveAll,
   cols = 7,
   rootClass,
   scrollClass,
@@ -136,7 +135,7 @@ export default function WeekTimeline({
   onEdit: (e: ScheduleEvent) => void;
   onToggleDone: (id: string) => void;
   onDelete: (id: string) => void;
-  onMove: (id: string, patch: EventMovePatch) => void;
+  onMoveAll: (patches: EventMovePatch[]) => void;
   cols?: number; // 列数：周视图 7 列，月视图当日面板 1 列
   rootClass?: string; // 追加到根容器 className（如 flex-1 min-h-0 供父 flex 撑满）
   scrollClass?: string; // 追加到滚动区 className（如 flex-1 min-h-0 供父 flex 撑满）
@@ -159,8 +158,8 @@ export default function WeekTimeline({
   selectedRef.current = selectedIds;
   const onAddDayRef = useRef(onAddDay);
   onAddDayRef.current = onAddDay;
-  const onMoveRef = useRef(onMove);
-  onMoveRef.current = onMove;
+  const onMoveAllRef = useRef(onMoveAll);
+  onMoveAllRef.current = onMoveAll;
   const foldedRef = useRef(folded);
   foldedRef.current = folded;
   const eventsRef = useRef(eventsByDay);
@@ -315,12 +314,14 @@ export default function WeekTimeline({
     const m = moveRef.current;
     if (m) {
       if (m.dx !== 0 || m.dy !== 0) {
+        const patches: EventMovePatch[] = [];
         for (const id of selectedRef.current) {
           const ev = eventsRef.current.flat().find((x) => x.id === id);
           if (!ev || isHidden(ev)) continue;
           const s = parseTimeToMinutes(ev.time);
           const day = parseDateKey(ev.date);
-          onMoveRef.current(id, {
+          patches.push({
+            id,
             date: toDateKey(addDays(day.getFullYear(), day.getMonth(), day.getDate(), m.dx)),
             time: minutesToTime(s + m.dy),
             endTime: ev.endTime
@@ -328,6 +329,8 @@ export default function WeekTimeline({
               : undefined,
           });
         }
+        // 整组一次提交：撤销/重做按一次操作记录
+        onMoveAllRef.current(patches);
       }
       moveRef.current = null;
       setMove(null);

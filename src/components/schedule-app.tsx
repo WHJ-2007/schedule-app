@@ -119,11 +119,27 @@ function GhostLayer({
 }
 
 export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
-  const { events, addEvent, updateEvent, deleteEvent, toggleDone, replaceEvents } = useEvents();
+  const {
+    events,
+    addEvent,
+    updateEvent,
+    deleteEvent,
+    toggleDone,
+    replaceEvents,
+    applyMoveAll,
+    undo,
+    redo,
+    jumpToIndex,
+    history,
+    index,
+    canUndo,
+    canRedo,
+  } = useEvents();
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
   const [selectedDateKey, setSelectedDateKey] = useState(() => todayKey());
   const [form, setForm] = useState<FormState | null>(null);
+  const [playerOpen, setPlayerOpen] = useState(false); // 版本播放条开关
   // 初始恒为 month：SSR 无 localStorage，直接读保存视图会导致服务端 HTML 与客户端首帧不一致而水合失败
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [navDir, setNavDir] = useState<"left" | "right" | null>(null);
@@ -568,18 +584,48 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
             {tokens.header.tagline}
           </header>
 
-          <div className="mb-6 flex gap-2">
-            {(["year", "month", "week"] as ViewMode[]).map((v) => (
+          <div className="mb-6 flex items-center justify-between">
+            <div className="flex gap-2">
+              {(["year", "month", "week"] as ViewMode[]).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => pickView(v)}
+                  aria-pressed={viewMode === v}
+                  className={viewMode === v ? tokens.viewTab.active : tokens.viewTab.inactive}
+                >
+                  {v === "year" ? "年" : v === "month" ? "月" : "周"}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
               <button
-                key={v}
                 type="button"
-                onClick={() => pickView(v)}
-                aria-pressed={viewMode === v}
-                className={viewMode === v ? tokens.viewTab.active : tokens.viewTab.inactive}
+                onClick={undo}
+                disabled={!canUndo}
+                aria-label="撤销"
+                className={tokens.navButton + " disabled:opacity-40"}
               >
-                {v === "year" ? "年" : v === "month" ? "月" : "周"}
+                ↶ 撤销
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => setPlayerOpen(true)}
+                aria-label="版本播放"
+                className={tokens.navButton}
+              >
+                ⏱ 版本
+              </button>
+              <button
+                type="button"
+                onClick={redo}
+                disabled={!canRedo}
+                aria-label="重做"
+                className={tokens.navButton + " disabled:opacity-40"}
+              >
+                重做 ↷
+              </button>
+            </div>
           </div>
 
           <div
@@ -713,7 +759,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                     onEdit={openEdit}
                     onToggleDone={toggleDone}
                     onDelete={deleteEvent}
-                    onMove={(id, patch) => updateEvent(id, patch)}
+                    onMoveAll={applyMoveAll}
                     cols={1}
                     rootClass="min-h-0 flex-1"
                     scrollClass="min-h-0 flex-1"
@@ -766,7 +812,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                     onEdit={openEdit}
                     onToggleDone={toggleDone}
                     onDelete={deleteEvent}
-                    onMove={(id, patch) => updateEvent(id, patch)}
+                    onMoveAll={applyMoveAll}
                   />
                 </div>
               </section>

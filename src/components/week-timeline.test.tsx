@@ -50,7 +50,7 @@ function renderTimeline(eventsByDay: ScheduleEvent[][], overrides: Partial<Param
     onEdit: vi.fn(),
     onToggleDone: vi.fn(),
     onDelete: vi.fn(),
-    onMove: vi.fn(),
+    onMoveAll: vi.fn(),
     ...overrides,
   };
   return render(<WeekTimeline {...props} />);
@@ -363,27 +363,25 @@ describe("WeekTimeline (选择与框选)", () => {
 
 describe("WeekTimeline (整体挪动)", () => {
   it("拖动单个事件跨天平移，松手提交，预览使用 transform", () => {
-    const onMove = vi.fn();
+    const onMoveAll = vi.fn();
     const a = ev("a", "晨会", "09:00", "10:00");
-    renderTimeline([[a], ...emptyWeek.slice(1)], { onMove });
+    renderTimeline([[a], ...emptyWeek.slice(1)], { onMoveAll });
     const block = screen.getByRole("button", { name: /日程 晨会/ });
     fireEvent.pointerDown(block, { pointerId: 1, clientX: 50, clientY: 100 }); // 9:00
     fireEvent.pointerMove(block, { pointerId: 1, clientX: 150, clientY: 140 }); // 620min → 10:20，+80 分钟、+1 天（精确分钟不吸附）
     expect(block.style.transform).toBe("translate(100px, 40px)");
     fireEvent.pointerUp(block, { pointerId: 1 });
     expect(block.style.transform).toBe("");
-    expect(onMove).toHaveBeenCalledWith("a", {
-      date: "2026-08-04",
-      time: "10:20",
-      endTime: "11:20",
-    });
+    expect(onMoveAll).toHaveBeenCalledWith([
+      { id: "a", date: "2026-08-04", time: "10:20", endTime: "11:20" },
+    ]);
   });
 
   it("整体挪动选中组：全部事件同时平移", () => {
-    const onMove = vi.fn();
+    const onMoveAll = vi.fn();
     const a = ev("a", "晨会", "09:00", "10:00");
     const b = ev("b", "评审", "11:00", "12:00");
-    renderTimeline([[a, b], ...emptyWeek.slice(1)], { onMove });
+    renderTimeline([[a, b], ...emptyWeek.slice(1)], { onMoveAll });
     const col = document.querySelector('[data-date="2026-08-03"]')!;
     fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 70 }); // 框选
     fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 205 });
@@ -392,62 +390,50 @@ describe("WeekTimeline (整体挪动)", () => {
     fireEvent.pointerDown(block, { pointerId: 1, clientX: 50, clientY: 100 }); // 9:00
     fireEvent.pointerMove(block, { pointerId: 1, clientX: 150, clientY: 140 }); // +80 分钟（精确）、+1 天
     fireEvent.pointerUp(block, { pointerId: 1 });
-    expect(onMove).toHaveBeenCalledWith("a", {
-      date: "2026-08-04",
-      time: "10:20",
-      endTime: "11:20",
-    });
-    expect(onMove).toHaveBeenCalledWith("b", {
-      date: "2026-08-04",
-      time: "12:20",
-      endTime: "13:20",
-    });
+    expect(onMoveAll).toHaveBeenCalledWith([
+      { id: "a", date: "2026-08-04", time: "10:20", endTime: "11:20" },
+      { id: "b", date: "2026-08-04", time: "12:20", endTime: "13:20" },
+    ]);
   });
 
   it("整体挪动落点吸附到 5 分钟（偏移非 5 倍数时取整）", () => {
-    const onMove = vi.fn();
+    const onMoveAll = vi.fn();
     const a = ev("a", "晨会", "09:00", "10:00");
-    renderTimeline([[a], ...emptyWeek.slice(1)], { onMove });
+    renderTimeline([[a], ...emptyWeek.slice(1)], { onMoveAll });
     const block = screen.getByRole("button", { name: /日程 晨会/ });
     fireEvent.pointerDown(block, { pointerId: 1, clientX: 50, clientY: 100 }); // 9:00
     fireEvent.pointerMove(block, { pointerId: 1, clientX: 150, clientY: 141.5 }); // 10:23，偏移 83 分钟
     fireEvent.pointerUp(block, { pointerId: 1 });
-    expect(onMove).toHaveBeenCalledWith("a", {
-      date: "2026-08-04",
-      time: "10:25", // 83 → 85（吸附 5 分钟）
-      endTime: "11:25",
-    });
+    expect(onMoveAll).toHaveBeenCalledWith([
+      { id: "a", date: "2026-08-04", time: "10:25", endTime: "11:25" }, // 83 → 85（吸附 5 分钟）
+    ]);
   });
 
   it("挪动落点绝对对齐：事件时间本身以 5 为倍数（不再对相对偏移取整产生 1/6/11 结尾）", () => {
-    const onMove = vi.fn();
+    const onMoveAll = vi.fn();
     // 起点 9:03（非 5 倍数）：拖 1 分钟后落点应为 9:05 而不是 9:04
     const a = ev("a", "晨会", "09:03", "10:03");
-    renderTimeline([[a], ...emptyWeek.slice(1)], { onMove });
+    renderTimeline([[a], ...emptyWeek.slice(1)], { onMoveAll });
     const block = screen.getByRole("button", { name: /日程 晨会/ });
     fireEvent.pointerDown(block, { pointerId: 1, clientX: 50, clientY: 100 }); // 按下处 9:00
     fireEvent.pointerMove(block, { pointerId: 1, clientX: 50, clientY: 100.5 }); // +1 分钟
     fireEvent.pointerUp(block, { pointerId: 1 });
-    expect(onMove).toHaveBeenCalledWith("a", {
-      date: "2026-08-03",
-      time: "09:05",
-      endTime: "10:05",
-    });
+    expect(onMoveAll).toHaveBeenCalledWith([
+      { id: "a", date: "2026-08-03", time: "09:05", endTime: "10:05" },
+    ]);
   });
 
   it("纵向拖拽钳制在当天内（不越过午夜）", () => {
-    const onMove = vi.fn();
+    const onMoveAll = vi.fn();
     const a = ev("a", "夜跑", "23:00", "23:30");
-    renderTimeline([[a], ...emptyWeek.slice(1)], { onMove });
+    renderTimeline([[a], ...emptyWeek.slice(1)], { onMoveAll });
     const block = screen.getByRole("button", { name: /日程 夜跑/ });
     fireEvent.pointerDown(block, { pointerId: 1, clientX: 50, clientY: 522.5 }); // 23:00（块位于 520–535）
     fireEvent.pointerMove(block, { pointerId: 1, clientX: 50, clientY: 734 }); // 拖到可见区底部以下
     fireEvent.pointerUp(block, { pointerId: 1 });
-    expect(onMove).toHaveBeenCalledWith("a", {
-      date: "2026-08-03",
-      time: "23:29",
-      endTime: "23:59",
-    });
+    expect(onMoveAll).toHaveBeenCalledWith([
+      { id: "a", date: "2026-08-03", time: "23:29", endTime: "23:59" },
+    ]);
   });
 });
 
@@ -484,22 +470,20 @@ describe("WeekTimeline (悬停高亮)", () => {
   });
 
   it("悬停不干扰事件块拖拽", () => {
-    const onMove = vi.fn();
+    const onMoveAll = vi.fn();
     const a = ev("a", "晨会", "09:00", "10:00");
-    renderTimeline([[a], ...emptyWeek.slice(1)], { onMove });
+    renderTimeline([[a], ...emptyWeek.slice(1)], { onMoveAll });
     const block = screen.getByRole("button", { name: /日程 晨会/ });
     fireEvent.mouseMove(block, { clientX: 50, clientY: 140 }); // 悬停 10:20 → 10:00 刻度高亮
     expect(screen.getByText("10:00").className).toContain("text-blue-600");
     fireEvent.pointerDown(block, { pointerId: 1, clientX: 50, clientY: 100 }); // 9:00
     fireEvent.pointerMove(block, { pointerId: 1, clientX: 150, clientY: 140 }); // +80 分钟（精确）、+1 天
-    expect(onMove).not.toHaveBeenCalled(); // 拖拽期间悬停高亮已清除
+    expect(onMoveAll).not.toHaveBeenCalled(); // 拖拽期间悬停高亮已清除
     expect(screen.getByText("10:00").className).not.toContain("text-blue-600");
     fireEvent.pointerUp(block, { pointerId: 1 });
-    expect(onMove).toHaveBeenCalledWith("a", {
-      date: "2026-08-04",
-      time: "10:20",
-      endTime: "11:20",
-    });
+    expect(onMoveAll).toHaveBeenCalledWith([
+      { id: "a", date: "2026-08-04", time: "10:20", endTime: "11:20" },
+    ]);
   });
 });
 
@@ -565,9 +549,9 @@ describe("WeekTimeline (拖拽时间气泡)", () => {
   });
 
   it("挪动事件时显示目标日期与时间，提交后消失", () => {
-    const onMove = vi.fn();
+    const onMoveAll = vi.fn();
     const a = ev("a", "晨会", "09:00", "10:00");
-    renderTimeline([[a], ...emptyWeek.slice(1)], { onMove });
+    renderTimeline([[a], ...emptyWeek.slice(1)], { onMoveAll });
     const block = screen.getByRole("button", { name: /日程 晨会/ });
     fireEvent.pointerDown(block, { pointerId: 1, clientX: 50, clientY: 100 }); // 9:00
     fireEvent.pointerMove(block, { pointerId: 1, clientX: 150, clientY: 140 }); // +80 分钟（精确）、+1 天

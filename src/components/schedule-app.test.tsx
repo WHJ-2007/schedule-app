@@ -87,6 +87,21 @@ describe("ScheduleApp (month view)", () => {
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     expect(screen.getAllByText("测试日程").length).toBeGreaterThan(0);
   });
+
+  it("撤销/重做按钮：添加后撤销消失、重做恢复", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    const now = new Date();
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
+    );
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "撤销测试" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    expect(screen.getAllByText("撤销测试").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "撤销" }));
+    expect(screen.queryByText("撤销测试")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "重做" }));
+    expect(screen.getAllByText("撤销测试").length).toBeGreaterThan(0);
+  });
 });
 
 describe("ScheduleApp (switcher & week view)", () => {
