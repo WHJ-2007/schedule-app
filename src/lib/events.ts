@@ -9,6 +9,7 @@ export type ScheduleEvent = {
   date: string; // "YYYY-MM-DD"
   time: string; // "HH:mm" 或 "" 表示全天
   endTime?: string; // "HH:mm"，缺省时按 1 小时显示
+  endDate?: string; // 全天事件跨至日期（含，缺省 = 仅当天）
   description: string;
   done: boolean;
   repeat?: RepeatRule;
@@ -20,6 +21,7 @@ export type EventInput = {
   date: string;
   time?: string;
   endTime?: string;
+  endDate?: string;
   description?: string;
   repeat?: RepeatRule;
   color?: string;
@@ -70,9 +72,27 @@ export function buildSampleEvents(now: Date): ScheduleEvent[] {
   return events;
 }
 
-// 重复事件展开为全部实例日期（含起点；until 缺省 = 无限，展开到 horizon 兜底；
+// 事件展开为全部实例日期（含起点；until 缺省 = 无限，展开到 horizon 兜底；
 // 两者都不存在时仅自身日期）。工作日 = 周一至周五，周末 = 周六、周日。
+// 全天跨天事件（endDate 存在，非重复）展开 date..endDate 每天。
 export function expandEventDates(e: ScheduleEvent, horizon?: string): string[] {
+  if (e.endDate && !e.repeat) {
+    const [y0, m0, d0] = e.date.split("-").map(Number);
+    const [y1, m1, d1] = e.endDate.split("-").map(Number);
+    const end = new Date(y1, m1 - 1, d1);
+    let lim = end;
+    if (horizon) {
+      const [hy, hm, hd] = horizon.split("-").map(Number);
+      lim = end < new Date(hy, hm - 1, hd) ? end : new Date(hy, hm - 1, hd);
+    }
+    const out: string[] = [];
+    const cur = new Date(y0, m0 - 1, d0);
+    while (cur <= lim) {
+      out.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`);
+      cur.setDate(cur.getDate() + 1);
+    }
+    return out;
+  }
   if (!e.repeat) return [e.date];
   const repeat = e.repeat;
   // 工作日/周末重复只保留符合条件的日期（起点也参与过滤，保证输出全符合频率）
@@ -112,6 +132,7 @@ export function addEventToList(list: ScheduleEvent[], input: EventInput): Schedu
     date: input.date,
     time: input.time ?? "",
     endTime: input.endTime || undefined,
+    endDate: input.endDate || undefined,
     description: input.description ?? "",
     done: false,
     repeat: input.repeat,
@@ -168,6 +189,7 @@ export function sanitizeImportedEvents(raw: unknown): ScheduleEvent[] {
       date: o.date as string,
       time: typeof o.time === "string" ? o.time : "",
       endTime: typeof o.endTime === "string" && o.endTime ? o.endTime : undefined,
+      endDate: typeof o.endDate === "string" && o.endDate ? o.endDate : undefined,
       description: typeof o.description === "string" ? o.description : "",
       done: Boolean(o.done),
       repeat,

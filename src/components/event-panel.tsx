@@ -11,6 +11,7 @@ export type FormState = {
   title: string;
   time: string;
   endTime: string;
+  endDate: string; // 全天事件跨至日期（含，空 = 仅当天）
   description: string;
   repeat: { on: boolean; freq: RepeatFreq | ""; until: string }; // 开关 + 频率 + 重复至；关闭 = 不重复
   color: string; // 自定义颜色（空 = 默认，跟随主题）
@@ -23,6 +24,7 @@ export function emptyForm(dates: string[]): FormState {
     title: "",
     time: "",
     endTime: "",
+    endDate: "",
     description: "",
     repeat: { on: false, freq: "", until: "" },
     color: "",
@@ -84,7 +86,7 @@ export default function EventPanel({
           type="button"
           aria-label="关闭"
           onClick={onClose}
-          className="text-neutral-400 transition hover:text-neutral-900"
+          className="text-neutral-400 transition hover:scale-105 hover:text-neutral-900"
         >
           ✕
         </button>
@@ -125,11 +127,12 @@ export default function EventPanel({
                 value={form.time}
                 onChange={(e) => {
                   const v = e.target.value;
-                  if (!v) return onChange({ ...form, time: v });
-                  // 改开始：结束 = 开始 + 当前时长（时长保持）
+                  if (!v) return onChange({ ...form, time: v, endDate: "" });
+                  // 改开始：结束 = 开始 + 当前时长（时长保持）；定时事件不再跨天
                   onChange({
                     ...form,
                     time: v,
+                    endDate: "",
                     endTime: minutesToTime(Math.min(1439, minutesOf(v) + curDuration(form))),
                   });
                 }}
@@ -168,6 +171,19 @@ export default function EventPanel({
               />
             </label>
           </div>
+          {!form.time && (
+            <label htmlFor="endDate" className="block">
+              <span className={dialog.inputLabel}>跨至日期（全天，留空 = 仅当天）</span>
+              <input
+                id="endDate"
+                type="date"
+                min={form.dates[0]}
+                value={form.endDate}
+                onChange={(e) => onChange({ ...form, endDate: e.target.value })}
+                className={dialog.input}
+              />
+            </label>
+          )}
           <div>
             <span className={dialog.inputLabel}>颜色</span>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -292,7 +308,7 @@ export default function EventPanel({
             <button
               type="button"
               onClick={() => onDelete(form.id!)}
-              className="text-sm text-red-500 transition hover:text-red-700"
+              className="text-sm text-red-500 transition hover:scale-[1.03] hover:text-red-700"
             >
               删除
             </button>

@@ -15,8 +15,15 @@ import {
 // 历史栈条目：events 是操作完成后的状态快照（引用零拷贝），at 为操作时间戳
 export type HistoryEntry = { events: ScheduleEvent[]; at: number };
 
-// 事件整体挪动（周视图拖拽）的批量补丁：一次提交多条，撤销时一条记录
-export type EventMovePatch = { id: string; date: string; time: string; endTime?: string };
+// 事件整体挪动（周视图拖拽）/全天跨天拉伸的批量补丁：一次提交多条，撤销时一条记录。
+// time 缺省 = 全天事件横向拉伸（只改 date/endDate，不动时间字段）
+export type EventMovePatch = {
+  id: string;
+  date: string;
+  time?: string;
+  endTime?: string;
+  endDate?: string;
+};
 
 export function useEvents() {
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
@@ -127,6 +134,7 @@ export function useEvents() {
         date: input.date,
         time: input.time ?? "",
         endTime: input.endTime || undefined,
+        endDate: input.endDate || undefined,
         description: input.description ?? "",
         done: false,
         repeat: input.repeat,
@@ -166,15 +174,19 @@ export function useEvents() {
     [commit]
   );
 
-  // 批量移动（周视图整体挪动选中组）：一次操作一条历史记录
+  // 批量移动（周视图整体挪动选中组）/全天跨天拉伸：一次操作一条历史记录
   const applyMoveAll = useCallback(
     (patches: EventMovePatch[]) => {
       if (patches.length === 0) return;
       commit((prev) =>
-        patches.reduce(
-          (list, p) => updateEventInList(list, p.id, { date: p.date, time: p.time, endTime: p.endTime }),
-          prev
-        )
+        patches.reduce((list, p) => {
+          // 全天横向拉伸只改 date/endDate：time 等字段缺省时不覆盖（避免清空全天 time）
+          const patch: Partial<Omit<ScheduleEvent, "id">> = { date: p.date };
+          if (p.time !== undefined) patch.time = p.time;
+          if (p.endTime !== undefined) patch.endTime = p.endTime;
+          if (p.endDate !== undefined) patch.endDate = p.endDate;
+          return updateEventInList(list, p.id, patch);
+        }, prev)
       );
     },
     [commit]

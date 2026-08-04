@@ -22,6 +22,7 @@ const MOVE_SNAP_MIN = 5; // 事件挪动松手落点吸附单位：事件时间�
 const SELECT_SNAP_MIN = 5; // 拖选新建时间吸附单位：起止时间对齐到 5 分钟倍数
 const MIN_DRAG_MIN = 5; // 拖选新建的最小时长：更短视为单击不误建
 const GUTTER = 48; // 左侧刻度列宽度
+const ALLDAY_ROW_H = 24; // 全天横条行高
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const FOLD_START = 0; // 折叠区起点 0:00（分钟）
 const FOLD_END = 420; // 折叠区终点 7:00（分钟），折叠含 0:00–6:00 共七行
@@ -48,6 +49,19 @@ type ResizeState = {
   top: number; // 列顶视口 y
   downMin: number; // 按下分钟
   curMin: number; // 当前预览分钟（已吸附与钳制）
+  colRects: DOMRect[];
+};
+
+// 全天事件横条：跨连续日期列（start/end 为周内列索引）；重复事件每实例一行
+type AllDayBar = { e: ScheduleEvent; start: number; end: number; row: number };
+
+// 全天横条横向拉伸：edge = 拉哪条边；cur = 当前指针列（预览用）
+type AllDayDrag = {
+  id: string;
+  start: number;
+  end: number;
+  edge: "start" | "end";
+  cur: number;
   colRects: DOMRect[];
 };
 
@@ -169,6 +183,7 @@ export default function WeekTimeline({
   const [drag, setDrag] = useState<RegionState | null>(null);
   const [move, setMove] = useState<MoveState | null>(null);
   const [resize, setResize] = useState<ResizeState | null>(null);
+  const [allDayDrag, setAllDayDrag] = useState<AllDayDrag | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [folded, setFolded] = useState(true); // 默认折叠凌晨 0:00–6:00
   const [hover, setHover] = useState<{ col: number; min: number | null } | null>(null); // 悬停高亮：列 + 分钟
@@ -195,6 +210,8 @@ export default function WeekTimeline({
   const dragRef = useRef<RegionState | null>(null);
   const moveRef = useRef<MoveState | null>(null);
   const resizeRef = useRef<ResizeState | null>(null);
+  const allDayDragRef = useRef<AllDayDrag | null>(null);
+  const allDayLayerRef = useRef<HTMLDivElement | null>(null);
   const selectedRef = useRef(selectedIds);
   selectedRef.current = selectedIds;
   const onAddDayRef = useRef(onAddDay);
@@ -282,6 +299,41 @@ export default function WeekTimeline({
       }).length,
     0
   );
+
+  // 全天横条：跨天事件（endDate）多日各有一个条目，合并为一条横跨列；
+  // 重复事件每个实例独立成条（键 = id:日期），不合并
+  const weekIdxMap = new Map<string, number>(weekKeys.map((k, i) => [k, i]));
+  const mergedBars = new Map<string, Omit<AllDayBar, "row">>();
+  eventsByDay.forEach((dayEvents, i) => {
+    for (const e of dayEvents) {
+      if (e.time) continue;
+      const key = e.repeat ? `${e.id}:${e.date}` : e.id;
+      const ex = mergedBars.get(key);
+      if (ex) {
+        ex.end = Math.max(ex.end, i);
+        continue;
+      }
+      let end = i;
+      if (!e.repeat && e.endDate) {
+        const ei = weekIdxMap.get(e.endDate);
+        if (ei != null) end = Math.max(end, ei);
+        else if (e.endDate > weekKeys[weekKeys.length - 1]) end = cols - 1; // 超出周范围钳到末列
+      }
+      mergedBars.set(key, { e, start: i, end });
+    }
+  });
+  // 贪心行分配：按起点排序，放入第一条不与既有条目重叠的行
+  const allDayRows: { end: number }[][] = [];
+  const allDayBars: AllDayBar[] = [];
+  for (const bar of [...mergedBars.values()].sort((a, b) => a.start - b.start)) {
+    let row = allDayRows.findIndex((r) => r.every((b) => b.end < bar.start));
+    if (row === -1) {
+      row = allDayRows.length;
+      allDayRows.push([]);
+    }
+    allDayRows[row].push({ end: bar.end });
+    allDayBars.push({ ...bar, row });
+  }
 
   // 只查时间轴自身的列：document 级查询会捕获月视图的 42 个月历格子（同样带 data-date），
   // 导致 rects[col].top 取到月历格子的坐标、拖选/挪动位置与鼠标错位
@@ -606,6 +658,71 @@ export default function WeekTimeline({
     setResize(r);
   };
 
+  // 全天横条横向拉伸：按列吸附（指针在每列范围内取该列索引），预览左右边界随列变化
+  const handleAllDayDown = (
+    e: React.PointerEvent,
+    bar: AllDayBar,
+    edge: "start" | "end"
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const rects = colRects();
+    allDayLayerRef.current?.setPointerCapture(e.pointerId);
+    const d: AllDayDrag = {
+      id: bar.e.id,
+      start: bar.start,
+      end: bar.end,
+      edge,
+      cur: colFromX(e.clientX, rects),
+      colRects: rects,
+    };
+    allDayDragRef.current = d;
+    setAllDayDrag(d);
+  };
+
+  const handleAllDayMove = (e: React.PointerEvent) => {
+    const d = allDayDragRef.current;
+    if (!d) return;
+    const next = { ...d, cur: colFromX(e.clientX, d.colRects) };
+    allDayDragRef.current = next;
+    setAllDayDrag(next);
+    const rect = timelineRef.current?.getBoundingClientRect();
+    if (rect) {
+      const lo = Math.min(d.start, d.end, next.cur);
+      const hi = Math.max(d.start, d.end, next.cur);
+      const sd = parseDateKey(weekKeysRef.current[lo]);
+      const ed = parseDateKey(weekKeysRef.current[hi]);
+      setTip({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+        text: `${sd.getMonth() + 1}月${sd.getDate()}日–${ed.getMonth() + 1}月${ed.getDate()}日`,
+      });
+    }
+  };
+
+  const handleAllDayUp = () => {
+    const d = allDayDragRef.current;
+    if (!d) return;
+    allDayDragRef.current = null;
+    setAllDayDrag(null);
+    setTip(null);
+    const ev = eventsRef.current.flat().find((x) => x.id === d.id);
+    if (!ev || ev.repeat) return; // 重复事件实例不可横向拉伸
+    const lo = Math.min(d.start, d.end, d.cur);
+    const hi = Math.max(d.start, d.end, d.cur);
+    const newDate = weekKeysRef.current[lo];
+    const newEnd = weekKeysRef.current[hi];
+    if (ev.date === newDate && (ev.endDate ?? ev.date) === newEnd) return;
+    onMoveAllRef.current([{ id: d.id, date: newDate, endDate: newEnd }]);
+  };
+
+  const handleAllDayCancel = () => {
+    if (!allDayDragRef.current) return;
+    allDayDragRef.current = null;
+    setAllDayDrag(null);
+    setTip(null);
+  };
+
   const handleBlockDown = (e: React.PointerEvent, ev: ScheduleEvent, col: number) => {
     e.stopPropagation(); // 不触发空白拖选
     e.preventDefault();
@@ -668,7 +785,6 @@ export default function WeekTimeline({
         >
           {dates.map((d, i) => {
             const key = toDateKey(d);
-            const allDay = (eventsByDay[i] ?? []).filter((e) => !e.time);
             const isToday = isSameDay(d, today);
             return (
               <div
@@ -699,41 +815,6 @@ export default function WeekTimeline({
                     ＋
                   </button>
                 </div>
-                {allDay.length > 0 && (
-                  <div className="mt-1 space-y-0.5">
-                    {allDay.map((e) => (
-                      <div key={e.id} className="flex items-center gap-1">
-                        <input
-                          type="checkbox"
-                          checked={e.done}
-                          onChange={() => onToggleDone(e.id)}
-                          aria-label={e.done ? `取消完成：${e.title}` : `标记完成：${e.title}`}
-                          className={tokens.dayList.checkbox}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => onEdit(e)}
-                          aria-label={`编辑 ${e.title}`}
-                          className={tokens.weekView.allDayItem}
-                          style={{
-                            backgroundColor: e.color ? e.color + "59" : undefined,
-                            borderLeft: e.color ? `3px solid ${e.color}` : undefined,
-                          }}
-                        >
-                          {e.title}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onDelete(e.id)}
-                          aria-label="删除"
-                          className={tokens.dayList.delete}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             );
           })}
@@ -741,6 +822,124 @@ export default function WeekTimeline({
         {/* 滚动条占位：滚动区右侧滚动条压缩内部列，这里同步留白保持列对齐 */}
         <div aria-hidden data-testid="header-scrollbar-gap" style={{ width: sbWidth }} />
       </div>
+
+      {/* 全天横条层：跨连续日期列渲染；非重复事件可左右拖拽拉伸 */}
+      {allDayBars.length > 0 && (
+        <div className="relative flex border-b border-neutral-100">
+          <div style={{ width: GUTTER }} />
+          <div
+            ref={allDayLayerRef}
+            data-testid="all-day-layer"
+            className="relative flex-1 select-none touch-none"
+            style={{ height: allDayRows.length * ALLDAY_ROW_H }}
+            onPointerMove={handleAllDayMove}
+            onPointerUp={handleAllDayUp}
+            onPointerCancel={handleAllDayCancel}
+            onDragStart={(e) => e.preventDefault()}
+          >
+            {allDayBars.map((bar) => {
+              // 拖动中预览：被拖条跟随指针列变化左右边界
+              const preview =
+                allDayDrag?.id === bar.e.id && allDayDrag
+                  ? {
+                      left: Math.min(allDayDrag.start, allDayDrag.end, allDayDrag.cur),
+                      right: Math.max(allDayDrag.start, allDayDrag.end, allDayDrag.cur),
+                    }
+                  : { left: bar.start, right: bar.end };
+              const isSelected = selectedIds.includes(bar.e.id);
+              return (
+                <div
+                  key={bar.e.repeat ? `${bar.e.id}:${bar.e.date}` : bar.e.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`日程 ${bar.e.title}`}
+                  onClick={(ev) => {
+                    if (justMovedRef.current) {
+                      justMovedRef.current = false;
+                      return;
+                    }
+                    ev.stopPropagation();
+                    applySelection([bar.e.id]);
+                    onEdit(bar.e);
+                  }}
+                  className="absolute"
+                  style={{
+                    left: `${(preview.left / cols) * 100}%`,
+                    width: `${((preview.right - preview.left + 1) / cols) * 100}%`,
+                    top: bar.row * ALLDAY_ROW_H + 1,
+                    height: ALLDAY_ROW_H - 2,
+                  }}
+                >
+                  <div
+                    className={
+                      "flex h-full items-center gap-1 rounded-md border border-transparent px-1 transition " +
+                      (isSelected ? " ring-2 ring-blue-700 " : "") +
+                      (bar.e.repeat ? "" : " cursor-grab hover:scale-[1.01] hover:bg-blue-100/70")
+                    }
+                  >
+                    <input
+                      type="checkbox"
+                      checked={bar.e.done}
+                      onChange={(ev) => {
+                        ev.stopPropagation();
+                        onToggleDone(bar.e.id);
+                      }}
+                      aria-label={bar.e.done ? `取消完成：${bar.e.title}` : `标记完成：${bar.e.title}`}
+                      className={tokens.dayList.checkbox + " shrink-0"}
+                    />
+                    <button
+                      type="button"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        applySelection([bar.e.id]);
+                        onEdit(bar.e);
+                      }}
+                      aria-label={`编辑 ${bar.e.title}`}
+                      className={
+                        tokens.weekView.allDayItem +
+                        " min-w-0 flex-1" +
+                        (bar.e.done ? " opacity-60 line-through" : "")
+                      }
+                      style={{
+                        backgroundColor: bar.e.color ? bar.e.color + "59" : undefined,
+                        borderLeft: bar.e.color ? `3px solid ${bar.e.color}` : undefined,
+                      }}
+                    >
+                      {bar.e.title}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        onDelete(bar.e.id);
+                      }}
+                      aria-label="删除"
+                      className={tokens.dayList.delete + " shrink-0"}
+                    >
+                      ✕
+                    </button>
+                    {isSelected && !bar.e.repeat && (
+                      <>
+                        <div
+                          data-testid="all-day-resize-start"
+                          className="absolute inset-y-0 left-0 w-2 cursor-ew-resize"
+                          onPointerDown={(ev) => handleAllDayDown(ev, bar, "start")}
+                        />
+                        <div
+                          data-testid="all-day-resize-end"
+                          className="absolute inset-y-0 right-0 w-2 cursor-ew-resize"
+                          onPointerDown={(ev) => handleAllDayDown(ev, bar, "end")}
+                        />
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div aria-hidden style={{ width: sbWidth }} />
+        </div>
+      )}
 
       {/* 滚动区：左侧小时刻度 ＋ 右侧 7 列时间轴 ＋ 凌晨折叠条 */}
       <div
