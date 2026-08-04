@@ -199,6 +199,37 @@ describe("ScheduleApp (month view)", () => {
     expect(screen.getByLabelText(/标题/)).toHaveValue("浮动面板");
   });
 
+  it("ESC 键返回上级视图：月 → 年、周 → 月，面板打开时先关面板", () => {
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const col = this.closest("[data-date]") as HTMLElement | null;
+      if (col) {
+        const idx = Array.from(document.querySelectorAll("[data-date]")).indexOf(col);
+        const r = { left: idx * 100, top: 0, width: 100, height: 500 };
+        return { ...r, right: r.left + r.width, bottom: r.top + r.height } as DOMRect;
+      }
+      return { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 } as DOMRect;
+    });
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    const year = new Date().getFullYear();
+    // 默认月视图 → ESC → 年
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.getByRole("button", { name: "年" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(formatYearTitle(year))).toBeInTheDocument();
+    // 切到周 → ESC → 月
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.getByRole("button", { name: "月" })).toHaveAttribute("aria-pressed", "true");
+    // 编辑面板打开时 ESC 只关面板，不切视图
+    const now = new Date();
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("button", { name: "月" })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("编辑面板时间行三输入等分且不横向溢出（min-w-0 可收缩）", () => {
     const now = new Date();
     render(<ScheduleApp tokens={THEME_TOKENS} />);

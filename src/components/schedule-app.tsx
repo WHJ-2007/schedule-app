@@ -267,12 +267,23 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     return () => clearTimeout(t);
   }, [toast]);
 
-  // Delete 键删除选中日程（输入框/文本编辑中不触发）
+  // Delete 键删除选中日程；ESC 返回上级视图（周→月、月→年），编辑面板打开时先关面板
+  // （输入框/文本编辑中不触发）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Delete") return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      if (e.key === "Escape") {
+        if (formRef.current) {
+          setForm(null);
+          return;
+        }
+        const v = viewModeRef.current;
+        if (v === "week") pickViewRef.current("month");
+        else if (v === "month") pickViewRef.current("year");
+        return;
+      }
+      if (e.key !== "Delete") return;
       const ids = selectedIdsRef.current;
       if (ids.length === 0) return;
       deleteEvents(ids);
@@ -400,6 +411,14 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     };
     setViewMode(v);
   };
+
+  // ESC 键切换视图：keydown 监听只挂一次，经 ref 取最新视图/面板/切换函数（pickView 声明在后）
+  const viewModeRef = useRef(viewMode);
+  viewModeRef.current = viewMode;
+  const formRef = useRef(form);
+  formRef.current = form;
+  const pickViewRef = useRef(pickView);
+  pickViewRef.current = pickView;
 
   // 月视图双击日期：跳到该日所在周，动画与月→周切换一致。
   // 捕获阶段旧月视图还显示着，用目标周的 7 天做残影锚点与数字飞行源（跨月缺失的格子自动跳过）
