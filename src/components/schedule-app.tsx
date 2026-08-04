@@ -770,24 +770,41 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                           {d.getDate()}
                         </span>
                         {dayList.length > 0 && (
-                          <span className={tokens.cell.eventChipArea ?? "mt-1 w-full space-y-0.5 px-0.5"}>
-                            {dayList.slice(0, indicatorCap).map((e) => (
-                              <span
-                                key={e.id}
-                                className={tokens.cell.eventChip}
-                                style={{
-                                  backgroundColor: e.color ? e.color + "14" : undefined,
-                                  borderLeft: e.color ? `3px solid ${e.color}` : undefined,
-                                }}
-                              >
-                                {e.title}
-                              </span>
-                            ))}
-                            {dayList.length > indicatorCap && (
-                              <span className={"truncate text-left text-[10px] " + tokens.dotMore}>
-                                +{dayList.length - indicatorCap}
-                              </span>
-                            )}
+                          <span className={tokens.cell.eventChipArea ?? "mt-1 flex w-full gap-x-0.5 px-0.5"}>
+                            {/* 竖排优先，放不下才横向第二列，最多两列 */}
+                            <span className="flex min-w-0 flex-1 flex-col gap-y-0.5">
+                              {dayList.slice(0, indicatorCap).map((e) => (
+                                <span
+                                  key={e.id}
+                                  className={tokens.cell.eventChip}
+                                  style={{
+                                    backgroundColor: e.color ? e.color + "14" : undefined,
+                                    borderLeft: e.color ? `3px solid ${e.color}` : undefined,
+                                  }}
+                                >
+                                  {e.title}
+                                </span>
+                              ))}
+                            </span>
+                            <span className="flex min-w-0 flex-1 flex-col gap-y-0.5">
+                              {dayList.slice(indicatorCap, indicatorCap * 2).map((e) => (
+                                <span
+                                  key={e.id}
+                                  className={tokens.cell.eventChip}
+                                  style={{
+                                    backgroundColor: e.color ? e.color + "14" : undefined,
+                                    borderLeft: e.color ? `3px solid ${e.color}` : undefined,
+                                  }}
+                                >
+                                  {e.title}
+                                </span>
+                              ))}
+                              {dayList.length > indicatorCap * 2 && (
+                                <span className={"truncate text-left text-[10px] " + tokens.dotMore}>
+                                  +{dayList.length - indicatorCap * 2}
+                                </span>
+                              )}
+                            </span>
                           </span>
                         )}
                       </button>
@@ -804,29 +821,44 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                 </div>
               </section>
 
-              {/* 当日日程：单列时间轴，交互与周视图一致 */}
+              {/* 当日日程：单列时间轴，交互与周视图一致；编辑时原位换成内嵌表单（看板式 UI） */}
               <section className={tokens.card + " flex flex-col"}>
                 <p className={tokens.dayList.dateLabel}>{formatDayLabel(selectedDate)}</p>
                 <div className="mt-4 flex min-h-0 flex-1 flex-col">
-                  <WeekTimeline
-                    tokens={tokens}
-                    dates={[selectedDate]}
-                    eventsByDay={[dayEvents]}
-                    anchorKey={selectedDateKey}
-                    today={today}
-                    onJumpToMonth={() => {}}
-                    onAddDay={openAdd}
-                    onEdit={openEdit}
-                    onToggleDone={toggleDone}
-                    onDelete={deleteEvent}
-                    onMoveAll={applyMoveAll}
-                    onBatchColor={setEventColors}
-                    onSelectionChange={setSelectedIds}
-                    cols={1}
-                    rootClass="min-h-0 flex-1"
-                    scrollClass="min-h-0 flex-1"
-                    scrollMaxHeight="none"
-                  />
+                  {form ? (
+                    <EventPanel
+                      inline
+                      form={form}
+                      tokens={tokens}
+                      onChange={setForm}
+                      onSave={handleSave}
+                      onDelete={(id) => {
+                        deleteEvent(id);
+                        setForm(null);
+                      }}
+                      onClose={() => setForm(null)}
+                    />
+                  ) : (
+                    <WeekTimeline
+                      tokens={tokens}
+                      dates={[selectedDate]}
+                      eventsByDay={[dayEvents]}
+                      anchorKey={selectedDateKey}
+                      today={today}
+                      onJumpToMonth={() => {}}
+                      onAddDay={openAdd}
+                      onEdit={openEdit}
+                      onToggleDone={toggleDone}
+                      onDelete={deleteEvent}
+                      onMoveAll={applyMoveAll}
+                      onBatchColor={setEventColors}
+                      onSelectionChange={setSelectedIds}
+                      cols={1}
+                      rootClass="min-h-0 flex-1"
+                      scrollClass="min-h-0 flex-1"
+                      scrollMaxHeight="none"
+                    />
+                  )}
                 </div>
               </section>
             </div>
@@ -997,8 +1029,8 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
         </div>
       </div>
 
-      {/* 右侧滑入编辑面板：新建/编辑统一入口 */}
-      {form && (
+      {/* 编辑面板：月视图内嵌在看板位（上方渲染）；其余视图右侧滑入 */}
+      {form && viewMode !== "month" && (
         <EventPanel
           form={form}
           tokens={tokens}

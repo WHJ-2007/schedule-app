@@ -37,7 +37,7 @@ const REPEAT_OPTIONS: { value: RepeatFreq; label: string }[] = [
   { value: "weekend", label: "周末（周六、周日）" },
 ];
 
-// 右侧滑入的编辑面板：新建/编辑统一入口，替代原居中弹窗
+// 编辑面板：新建/编辑统一入口。默认右侧滑入；inline 模式填充父容器（月视图看板式内嵌）
 export default function EventPanel({
   form,
   tokens,
@@ -45,6 +45,7 @@ export default function EventPanel({
   onSave,
   onDelete,
   onClose,
+  inline = false,
 }: {
   form: FormState;
   tokens: ThemeTokens;
@@ -52,6 +53,7 @@ export default function EventPanel({
   onSave: () => void;
   onDelete?: (id: string) => void;
   onClose: () => void;
+  inline?: boolean;
 }) {
   const { dialog } = tokens;
   const minutesOf = (t: string) => (t ? parseTimeToMinutes(t) : NaN);
@@ -65,9 +67,18 @@ export default function EventPanel({
     <div
       role="dialog"
       aria-label={form.id ? "编辑日程" : "添加日程"}
-      className="anim-panel-in fixed inset-y-0 right-0 z-50 flex w-80 max-w-[92vw] flex-col border-l border-white/40 bg-white/70 shadow-xl backdrop-blur-xl"
+      className={
+        inline
+          ? "anim-fade-in flex min-h-0 flex-1 flex-col"
+          : "anim-panel-in fixed inset-y-0 right-0 z-50 flex w-80 max-w-[92vw] flex-col border-l border-white/40 bg-white/70 shadow-xl backdrop-blur-xl"
+      }
     >
-      <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-4">
+      <div
+        className={
+          "flex items-center justify-between border-b border-neutral-100 " +
+          (inline ? "pb-3" : "px-5 py-4")
+        }
+      >
         <h3 className={dialog.title}>{form.id ? "编辑日程" : "添加日程"}</h3>
         <button
           type="button"
@@ -84,7 +95,7 @@ export default function EventPanel({
           e.preventDefault();
           onSave();
         }}
-        className={"flex min-h-0 flex-1 flex-col " + dialog.bodyClass}
+        className={"flex min-h-0 flex-1 flex-col " + (inline ? "" : dialog.bodyClass)}
       >
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
           {form.dates.length > 1 && (
@@ -104,8 +115,9 @@ export default function EventPanel({
               className={dialog.input}
             />
           </label>
-          <div className="flex gap-3">
-            <label htmlFor="time" className="block flex-1">
+          {/* 三输入等分网格：min-w-0 允许收缩，避免窄面板横向溢出（结束时间/色板被滚动切掉） */}
+          <div className="grid grid-cols-3 gap-2">
+            <label htmlFor="time" className="block min-w-0">
               <span className={dialog.inputLabel}>开始时间</span>
               <input
                 id="time"
@@ -121,10 +133,10 @@ export default function EventPanel({
                     endTime: minutesToTime(Math.min(1439, minutesOf(v) + curDuration(form))),
                   });
                 }}
-                className={dialog.input}
+                className={dialog.input + " min-w-0"}
               />
             </label>
-            <label htmlFor="duration" className="block flex-1">
+            <label htmlFor="duration" className="block min-w-0">
               <span className={dialog.inputLabel}>时长</span>
               <input
                 id="duration"
@@ -142,17 +154,17 @@ export default function EventPanel({
                     endTime: minutesToTime(Math.min(1439, minutesOf(form.time) + dur)),
                   });
                 }}
-                className={dialog.input}
+                className={dialog.input + " min-w-0"}
               />
             </label>
-            <label htmlFor="endTime" className="block flex-1">
+            <label htmlFor="endTime" className="block min-w-0">
               <span className={dialog.inputLabel}>结束时间</span>
               <input
                 id="endTime"
                 type="time"
                 value={form.endTime}
                 onChange={(e) => onChange({ ...form, endTime: e.target.value })}
-                className={dialog.input}
+                className={dialog.input + " min-w-0"}
               />
             </label>
           </div>
@@ -243,8 +255,8 @@ export default function EventPanel({
                     ))}
                   </select>
                 </label>
-                <div className="flex gap-3">
-                  <label htmlFor="repeatStart" className="block flex-1">
+                <div className="grid grid-cols-2 gap-2">
+                  <label htmlFor="repeatStart" className="block min-w-0">
                     <span className={dialog.inputLabel}>重复开始</span>
                     <input
                       id="repeatStart"
@@ -253,10 +265,10 @@ export default function EventPanel({
                       onChange={(e) =>
                         onChange({ ...form, dates: [e.target.value, ...form.dates.slice(1)] })
                       }
-                      className={dialog.input}
+                      className={dialog.input + " min-w-0"}
                     />
                   </label>
-                  <label htmlFor="repeatUntil" className="block flex-1">
+                  <label htmlFor="repeatUntil" className="block min-w-0">
                     <span className={dialog.inputLabel}>重复至</span>
                     <input
                       id="repeatUntil"
@@ -265,7 +277,7 @@ export default function EventPanel({
                       onChange={(e) =>
                         onChange({ ...form, repeat: { ...form.repeat, until: e.target.value } })
                       }
-                      className={dialog.input}
+                      className={dialog.input + " min-w-0"}
                     />
                   </label>
                 </div>

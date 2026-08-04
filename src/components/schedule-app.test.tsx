@@ -158,6 +158,60 @@ describe("ScheduleApp (month view)", () => {
     expect(screen.getByText("暂无历史操作")).toBeInTheDocument();
     expect(screen.queryByLabelText("版本时间轴")).toBeNull();
   });
+
+  it("月视图编辑日程内嵌在看板位：替换看板而非右侧滑出", () => {
+    const now = new Date();
+    localStorage.setItem(
+      "schedule-demo-events",
+      JSON.stringify([
+        { id: "a", title: "内嵌测试", date: toDateKey(now), time: "10:00", endTime: "11:00", description: "", done: false },
+      ])
+    );
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "日程 内嵌测试" }));
+    const dialog = screen.getByRole("dialog", { name: "编辑日程" });
+    // 看板式内嵌：淡入、无 fixed 定位、无右侧滑入动画
+    expect(dialog.className).toContain("anim-fade-in");
+    expect(dialog.className).not.toContain("anim-panel-in");
+    expect(dialog.className).not.toContain("fixed");
+    expect(screen.getByLabelText(/标题/)).toHaveValue("内嵌测试");
+    // 看板被替换：列头 ＋ 按钮消失
+    const addBtn = `在${now.getMonth() + 1}月${now.getDate()}日添加日程`;
+    expect(screen.queryByRole("button", { name: addBtn })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    expect(screen.getByRole("button", { name: addBtn })).toBeInTheDocument();
+  });
+
+  it("周视图编辑日程仍是右侧滑出面板", () => {
+    const now = new Date();
+    localStorage.setItem(
+      "schedule-demo-events",
+      JSON.stringify([
+        { id: "b", title: "浮动面板", date: toDateKey(now), time: "10:00", endTime: "11:00", description: "", done: false },
+      ])
+    );
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.click(screen.getByRole("button", { name: "日程 浮动面板" }));
+    const dialog = screen.getByRole("dialog", { name: "编辑日程" });
+    expect(dialog.className).toContain("anim-panel-in");
+    expect(dialog.className).toContain("fixed");
+    expect(screen.getByLabelText(/标题/)).toHaveValue("浮动面板");
+  });
+
+  it("编辑面板时间行三输入等分且不横向溢出（min-w-0 可收缩）", () => {
+    const now = new Date();
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
+    );
+    const dialog = screen.getByRole("dialog");
+    const timeRow = dialog.querySelector("#time")!.closest("div.grid")!;
+    expect(timeRow.className).toContain("grid-cols-3");
+    expect(screen.getByLabelText(/开始时间/)).toHaveClass("min-w-0");
+    expect(screen.getByLabelText(/时长/)).toHaveClass("min-w-0");
+    expect(screen.getByLabelText(/结束时间/)).toHaveClass("min-w-0");
+  });
 });
 
 describe("ScheduleApp (switcher & week view)", () => {
@@ -859,17 +913,40 @@ describe("ScheduleApp (recurring & day timeline)", () => {
     expect(screen.queryByRole("button", { name: /编辑 待删除/ })).toBeNull();
   });
 
-  it("月视图小卡片显示当日日程标题（仅标题，超出 +N）", () => {
+  it("月视图小卡片：竖排优先，放不下进第二列，两列都满才 +N", () => {
+    const todayKey = toDateKey(new Date());
+    const mk = (id: string, title: string, time: string) =>
+      ({ id, title, date: todayKey, time, description: "", done: false });
     localStorage.setItem("schedule-demo-events", JSON.stringify([
-      { id: "a", title: "晨会", date: toDateKey(new Date()), time: "09:30", description: "", done: false },
-      { id: "b", title: "评审", date: toDateKey(new Date()), time: "14:00", description: "", done: false },
-      { id: "c", title: "健身", date: toDateKey(new Date()), time: "19:00", description: "", done: false },
-      { id: "d", title: "读书", date: toDateKey(new Date()), time: "21:00", description: "", done: false },
+      mk("a", "晨会", "09:30"),
+      mk("b", "评审", "14:00"),
+      mk("c", "健身", "19:00"),
+      mk("d", "读书", "21:00"),
     ]));
     render(<ScheduleApp tokens={THEME_TOKENS} />);
-    const chips = screen.getAllByText("晨会");
-    expect(chips.length).toBeGreaterThan(0); // 月历格子小卡片
-    expect(screen.getByText("+1")).toBeInTheDocument(); // 超出 3 条上限
+    // 4 条 ≤ 两列上限（3+3）：全部显示且不出现 +N
+    for (const t of ["晨会", "评审", "健身", "读书"]) {
+      expect(screen.getAllByText(t).length).toBeGreaterThan(0);
+    }
+    expect(screen.queryByText("+1")).toBeNull();
+  });
+
+  it("月视图小卡片超过两列上限（3+3）显示 +N", () => {
+    const todayKey = toDateKey(new Date());
+    const mk = (id: string, title: string, time: string) =>
+      ({ id, title, date: todayKey, time, description: "", done: false });
+    localStorage.setItem("schedule-demo-events", JSON.stringify([
+      mk("a", "晨会", "09:30"),
+      mk("b", "评审", "10:00"),
+      mk("c", "健身", "11:00"),
+      mk("d", "读书", "12:00"),
+      mk("e", "开会", "13:00"),
+      mk("f", "写码", "14:00"),
+      mk("g", "锻炼", "15:00"),
+    ]));
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    expect(screen.getByText("+1")).toBeInTheDocument(); // 7 - 6 = 1 条溢出
+    expect(screen.queryByText("+2")).toBeNull();
   });
 
   it("年视图翻年后点月标签：月视图定位到正在查看的月", () => {

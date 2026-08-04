@@ -73,7 +73,7 @@ export const THEME_TOKENS: ThemeTokens = {
       outside: "text-neutral-300",
       today: "border-2 border-blue-600 text-neutral-900",
       selected: "bg-blue-600 text-white",
-      eventChipArea: "mt-1 w-full space-y-0.5 px-0.5",
+      eventChipArea: "mt-1 flex w-full gap-x-0.5 px-0.5",
       eventChip: "glass-hover truncate rounded-sm bg-white/60 px-1 text-left text-[10px] leading-4 text-neutral-600 backdrop-blur-xl",
     },
     dot: "h-1.5 w-1.5 rounded-full bg-blue-600",
