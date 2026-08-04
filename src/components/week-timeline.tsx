@@ -15,7 +15,8 @@ import type { ScheduleEvent } from "@/lib/events";
 import type { ThemeTokens } from "./theme-tokens";
 
 const HOUR_PX = 48; // 每小时高度（像素）
-const SNAP_MIN = 30; // 拖选吸附粒度（分钟）
+const SNAP_MIN = 30; // 事件挪动吸附粒度（分钟）
+const MIN_DRAG_MIN = 5; // 拖选新建的最小时长：更短视为单击不误建
 const GUTTER = 48; // 左侧刻度列宽度
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const FOLD_START = 0; // 折叠区起点 0:00（分钟）
@@ -26,9 +27,10 @@ const EXPAND_BAND_H = 26; // 展开时条带高度
 // 空白处拖拽：矩形选区（矩形内有日程 → 框选；无 → 批量新建）
 type RegionState = {
   top: number; // 列顶视口 y 快照
-  down: number; // 按下分钟
+  down: number; // 按下分钟（精确，不吸附）
   start: number; // 选区起止分钟（min/max）
   end: number;
+  moved: boolean; // 指针是否实际移动（区分单击与拖选）
   startCol: number; // 按下列
   curCol: number; // 当前列
   colRects: DOMRect[]; // 7 列矩形快照
@@ -210,7 +212,7 @@ export default function WeekTimeline({
     const d = dragRef.current;
     if (!d) return;
     const curCol = colFromX(e.clientX, d.colRects);
-    const curMin = minutesAtY(e.clientY - d.top);
+    const curMin = rawMinAtY(e.clientY - d.top);
     if (curMin == null) {
       dragRef.current = { ...d, curCol };
       setDrag({ ...d, curCol });
@@ -218,7 +220,13 @@ export default function WeekTimeline({
     }
     const start = Math.min(d.down, curMin);
     const end = Math.max(d.down, curMin);
-    const next = { ...d, curCol, start, end: end === start ? end + SNAP_MIN : end };
+    const next = {
+      ...d,
+      curCol,
+      start,
+      end: end === start ? end + SNAP_MIN : end,
+      moved: d.moved || curMin !== d.down,
+    };
     dragRef.current = next;
     setDrag(next);
     if (rect) {
@@ -271,7 +279,7 @@ export default function WeekTimeline({
     dragRef.current = null;
     setDrag(null);
     setTip(null);
-    if (d.end - d.start <= SNAP_MIN) {
+    if (!d.moved || d.end - d.start < MIN_DRAG_MIN) {
       setSelectedIds([]); // 空白单击：取消选中
       setEditAnchor(null);
       return;
@@ -329,7 +337,7 @@ export default function WeekTimeline({
     setHover(null);
     const rects = colRects();
     const top = rects[col].top;
-    const down = minutesAtY(e.clientY - top);
+    const down = rawMinAtY(e.clientY - top);
     if (down == null) return; // 在条带上按下：交给条带按钮处理
     e.currentTarget.setPointerCapture(e.pointerId); // 捕获后拖出窗口仍可靠释放
     const d: RegionState = {
@@ -337,6 +345,7 @@ export default function WeekTimeline({
       down,
       start: down,
       end: down + SNAP_MIN,
+      moved: false,
       startCol: col,
       curCol: col,
       colRects: rects,

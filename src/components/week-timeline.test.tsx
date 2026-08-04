@@ -141,13 +141,35 @@ describe("WeekTimeline", () => {
     expect(col.querySelector('[data-testid="drag-select"]')).toBeNull();
   });
 
-  it("拖动不足一个槽位不触发（移动 15 分钟仍吸附回起点）", () => {
+  it("拖动 15 分钟按精确时间新建（不再吸附整半点）", () => {
     const onAddDay = vi.fn();
     renderTimeline(emptyWeek, { onAddDay });
     expandFold();
     const col = document.querySelector('[data-date="2026-08-03"]')!;
     fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 96 }); // 2:00
-    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 108 }); // 2:15，仍吸附 2:00
+    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 108 }); // 2:15
+    fireEvent.pointerUp(col, { pointerId: 1 });
+    expect(onAddDay).toHaveBeenCalledWith(["2026-08-03"], "02:00", "02:15");
+  });
+
+  it("拖选非整半点时段按精确分钟提交", () => {
+    const onAddDay = vi.fn();
+    renderTimeline(emptyWeek, { onAddDay });
+    expandFold();
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 96 }); // 2:00
+    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 110 }); // 2:18
+    fireEvent.pointerUp(col, { pointerId: 1 });
+    expect(onAddDay).toHaveBeenCalledWith(["2026-08-03"], "02:00", "02:18");
+  });
+
+  it("拖动不足 5 分钟视为单击不新建", () => {
+    const onAddDay = vi.fn();
+    renderTimeline(emptyWeek, { onAddDay });
+    expandFold();
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 96 }); // 2:00
+    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 97 }); // 2:01，仅 1 分钟
     fireEvent.pointerUp(col, { pointerId: 1 });
     expect(onAddDay).not.toHaveBeenCalled();
   });
