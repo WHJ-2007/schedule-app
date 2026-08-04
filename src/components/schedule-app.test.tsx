@@ -415,8 +415,8 @@ describe("ScheduleApp (switcher & week view)", () => {
       within(screen.getByTestId("view-anim")).getByRole("button", { name: "日程 明日事件" })
     );
     expect(grid.className).toContain("lg:grid-cols-[2fr_1fr]");
-    // 看板已切到明日
-    expect(screen.getAllByText(formatDayLabel(tomorrow)).length).toBeGreaterThan(0);
+    // 右侧只显示表单（无日期标签），表单已跟随到明日事件
+    expect((screen.getByLabelText(/标题/) as HTMLInputElement).value).toBe("明日事件");
   });
 
   it("周视图列头＋按钮添加到该日", () => {

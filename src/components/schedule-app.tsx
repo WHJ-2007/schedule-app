@@ -389,8 +389,10 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
 
   const grid = useMemo(() => getMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
   const today = new Date();
-  // 周视图右侧单日看板：选中日程或打开表单时展开，否则折叠（左侧 7 列等比例展开）
-  const showWeekDayPanel = viewMode === "week" && (selectedIds.length > 0 || form !== null);
+  // 周视图右侧：只在编辑时显示表单（多选/框选不打开侧边栏）。
+  // 区分「重复日程多选」（点击单个实例，同 id 全部高亮但语义是单选 → 开表单）与
+  // 「真正多选」（框选多个不同 id → 无表单 → 折叠）
+  const showWeekDayPanel = viewMode === "week" && form !== null;
   const selectedDate = parseDateKey(selectedDateKey);
   const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // 无限重复（无 until）的展开兜底：只展开到当前视图可见的最远日期，避免无限展开
@@ -1022,34 +1024,23 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                     />
                   </div>
                 </section>
-                {/* 选中日的单日看板：编辑时表单内嵌，与月视图一致；无选中时折叠为 0 宽 */}
-                <div
-                  className={
-                    "min-w-0 overflow-hidden transition-opacity duration-300 " +
-                    (showWeekDayPanel ? "opacity-100" : "pointer-events-none opacity-0")
-                  }
-                >
-                  <DayPanel
-                    tokens={tokens}
-                    dateKey={selectedDateKey}
-                    dayEvents={sortByTime(byDay.get(selectedDateKey) ?? [])}
-                    today={today}
-                    form={form}
-                    onFormChange={setForm}
-                    onSave={handleSave}
-                    onDelete={(id) => {
-                      deleteEvent(id);
-                      setForm(null);
-                    }}
-                    onClose={() => setForm(null)}
-                    onAddDay={openAdd}
-                    onEdit={openEdit}
-                    onToggleDone={toggleDone}
-                    onMoveAll={applyMoveAll}
-                    onBatchColor={setEventColors}
-                    onSelectionChange={setSelectedIds}
-                  />
-                </div>
+                {/* 编辑时右侧只显示表单（不显示单日时间轴/日期标签）；无编辑内容时折叠 */}
+                {form && (
+                  <div className="min-w-0 overflow-hidden transition-opacity duration-300 opacity-100">
+                    <EventPanel
+                      inline
+                      form={form}
+                      tokens={tokens}
+                      onChange={setForm}
+                      onSave={handleSave}
+                      onDelete={(id) => {
+                        deleteEvent(id);
+                        setForm(null);
+                      }}
+                      onClose={() => setForm(null)}
+                    />
+                  </div>
+                )}
               </div>
             )}
             {viewMode === "year" && (

@@ -271,7 +271,7 @@ export default function WeekTimeline({
     applySelection([]);
   }, [weekKeyStr, cols]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const bandTop = folded ? 0 : 7 * HOUR_PX; // 条带 y：折叠时在顶部（0:00 起），展开时在 6:00 与 7:00 之间
+  const bandTop = folded ? 0 : 6 * HOUR_PX; // 条带 y：折叠时在顶部（0:00 起），展开时在 6:00 与 7:00 之间（180px）
   const bandH = folded ? FOLD_BAND_H : EXPAND_BAND_H;
   const dayHeight = (folded ? 18 : 24) * HOUR_PX + bandH;
 
@@ -324,7 +324,8 @@ export default function WeekTimeline({
   eventsByDay.forEach((dayEvents, i) => {
     for (const e of dayEvents) {
       if (e.time) continue;
-      const key = e.repeat ? `${e.id}:${e.date}` : e.id;
+      // 重复实例 e.date 都是起点日期（展开时复用同一记录对象），键改用列索引区分
+      const key = e.repeat ? `${e.id}:${i}` : e.id;
       const ex = mergedBars.get(key);
       if (ex) {
         ex.end = Math.max(ex.end, i);
@@ -543,7 +544,10 @@ export default function WeekTimeline({
       if (m.dx === 0 && m.dy === 0) {
         // 指针捕获后浏览器把 click 派发到捕获元素（列）而非事件块，onClick 收不到：
         // 单击事件块 → 选中并打开编辑面板改在 pointerup 处理
-        const ev = eventsRef.current.flat().find((x) => x.id === m.pressId);
+        // 重复事件同 id 多实例：按 pressKey 定位被按实例，否则 find 匹配第一个实例打开错误日期
+        const ev = eventsRef.current
+          .flat()
+          .find((x) => x.id === m.pressId && `${x.id}:${x.date}` === m.pressKey);
         if (ev) {
           applySelection([m.pressId]);
           onEdit(ev);
@@ -878,7 +882,7 @@ export default function WeekTimeline({
               const isSelected = selectedIds.includes(bar.e.id);
               return (
                 <div
-                  key={bar.e.repeat ? `${bar.e.id}:${bar.e.date}` : bar.e.id}
+                  key={bar.e.repeat ? `${bar.e.id}:${bar.start}` : bar.e.id}
                   role="button"
                   tabIndex={0}
                   aria-label={`日程 ${bar.e.title}`}
