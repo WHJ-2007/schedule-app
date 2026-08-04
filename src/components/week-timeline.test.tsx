@@ -854,7 +854,7 @@ describe("WeekTimeline (重叠事件并排)", () => {
     renderTimeline([[ev("a", "晨会", "09:30", "11:00")], ...emptyWeek.slice(1)]);
     const block = screen.getByRole("button", { name: /日程 晨会/ });
     expect(block.className).toContain(
-      "transition-[top,left,width,height,background-color,opacity,filter]"
+      "transition-[top,left,width,height,background-color,opacity,filter,scale]"
     );
     expect(block.className).not.toContain("anim-fold");
   });

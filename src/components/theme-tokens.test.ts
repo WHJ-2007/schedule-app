@@ -38,7 +38,7 @@ describe("theme tokens", () => {
   it("style-1 关键字符串精确匹配（防 typo/回归）", () => {
     expect(THEME_TOKENS.main).toBe("min-h-screen bg-[#fafafa]");
     expect(THEME_TOKENS.button.primary).toBe(
-      "rounded-md bg-blue-600 px-4 py-2 text-sm text-white transition hover:bg-blue-700",
+      "rounded-md bg-blue-600 px-4 py-2 text-sm text-white transition hover:scale-[1.03] hover:bg-blue-700",
     );
     expect(THEME_TOKENS.cell.today).toBe("border-2 border-blue-600 text-neutral-900");
     expect(THEME_TOKENS.cell.selected).toBe("bg-blue-600 text-white");
@@ -66,9 +66,10 @@ describe("theme tokens", () => {
     expect(w.cursorLabel.length).toBeGreaterThan(0);
   });
 
-  it("事件块使用显式过渡类（含 top/left/width/height）", () => {
+  it("事件块使用显式过渡类（含 top/left/width/height/scale）", () => {
     const b = THEME_TOKENS.weekView.eventBlock;
-    expect(b).toContain("transition-[top,left,width,height,background-color,opacity,filter]");
+    expect(b).toContain("transition-[top,left,width,height,background-color,opacity,filter,scale]");
     expect(b).toContain("duration-200");
+    expect(b).toContain("hover:scale-[1.02]");
   });
 });

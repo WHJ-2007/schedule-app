@@ -121,7 +121,7 @@ export default function Settings({
           setPage(1);
           setPageAnim(null);
         }}
-        className="fixed bottom-6 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-black/10 bg-white/70 text-xl shadow-lg backdrop-blur transition hover:bg-white"
+        className="fixed bottom-6 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-black/10 bg-white/70 text-xl shadow-lg backdrop-blur transition hover:scale-105 hover:bg-white"
       >
         ⚙
       </button>
@@ -180,7 +180,7 @@ export default function Settings({
                 }}
                 className={
                   "relative z-10 rounded-full px-4 py-1.5 text-sm transition " +
-                  (tab === "log" ? "text-white" : "text-neutral-500 hover:bg-neutral-100")
+                  (tab === "log" ? "text-white" : "text-neutral-500 hover:scale-[1.03] hover:bg-neutral-100")
                 }
               >
                 更新日志
@@ -194,7 +194,7 @@ export default function Settings({
                 }}
                 className={
                   "relative z-10 rounded-full px-4 py-1.5 text-sm transition " +
-                  (tab === "data" ? "text-white" : "text-neutral-500 hover:bg-neutral-100")
+                  (tab === "data" ? "text-white" : "text-neutral-500 hover:scale-[1.03] hover:bg-neutral-100")
                 }
               >
                 数据
@@ -238,7 +238,7 @@ export default function Settings({
                     type="button"
                     disabled={page <= 1}
                     onClick={() => goPage(page - 1, "left")}
-                    className="text-neutral-600 transition hover:text-neutral-900 disabled:text-neutral-300"
+                    className="text-neutral-600 transition hover:scale-105 hover:text-neutral-900 disabled:text-neutral-300"
                   >
                     ‹ 上一页
                   </button>
@@ -249,7 +249,7 @@ export default function Settings({
                     type="button"
                     disabled={page >= pageCount}
                     onClick={() => goPage(page + 1, "right")}
-                    className="text-neutral-600 transition hover:text-neutral-900 disabled:text-neutral-300"
+                    className="text-neutral-600 transition hover:scale-105 hover:text-neutral-900 disabled:text-neutral-300"
                   >
                     下一页 ›
                   </button>
@@ -260,7 +260,7 @@ export default function Settings({
                 <button
                   type="button"
                   onClick={exportAll}
-                  className="w-full rounded-xl border border-neutral-200 p-3 text-left transition hover:border-neutral-400"
+                  className="w-full rounded-xl border border-neutral-200 p-3 text-left transition hover:scale-[1.01] hover:border-neutral-400 hover:bg-neutral-50"
                 >
                   <span className="text-sm font-medium text-neutral-800">导出全部日程</span>
                   <p className="mt-0.5 text-xs text-neutral-500">
@@ -270,7 +270,7 @@ export default function Settings({
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
-                  className="w-full rounded-xl border border-neutral-200 p-3 text-left transition hover:border-neutral-400"
+                  className="w-full rounded-xl border border-neutral-200 p-3 text-left transition hover:scale-[1.01] hover:border-neutral-400 hover:bg-neutral-50"
                 >
                   <span className="text-sm font-medium text-neutral-800">导入日程</span>
                   <p className="mt-0.5 text-xs text-neutral-500">
