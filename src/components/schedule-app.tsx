@@ -626,7 +626,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                 </button>
               ))}
             </div>
-            <div className="flex gap-2">
+            <div className="relative flex gap-2">
               <button
                 type="button"
                 onClick={undo}
@@ -653,6 +653,14 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
               >
                 重做 ↷
               </button>
+              {playerOpen && (
+                <VersionPlayer
+                  history={history}
+                  index={index}
+                  onJump={jumpToIndex}
+                  onClose={() => setPlayerOpen(false)}
+                />
+              )}
             </div>
           </div>
 
@@ -976,14 +984,6 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
         />
       )}
       <Settings events={events} onImport={replaceEvents} />
-      {playerOpen && (
-        <VersionPlayer
-          history={history}
-          index={index}
-          onJump={jumpToIndex}
-          onClose={() => setPlayerOpen(false)}
-        />
-      )}
       {toast && (
         <UndoToast
           text={toast.text}

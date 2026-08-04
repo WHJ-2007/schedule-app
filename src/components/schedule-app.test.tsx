@@ -129,6 +129,22 @@ describe("ScheduleApp (month view)", () => {
     expect(screen.queryByLabelText("版本时间轴")).toBeNull();
   });
 
+  it("版本播放条在版本按钮上方弹出，滑条与关闭按钮不重叠", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    const now = new Date();
+    const addBtn = `在${now.getMonth() + 1}月${now.getDate()}日添加日程`;
+    fireEvent.click(screen.getByRole("button", { name: addBtn }));
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "布局测试" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "版本播放" }));
+    const player = screen.getByRole("dialog", { name: "版本播放" });
+    expect(player.className).toContain("bottom-full");
+    expect(player.className).toContain("backdrop-blur");
+    // 关闭按钮（右上 absolute）不压滑条：滑条包一层右侧内边距
+    const sliderWrap = screen.getByLabelText("版本时间轴").closest("div")!;
+    expect(sliderWrap.className).toContain("pr-8");
+  });
+
   it("无操作时打开版本播放显示暂无历史操作", () => {
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "版本播放" }));
