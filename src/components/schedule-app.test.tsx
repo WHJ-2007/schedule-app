@@ -102,6 +102,39 @@ describe("ScheduleApp (month view)", () => {
     fireEvent.click(screen.getByRole("button", { name: "重做" }));
     expect(screen.getAllByText("撤销测试").length).toBeGreaterThan(0);
   });
+
+  it("版本播放条：拖动时间轴实时回看任意历史版本", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    const now = new Date();
+    const addBtn = `在${now.getMonth() + 1}月${now.getDate()}日添加日程`;
+    for (const title of ["事件A", "事件B"]) {
+      fireEvent.click(screen.getByRole("button", { name: addBtn }));
+      fireEvent.change(screen.getByLabelText(/标题/), { target: { value: title } });
+      fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    }
+    expect(screen.getAllByText("事件A").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("事件B").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "版本播放" }));
+    const slider = screen.getByLabelText("版本时间轴") as HTMLInputElement;
+    expect(slider).toHaveValue("2");
+    expect(slider.max).toBe("2");
+    expect(screen.getByText(/第 3 \/ 3 版/)).toBeInTheDocument();
+    // 拖到初始版本：两条日程消失
+    fireEvent.change(slider, { target: { value: "0" } });
+    expect(screen.getByText(/第 1 \/ 3 版/)).toBeInTheDocument();
+    expect(screen.queryByText("事件A")).toBeNull();
+    expect(screen.queryByText("事件B")).toBeNull();
+    // 关闭版本播放
+    fireEvent.click(screen.getByRole("button", { name: "关闭版本播放" }));
+    expect(screen.queryByLabelText("版本时间轴")).toBeNull();
+  });
+
+  it("无操作时打开版本播放显示暂无历史操作", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "版本播放" }));
+    expect(screen.getByText("暂无历史操作")).toBeInTheDocument();
+    expect(screen.queryByLabelText("版本时间轴")).toBeNull();
+  });
 });
 
 describe("ScheduleApp (switcher & week view)", () => {

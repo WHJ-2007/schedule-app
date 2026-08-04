@@ -30,6 +30,7 @@ import SelectionBubble from "./selection-bubble";
 import WeekTimeline from "./week-timeline";
 import EventPanel, { emptyForm, type FormState } from "./event-panel";
 import UndoToast from "./undo-toast";
+import VersionPlayer from "./version-player";
 
 function sortByTime(list: ScheduleEvent[]): ScheduleEvent[] {
   return [...list].sort((a, b) => {
@@ -975,6 +976,14 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
         />
       )}
       <Settings events={events} onImport={replaceEvents} />
+      {playerOpen && (
+        <VersionPlayer
+          history={history}
+          index={index}
+          onJump={jumpToIndex}
+          onClose={() => setPlayerOpen(false)}
+        />
+      )}
       {toast && (
         <UndoToast
           text={toast.text}
