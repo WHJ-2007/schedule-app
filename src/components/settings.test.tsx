@@ -33,6 +33,32 @@ describe("settings", () => {
     expect(dialog.querySelector(".backdrop-blur-xl")).not.toBeNull();
   });
 
+  it("关闭播放与打开相反的反向动画，动画结束后卸载", () => {
+    renderSettings();
+    fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭设置" }));
+    const dialog = screen.getByRole("dialog", { name: "设置" });
+    expect(dialog.className).toContain("anim-fade-out"); // 遮罩淡出（打开为淡入）
+    expect(dialog.className).not.toContain("anim-fade-in");
+    const panel = dialog.querySelector(".max-w-md");
+    expect(panel!.className).toContain("anim-scale-out"); // 面板缩小淡出
+    expect(panel!.className).not.toContain("anim-scale-in");
+    // 动画结束（target === currentTarget）后卸载
+    fireEvent.animationEnd(dialog, { target: dialog });
+    expect(screen.queryByRole("dialog", { name: "设置" })).toBeNull();
+    expect(screen.getByRole("button", { name: "打开设置" })).toBeInTheDocument();
+  });
+
+  it("点击遮罩同样关闭并播放反向动画", () => {
+    renderSettings();
+    fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
+    const dialog = screen.getByRole("dialog", { name: "设置" });
+    fireEvent.mouseDown(dialog); // 遮罩 onMouseDown 关闭
+    expect(dialog.className).toContain("anim-fade-out");
+    fireEvent.animationEnd(dialog, { target: dialog });
+    expect(screen.queryByRole("dialog", { name: "设置" })).toBeNull();
+  });
+
   it("tab 切换：高亮块跟随选中按钮滑动，内容区带缩放动画", () => {
     renderSettings();
     fireEvent.click(screen.getByRole("button", { name: "打开设置" }));

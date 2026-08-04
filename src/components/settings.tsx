@@ -15,6 +15,7 @@ export default function Settings({
   onImport: (list: ScheduleEvent[]) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [tab, setTab] = useState<Tab>("log");
   const [page, setPage] = useState(1);
   const [importMsg, setImportMsg] = useState<string | null>(null);
@@ -70,6 +71,9 @@ export default function Settings({
   const pageCount = getChangelogPageCount();
   const entries = getChangelogPage(page);
 
+  // 关闭先播反向动画（缩放淡出），动画结束后再卸载
+  const close = () => setClosing(true);
+
   return (
     <>
       <button
@@ -77,6 +81,7 @@ export default function Settings({
         aria-label="打开设置"
         onClick={() => {
           setOpen(true);
+          setClosing(false);
           setPage(1);
         }}
         className="fixed bottom-6 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-black/10 bg-white/70 text-xl shadow-lg backdrop-blur transition hover:bg-white"
@@ -87,11 +92,23 @@ export default function Settings({
         <div
           role="dialog"
           aria-label="设置"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm anim-fade-in"
-          onMouseDown={() => setOpen(false)}
+          className={
+            "fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm " +
+            (closing ? "anim-fade-out" : "anim-fade-in")
+          }
+          onMouseDown={close}
+          onAnimationEnd={(e) => {
+            if (closing && e.target === e.currentTarget) {
+              setOpen(false);
+              setClosing(false);
+            }
+          }}
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-white/40 bg-white/70 p-6 shadow-xl max-h-[90vh] overflow-y-auto anim-scale-in backdrop-blur-xl"
+            className={
+              "w-full max-w-md rounded-2xl border border-white/40 bg-white/70 p-6 shadow-xl max-h-[90vh] overflow-y-auto backdrop-blur-xl " +
+              (closing ? "anim-scale-out" : "anim-scale-in")
+            }
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
@@ -99,7 +116,7 @@ export default function Settings({
               <button
                 type="button"
                 aria-label="关闭设置"
-                onClick={() => setOpen(false)}
+                onClick={close}
                 className="text-neutral-400 transition hover:text-neutral-900"
               >
                 ✕
