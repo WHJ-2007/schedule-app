@@ -694,4 +694,45 @@ describe("WeekTimeline (重叠事件并排)", () => {
       { id: "a", date: "2026-08-03", time: "09:00", endTime: "09:05" },
     ]);
   });
+
+  it("选中事件块后出现批量颜色工具条", () => {
+    renderTimeline([[ev("a", "晨会", "09:30", "11:00")], ...emptyWeek.slice(1)]);
+    fireEvent.click(screen.getByRole("button", { name: /日程 晨会/ }));
+    expect(screen.getByTestId("batch-color-bar")).toBeInTheDocument();
+    expect(screen.getByText("已选 1")).toBeInTheDocument();
+  });
+
+  it("工具条点色点批量回调全部选中", () => {
+    const onBatchColor = vi.fn();
+    renderTimeline(
+      [[ev("a", "晨会", "09:30", "11:00"), ev("b", "评审", "10:00", "11:00")], ...emptyWeek.slice(1)],
+      { onBatchColor }
+    );
+    expandFold();
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    // 展开态 1px = 2 分钟：150px=05:00、400px=13:20，框选覆盖两块
+    fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 150 });
+    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 400 });
+    fireEvent.pointerUp(col, { pointerId: 1 });
+    expect(screen.getByText("已选 2")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "批量颜色 #ef4444" }));
+    expect(onBatchColor).toHaveBeenCalledWith(["a", "b"], "#ef4444");
+  });
+
+  it("自定义颜色的日程块内联背景色，未设色不覆盖主题色", () => {
+    const colored = { ...ev("a", "晨会", "09:30", "11:00"), color: "#ef4444" };
+    renderTimeline([[colored, ev("b", "评审", "09:00", "10:00")], ...emptyWeek.slice(1)]);
+    const coloredBlock = screen.getByRole("button", { name: /日程 晨会/ });
+    expect(coloredBlock.style.backgroundColor).toMatch(/239, 68, 68/);
+    const plainBlock = screen.getByRole("button", { name: /日程 评审/ });
+    expect(plainBlock.style.backgroundColor).toBe("");
+  });
+
+  it("自定义颜色的全天条目实心背景白字", () => {
+    const colored = { ...ev("c", "全天事项", ""), color: "#22c55e" };
+    renderTimeline([[colored], ...emptyWeek.slice(1)]);
+    const item = screen.getByRole("button", { name: /编辑 全天事项/ });
+    expect(item.style.backgroundColor).toMatch(/34, 197, 94/);
+    expect(item.className).toContain("text-white!");
+  });
 });

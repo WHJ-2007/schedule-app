@@ -329,6 +329,34 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(screen.getAllByRole("button", { name: "日程 晚间练习" })).toHaveLength(3);
   });
 
+  it("批量设色：框选多个 → 工具条点色点 → 全部变", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    const now = new Date();
+    const addBtn = `在${now.getMonth() + 1}月${now.getDate()}日添加日程`;
+    for (const title of ["批量A", "批量B"]) {
+      fireEvent.click(screen.getByRole("button", { name: addBtn }));
+      fireEvent.change(screen.getByLabelText(/标题/), { target: { value: title } });
+      fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "09:00" } });
+      fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    }
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.click(screen.getByRole("button", { name: /展开凌晨时段/ }));
+    // 从真实事件块反查所在列（残影 ghost 里的月历格会干扰 document 级查询）
+    const todayCol = screen
+      .getByRole("button", { name: /日程 批量A/ })
+      .closest("[data-date]")!;
+    // 展开态 1px = 2 分钟：250px=07:28、380px=11:48（避开 210–236px 条带，覆盖 09:00–11:00 两块）
+    fireEvent.pointerDown(todayCol, { pointerId: 1, clientX: 150, clientY: 250 });
+    fireEvent.pointerMove(todayCol, { pointerId: 1, clientX: 150, clientY: 380 });
+    fireEvent.pointerUp(todayCol, { pointerId: 1 });
+    expect(screen.getByText("已选 2")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "批量颜色 #ef4444" }));
+    const a = screen.getByRole("button", { name: /日程 批量A/ });
+    const b = screen.getByRole("button", { name: /日程 批量B/ });
+    expect(a.style.backgroundColor).toMatch(/239, 68, 68/);
+    expect(b.style.backgroundColor).toMatch(/239, 68, 68/);
+  });
+
   it("周视图时间轴事件块点击直接打开编辑面板并回填结束时间", () => {
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();

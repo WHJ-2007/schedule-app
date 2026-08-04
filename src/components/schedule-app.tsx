@@ -117,6 +117,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     toggleDone,
     replaceEvents,
     applyMoveAll,
+    setEventColors,
     undo,
     redo,
     jumpToIndex,
@@ -758,7 +759,14 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                         {dayList.length > 0 && (
                           <span className={tokens.cell.eventChipArea ?? "mt-1 w-full space-y-0.5 px-0.5"}>
                             {dayList.slice(0, indicatorCap).map((e) => (
-                              <span key={e.id} className={tokens.cell.eventChip}>
+                              <span
+                                key={e.id}
+                                className={tokens.cell.eventChip}
+                                style={{
+                                  backgroundColor: e.color ? e.color + "14" : undefined,
+                                  borderLeft: e.color ? `3px solid ${e.color}` : undefined,
+                                }}
+                              >
                                 {e.title}
                               </span>
                             ))}
@@ -799,6 +807,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                     onToggleDone={toggleDone}
                     onDelete={deleteEvent}
                     onMoveAll={applyMoveAll}
+                    onBatchColor={setEventColors}
                     onSelectionChange={setSelectedIds}
                     cols={1}
                     rootClass="min-h-0 flex-1"
@@ -855,6 +864,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                     onToggleDone={toggleDone}
                     onDelete={deleteEvent}
                     onMoveAll={applyMoveAll}
+                    onBatchColor={setEventColors}
                     onSelectionChange={setSelectedIds}
                   />
                 </div>
