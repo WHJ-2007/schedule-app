@@ -16,6 +16,7 @@ import type { ThemeTokens } from "./theme-tokens";
 
 const HOUR_PX = 30; // 每小时高度（像素）：一屏能放下所有时间
 const SNAP_MIN = 30; // 拖选初始占位时长（未移动时选区的最小显示宽度）
+const MOVE_SNAP_MIN = 5; // 事件挪动松手落点吸附单位：偏移取整到 5 分钟
 const MIN_DRAG_MIN = 5; // 拖选新建的最小时长：更短视为单击不误建
 const GUTTER = 48; // 左侧刻度列宽度
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -119,8 +120,6 @@ export default function WeekTimeline({
     setEditAnchor(null);
   }, [dates]);
 
-  const snap = (minutes: number) => Math.round(minutes / SNAP_MIN) * SNAP_MIN;
-
   const bandTop = folded ? 0 : 7 * HOUR_PX; // 条带 y：折叠时在顶部（0:00 起），展开时在 6:00 与 7:00 之间
   const bandH = folded ? FOLD_BAND_H : EXPAND_BAND_H;
   const dayHeight = (folded ? 18 : 24) * HOUR_PX + bandH;
@@ -132,17 +131,7 @@ export default function WeekTimeline({
     return (m * HOUR_PX) / 60;
   };
 
-  // 可见 y 坐标 → 分钟；条带区域返回 null（不创建/不更新）
-  const minutesAtY = (y: number) => {
-    const f = foldedRef.current;
-    const bTop = f ? 0 : 7 * HOUR_PX;
-    const bH = f ? FOLD_BAND_H : EXPAND_BAND_H;
-    if (y < bTop) return snap((y / HOUR_PX) * 60);
-    if (y < bTop + bH) return null;
-    return snap(((y - bTop - bH) / HOUR_PX) * 60 + FOLD_END);
-  };
-
-  // 原始分钟（不吸附）：供光标横线与时刻标签使用；条带区域返回 null
+  // 原始分钟（不吸附）：供光标横线、时刻标签、拖选新建与挪动基准使用；条带区域返回 null
   const rawMinAtY = (y: number) => {
     const f = foldedRef.current;
     const bTop = f ? 0 : 7 * HOUR_PX;
@@ -194,8 +183,10 @@ export default function WeekTimeline({
     const m = moveRef.current;
     if (m) {
       const dx = Math.max(m.dxMin, Math.min(m.dxMax, colFromX(e.clientX, m.colRects) - m.downCol));
-      const curMin = rawMinAtY(e.clientY - m.top); // 事件挪动按精确分钟，与拖选新建一致
-      const dy = curMin == null ? m.dy : Math.max(m.dyMin, Math.min(m.dyMax, curMin - m.downMin));
+      const curMin = rawMinAtY(e.clientY - m.top);
+      // 落点偏移吸附到 5 分钟：先按原始偏移取整再钳制，避免吸附把落点推出边界
+      const dyRaw = curMin == null ? m.dy : Math.max(m.dyMin, Math.min(m.dyMax, curMin - m.downMin));
+      const dy = Math.max(m.dyMin, Math.min(m.dyMax, Math.round(dyRaw / MOVE_SNAP_MIN) * MOVE_SNAP_MIN));
       const next = { ...m, dx, dy };
       moveRef.current = next;
       setMove(next);

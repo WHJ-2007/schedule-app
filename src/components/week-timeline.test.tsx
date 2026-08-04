@@ -393,6 +393,21 @@ describe("WeekTimeline (整体挪动)", () => {
     });
   });
 
+  it("整体挪动落点吸附到 5 分钟（偏移非 5 倍数时取整）", () => {
+    const onMove = vi.fn();
+    const a = ev("a", "晨会", "09:00", "10:00");
+    renderTimeline([[a], ...emptyWeek.slice(1)], { onMove });
+    const block = screen.getByRole("button", { name: /日程 晨会/ });
+    fireEvent.pointerDown(block, { pointerId: 1, clientX: 50, clientY: 100 }); // 9:00
+    fireEvent.pointerMove(block, { pointerId: 1, clientX: 150, clientY: 141.5 }); // 10:23，偏移 83 分钟
+    fireEvent.pointerUp(block, { pointerId: 1 });
+    expect(onMove).toHaveBeenCalledWith("a", {
+      date: "2026-08-04",
+      time: "10:25", // 83 → 85（吸附 5 分钟）
+      endTime: "11:25",
+    });
+  });
+
   it("纵向拖拽钳制在当天内（不越过午夜）", () => {
     const onMove = vi.fn();
     const a = ev("a", "夜跑", "23:00", "23:30");
