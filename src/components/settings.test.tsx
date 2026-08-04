@@ -52,6 +52,8 @@ describe("settings", () => {
     // 内容区切换带缩放动画
     fireEvent.click(dataBtn);
     expect(screen.getByRole("button", { name: /导出全部日程/ }).closest(".anim-scale-in")).toBeTruthy();
+    // 高亮块与按钮同高：容器 pb-3 时 pill 底部应停在内容区下沿（bottom-3）
+    expect(pill.className).toContain("bottom-3");
   });
 
   it("导入导出 JSON 包装格式：解包 events 并整体替换", async () => {

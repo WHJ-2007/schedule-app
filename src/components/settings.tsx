@@ -112,7 +112,7 @@ export default function Settings({
               <div
                 aria-hidden
                 data-testid="tab-pill"
-                className="absolute bottom-0 top-0 rounded-full bg-neutral-900 transition-all duration-200 ease-out"
+                className="absolute bottom-3 top-0 rounded-full bg-neutral-900 transition-all duration-200 ease-out"
                 style={{ left: pill.left, width: pill.width, opacity: pill.width ? 1 : 0 }}
               />
               <button
