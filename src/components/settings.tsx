@@ -7,6 +7,10 @@ import type { ScheduleEvent } from "@/lib/events";
 
 type Tab = "log" | "data";
 
+// 面板 p-6 上下各 24px：height 是 border-box，内容区实际高度 = panelH − 48，
+// 测量值需补偿，否则内容底部（翻页按钮等）被固定高度裁掉
+const PANEL_PAD_V = 48;
+
 export default function Settings({
   events,
   onImport,
@@ -46,7 +50,7 @@ export default function Settings({
     if (!el) return;
     const measure = () => {
       const h = el.offsetHeight;
-      if (h > 0) setPanelH(h);
+      if (h > 0) setPanelH(h + PANEL_PAD_V);
     };
     if (typeof ResizeObserver === "undefined") {
       measure();

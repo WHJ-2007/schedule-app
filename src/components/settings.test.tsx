@@ -152,6 +152,8 @@ describe("settings", () => {
     const inner = panel.firstElementChild as HTMLElement;
     Object.defineProperty(inner, "offsetHeight", { value: 480, configurable: true });
     fireEvent.click(screen.getByRole("button", { name: "下一页 ›" }));
-    expect(panel.style.height).toBe("480px"); // 测量后写入，配合 transition-[height] 拉伸
+    // 测量值 + p-6 上下 48px 补偿：height 是 border-box，内容区实际高度 = panelH − 48，
+    // 不补偿会裁掉内容底部（翻页按钮）
+    expect(panel.style.height).toBe("528px");
   });
 });
