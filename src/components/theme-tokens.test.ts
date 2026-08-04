@@ -84,4 +84,28 @@ describe("theme tokens", () => {
       "font-hand rounded-lg bg-[#4a7bb5] px-4 py-2 text-white transition",
     );
   });
+
+  it.each([1, 6])("主题 %i 编辑按钮与日程块颜色不同", (n) => {
+    const t = THEME_TOKENS[n];
+    const colorOf = (s: string) => s.match(/bg-(?:\[[^\]]+\]|[\w-]+)/)?.[0] ?? "";
+    expect(colorOf(t.weekView.eventEdit)).not.toBe(colorOf(t.weekView.eventBlock));
+  });
+
+  it("编辑按钮为深色工具风格", () => {
+    expect(THEME_TOKENS[1].weekView.eventEdit).toContain("bg-neutral-900");
+    expect(THEME_TOKENS[1].weekView.eventEdit).toContain("text-white");
+    expect(THEME_TOKENS[6].weekView.eventEdit).toContain("bg-[#4a3f35]");
+  });
+
+  it("极简主题拖拽气泡白底黑字", () => {
+    const tip = THEME_TOKENS[1].weekView.dragTip;
+    expect(tip).toContain("bg-white");
+    expect(tip).toContain("text-neutral-900");
+  });
+
+  it.each([1, 6])("主题 %i 光标横线与标签令牌非空", (n) => {
+    const w = THEME_TOKENS[n].weekView;
+    expect(w.cursorLine.length).toBeGreaterThan(0);
+    expect(w.cursorLabel.length).toBeGreaterThan(0);
+  });
 });
