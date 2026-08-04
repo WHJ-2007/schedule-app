@@ -73,6 +73,51 @@ describe("WeekTimeline", () => {
     expect(screen.getByTestId("header-scrollbar-gap")).toHaveStyle({ width: "30px" });
   });
 
+  it("重复日程（多实例同 id）拖边缘只拉伸被拖的那一个实例", () => {
+    renderTimeline([
+      [ev("r", "重复日程", "09:00", "10:00", 0)],
+      [ev("r", "重复日程", "09:00", "10:00", 1)],
+      [ev("r", "重复日程", "09:00", "10:00", 2)],
+      [ev("r", "重复日程", "09:00", "10:00", 3)],
+      [ev("r", "重复日程", "09:00", "10:00", 4)],
+      [ev("r", "重复日程", "09:00", "10:00", 5)],
+      [ev("r", "重复日程", "09:00", "10:00", 6)],
+    ]);
+    let blocks = screen.getAllByRole("button", { name: /日程 重复日程/ });
+    fireEvent.click(blocks[0]);
+    const handles = screen.getAllByTestId("resize-handle-end");
+    expect(handles.length).toBe(7); // 同 id → 全部实例选中并显示手柄
+    // 拖第一个实例的结束手柄：y 130 = 10:00，y 150 = 10:40
+    fireEvent.pointerDown(handles[0], { pointerId: 1, clientX: 50, clientY: 130 });
+    fireEvent.pointerMove(handles[0], { pointerId: 1, clientX: 50, clientY: 150 });
+    blocks = screen.getAllByRole("button", { name: /日程 重复日程/ });
+    // 只有被拖的实例拉伸（9:00–10:40 = 100min → 50px），其余实例保持原时长 30px
+    expect(blocks[0].style.height).toBe("50px");
+    for (let i = 1; i < 7; i++) {
+      expect(blocks[i].style.height).toBe("30px");
+    }
+  });
+
+  it("重复日程整体拖动：拖入与其它事件重叠的列，仅被拖实例让位并排", () => {
+    renderTimeline([
+      [ev("r", "重复日程", "09:00", "10:00", 0)],
+      [ev("r", "重复日程", "09:00", "10:00", 1), ev("b", "站会", "09:30", "10:30", 1)],
+      [ev("r", "重复日程", "09:00", "10:00", 2)],
+      [ev("r", "重复日程", "09:00", "10:00", 3)],
+      [ev("r", "重复日程", "09:00", "10:00", 4)],
+      [ev("r", "重复日程", "09:00", "10:00", 5)],
+      [ev("r", "重复日程", "09:00", "10:00", 6)],
+    ]);
+    let blocks = screen.getAllByRole("button", { name: /日程 重复日程/ });
+    // 拖周一实例向右一列（dx=1）：与周二列的站会重叠 → 预览让位 2 轨
+    fireEvent.pointerDown(blocks[0], { pointerId: 1, clientX: 50, clientY: 100 });
+    fireEvent.pointerMove(blocks[0], { pointerId: 1, clientX: 150, clientY: 100 });
+    blocks = screen.getAllByRole("button", { name: /日程 重复日程/ });
+    expect(blocks.length).toBe(7); // 同 id 实例与站会同列不冲突，全部正常渲染
+    expect(blocks[0].style.width).toBe("calc(50% - 2px)"); // 周一实例预览在周二列占一轨
+    fireEvent.pointerUp(blocks[0], { pointerId: 1 });
+  });
+
   it("渲染小时刻度（默认折叠凌晨时段）", () => {
     renderTimeline(emptyWeek);
     expect(screen.getByText("7:00")).toBeInTheDocument();

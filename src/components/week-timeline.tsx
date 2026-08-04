@@ -43,6 +43,7 @@ type RegionState = {
 // 拖边缘调整大小：edge = 调整哪条边；curMin = 当前吸附分钟（预览用）
 type ResizeState = {
   id: string;
+  date: string; // 被拖实例的日期：重复日程多实例同 id，预览/提交只作用于被拖的那一个
   edge: "start" | "end";
   top: number; // 列顶视口 y
   downMin: number; // 按下分钟
@@ -66,9 +67,13 @@ type MoveState = {
   colRects: DOMRect[];
 };
 
+// 实例身份键：重复日程多实例同 id，用「id + 原日期」区分；_src 为拖动预览里变换前的日期
+type LayoutEvent = ScheduleEvent & { _src?: string };
+const posKey = (e: LayoutEvent) => `${e.id}:${e._src ?? e.date}`;
+
 // 同一时段重叠事件并排分列（Google 日历风格）：链式重叠归入同一簇，
 // 簇内按起点贪心分轨道，簇内全部事件宽度 = 100/簇内最大并发轨道数
-function layoutColumns(list: ScheduleEvent[]): Map<string, { track: number; tracks: number }> {
+function layoutColumns(list: LayoutEvent[]): Map<string, { track: number; tracks: number }> {
   const sorted = [...list].sort((a, b) => {
     const as = parseTimeToMinutes(a.time);
     const bs = parseTimeToMinutes(b.time);
@@ -115,7 +120,7 @@ function layoutColumns(list: ScheduleEvent[]): Map<string, { track: number; trac
       trackOf.set(i, track);
       max = Math.max(max, endsByTrack.length);
     }
-    for (const i of idxs) result.set(sorted[i].id, { track: trackOf.get(i)!, tracks: max });
+    for (const i of idxs) result.set(posKey(sorted[i]), { track: trackOf.get(i)!, tracks: max });
   }
   return result;
 }
@@ -318,6 +323,7 @@ export default function WeekTimeline({
               const day = parseDateKey(e.date);
               return {
                 ...e,
+                _src: e.date, // 身份键用原日期：同 id 重复实例拖入同列时互不覆盖
                 date: toDateKey(
                   addDays(day.getFullYear(), day.getMonth(), day.getDate(), activeMove.dx)
                 ),
@@ -343,7 +349,7 @@ export default function WeekTimeline({
     if (rz) {
       const raw = rawMinAtY(e.clientY - rz.top);
       if (raw != null) {
-        const ev = eventsRef.current.flat().find((x) => x.id === rz.id);
+        const ev = eventsRef.current.flat().find((x) => x.id === rz.id && x.date === rz.date);
         if (ev) {
           const s = parseTimeToMinutes(ev.time);
           const en = ev.endTime ? parseTimeToMinutes(ev.endTime) : s + 60;
@@ -440,7 +446,7 @@ export default function WeekTimeline({
     // 调整大小提交：一次 commit（撤销一条记录）
     const rz = resizeRef.current;
     if (rz) {
-      const ev = eventsRef.current.flat().find((x) => x.id === rz.id);
+      const ev = eventsRef.current.flat().find((x) => x.id === rz.id && x.date === rz.date);
       if (ev && rz.curMin !== rz.downMin) {
         onMoveAllRef.current([
           rz.edge === "start"
@@ -595,7 +601,7 @@ export default function WeekTimeline({
     if (raw == null) return;
     (e.currentTarget as HTMLElement).closest("[data-date]")?.setPointerCapture(e.pointerId);
     const snap = snapSelect(raw);
-    const r: ResizeState = { id: ev.id, edge, top: rects[col].top, downMin: snap, curMin: snap, colRects: rects };
+    const r: ResizeState = { id: ev.id, date: ev.date, edge, top: rects[col].top, downMin: snap, curMin: snap, colRects: rects };
     resizeRef.current = r;
     setResize(r);
   };
@@ -844,7 +850,8 @@ export default function WeekTimeline({
                   if (folded && start < FOLD_END && end > FOLD_START) return null;
                   const isSelected = selectedIds.includes(e.id);
                   const moving = move != null && isSelected;
-                  const isResizing = resize?.id === e.id;
+                  // 只对被拖的那一个实例做拉伸预览：重复日程多实例同 id，全匹配会一起拉伸
+                  const isResizing = resize?.id === e.id && resize.date === e.date;
                   // 正在进行的日程（今天此刻起止区间覆盖当前时间）：描蓝边高亮
                   const ongoing =
                     !isHidden(e) &&
@@ -852,12 +859,12 @@ export default function WeekTimeline({
                     start <= nowMin &&
                     nowMin < end;
                   // 拖动块看目标列的预览轨道（显示松手后将占的轨位）；其余块看本列预览
-                  const basePos = baseLayout.get(e.id) ?? { track: 0, tracks: 1 };
+                  const basePos = baseLayout.get(posKey(e)) ?? { track: 0, tracks: 1 };
                   const { track, tracks } = moving
                     ? (previewLayouts?.get(
                         Math.min(Math.max(i + move!.dx, 0), cols - 1)
-                      )?.get(e.id) ?? basePos)
-                    : (layout.get(e.id) ?? basePos);
+                      )?.get(posKey(e)) ?? basePos)
+                    : (layout.get(posKey(e)) ?? basePos);
                   let blockTop = yOf(start);
                   let blockH = (duration * HOUR_PX) / 60;
                   if (isResizing && resize) {
@@ -870,7 +877,7 @@ export default function WeekTimeline({
                   }
                   return (
                     <div
-                      key={e.id}
+                      key={posKey(e)}
                       role="button"
                       tabIndex={0}
                       aria-label={`日程 ${e.title}`}
