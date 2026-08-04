@@ -563,6 +563,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
       repeat: e.repeat
         ? { on: true, freq: e.repeat.freq, until: e.repeat.until ?? "" }
         : { on: false, freq: "", until: "" },
+      color: e.color ?? "",
     });
 
   const handleSave = () => {
@@ -583,6 +584,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
         endTime: form.endTime || undefined,
         description: form.description,
         repeat,
+        color: form.color || undefined,
       });
     } else {
       for (const d of form.dates) {
@@ -593,6 +595,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
           endTime: form.endTime || undefined,
           description: form.description,
           repeat,
+          color: form.color || undefined,
         });
       }
       setSelectedDateKey(form.dates[0]);

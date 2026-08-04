@@ -24,6 +24,9 @@ describe("EventPanel", () => {
     expect(screen.getByLabelText(/标题/)).toBeInTheDocument();
     expect(screen.getByLabelText(/开始时间/)).toBeInTheDocument();
     expect(screen.getByLabelText(/结束时间/)).toBeInTheDocument();
+    expect(screen.getByLabelText("时长")).toBeInTheDocument();
+    // 色盘：8 色点 + 默认格
+    expect(screen.getAllByLabelText(/颜色/).length).toBeGreaterThanOrEqual(9);
     expect(screen.getByLabelText(/描述/)).toBeInTheDocument();
     expect(screen.getByLabelText("重复")).toBeInTheDocument();
     // 未勾选重复时不展开频率选项
@@ -96,5 +99,59 @@ describe("EventPanel", () => {
   it("多日期显示同时添加提示", () => {
     renderPanel(emptyForm(["2026-08-05", "2026-08-06"]));
     expect(screen.getByText(/将同时添加到 2 天/)).toBeInTheDocument();
+  });
+
+  it("色盘：8 色 + 默认，点击色点与默认格写入 color", () => {
+    const onChange = vi.fn();
+    renderPanel(emptyForm(["2026-08-05"]), { onChange });
+    fireEvent.click(screen.getByRole("button", { name: "颜色 #ef4444" }));
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ color: "#ef4444" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "颜色 默认" }));
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ color: "" })
+    );
+  });
+
+  it("时长联动：改开始 → 结束 = 开始 + 当前时长", () => {
+    const onChange = vi.fn();
+    const form = { ...emptyForm(["2026-08-05"]), time: "09:00", endTime: "10:30" };
+    renderPanel(form, { onChange });
+    fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "11:00" } });
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ time: "11:00", endTime: "12:30" })
+    );
+  });
+
+  it("时长联动：改结束 → 时长自动为差值，开始不动", () => {
+    const onChange = vi.fn();
+    const form = { ...emptyForm(["2026-08-05"]), time: "09:00", endTime: "10:30" };
+    renderPanel(form, { onChange });
+    fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "10:00" } });
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ time: "09:00", endTime: "10:00" })
+    );
+  });
+
+  it("时长联动：改时长 → 结束 = 开始 + 时长（结束钳制 23:59）", () => {
+    const onChange = vi.fn();
+    const form = { ...emptyForm(["2026-08-05"]), time: "23:00", endTime: "23:30" };
+    renderPanel(form, { onChange });
+    fireEvent.change(screen.getByLabelText("时长"), { target: { value: "02:00" } });
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ time: "23:00", endTime: "23:59" })
+    );
+  });
+
+  it("无开始时时长输入保持可用且不崩溃", () => {
+    const onChange = vi.fn();
+    renderPanel(emptyForm(["2026-08-05"]), { onChange });
+    expect(screen.getByLabelText("时长")).toHaveValue("01:00"); // 缺省 60 分钟
+    fireEvent.change(screen.getByLabelText("时长"), { target: { value: "02:00" } });
+    // 无开始：时长直接作为结束时间，不崩溃
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ endTime: "02:00" })
+    );
   });
 });

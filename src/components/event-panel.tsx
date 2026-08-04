@@ -1,6 +1,8 @@
 "use client";
 
 import type { RepeatFreq } from "@/lib/events";
+import { parseTimeToMinutes, minutesToTime } from "@/lib/date";
+import { EVENT_COLORS } from "@/lib/colors";
 import type { ThemeTokens } from "./theme-tokens";
 
 export type FormState = {
@@ -11,6 +13,7 @@ export type FormState = {
   endTime: string;
   description: string;
   repeat: { on: boolean; freq: RepeatFreq | ""; until: string }; // 开关 + 频率 + 重复至；关闭 = 不重复
+  color: string; // 自定义颜色（空 = 默认，跟随主题）
 };
 
 export function emptyForm(dates: string[]): FormState {
@@ -22,6 +25,7 @@ export function emptyForm(dates: string[]): FormState {
     endTime: "",
     description: "",
     repeat: { on: false, freq: "", until: "" },
+    color: "",
   };
 }
 
@@ -50,6 +54,13 @@ export default function EventPanel({
   onClose: () => void;
 }) {
   const { dialog } = tokens;
+  const minutesOf = (t: string) => (t ? parseTimeToMinutes(t) : NaN);
+  // 当前时长（结束 − 开始，缺省 60 分钟，最短 15 分钟）
+  const curDuration = (f: FormState) => {
+    const s = minutesOf(f.time);
+    const en = minutesOf(f.endTime);
+    return isNaN(s) || isNaN(en) ? 60 : Math.max(15, en - s);
+  };
   return (
     <div
       role="dialog"
@@ -100,7 +111,37 @@ export default function EventPanel({
                 id="time"
                 type="time"
                 value={form.time}
-                onChange={(e) => onChange({ ...form, time: e.target.value })}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) return onChange({ ...form, time: v });
+                  // 改开始：结束 = 开始 + 当前时长（时长保持）
+                  onChange({
+                    ...form,
+                    time: v,
+                    endTime: minutesToTime(Math.min(1439, minutesOf(v) + curDuration(form))),
+                  });
+                }}
+                className={dialog.input}
+              />
+            </label>
+            <label htmlFor="duration" className="block flex-1">
+              <span className={dialog.inputLabel}>时长</span>
+              <input
+                id="duration"
+                type="time"
+                aria-label="时长"
+                value={minutesToTime(curDuration(form))}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) return;
+                  const dur = parseTimeToMinutes(v);
+                  if (!form.time) return onChange({ ...form, endTime: v });
+                  // 改时长：结束 = 开始 + 时长（开始不动，结束钳制 23:59）
+                  onChange({
+                    ...form,
+                    endTime: minutesToTime(Math.min(1439, minutesOf(form.time) + dur)),
+                  });
+                }}
                 className={dialog.input}
               />
             </label>
@@ -114,6 +155,39 @@ export default function EventPanel({
                 className={dialog.input}
               />
             </label>
+          </div>
+          <div>
+            <span className={dialog.inputLabel}>颜色</span>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {EVENT_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  aria-label={`颜色 ${c}`}
+                  onClick={() => onChange({ ...form, color: c })}
+                  className={
+                    "h-6 w-6 rounded-full border border-black/10 transition " +
+                    (form.color === c
+                      ? "ring-2 ring-neutral-900 ring-offset-1"
+                      : "hover:scale-110")
+                  }
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+              <button
+                type="button"
+                aria-label="颜色 默认"
+                onClick={() => onChange({ ...form, color: "" })}
+                className={
+                  "h-6 w-6 rounded-full border border-dashed border-neutral-400 text-[10px] leading-none text-neutral-500 transition " +
+                  (form.color === ""
+                    ? "ring-2 ring-neutral-900 ring-offset-1"
+                    : "hover:scale-110")
+                }
+              >
+                默
+              </button>
+            </div>
           </div>
           <label htmlFor="description" className="block">
             <span className={dialog.inputLabel}>描述</span>
