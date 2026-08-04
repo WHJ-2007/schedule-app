@@ -198,6 +198,17 @@ describe("WeekTimeline", () => {
     const col = container.querySelector('[data-date="2026-08-03"]')!;
     expect(col.className).toContain("border-blue-200");
   });
+
+  it("列头“今”标记：今天在本周时显示在当天列", () => {
+    renderTimeline(emptyWeek, { today: new Date(2026, 7, 4) }); // 8/4 在本周 8/3–8/9
+    expect(screen.getByRole("button", { name: "跳转到8月4日" }).textContent).toContain("今");
+    expect(screen.getByRole("button", { name: "跳转到8月3日" }).textContent).not.toContain("今");
+  });
+
+  it("列头“今”标记：今天不在本周时全部隐藏", () => {
+    renderTimeline(emptyWeek, { today: new Date(2026, 7, 10) }); // 8/10 在下一周
+    expect(screen.queryByText(/今/)).toBeNull();
+  });
 });
 
 describe("WeekTimeline (凌晨折叠)", () => {
@@ -408,6 +419,22 @@ describe("WeekTimeline (整体挪动)", () => {
     });
   });
 
+  it("挪动落点绝对对齐：事件时间本身以 5 为倍数（不再对相对偏移取整产生 1/6/11 结尾）", () => {
+    const onMove = vi.fn();
+    // 起点 9:03（非 5 倍数）：拖 1 分钟后落点应为 9:05 而不是 9:04
+    const a = ev("a", "晨会", "09:03", "10:03");
+    renderTimeline([[a], ...emptyWeek.slice(1)], { onMove });
+    const block = screen.getByRole("button", { name: /日程 晨会/ });
+    fireEvent.pointerDown(block, { pointerId: 1, clientX: 50, clientY: 100 }); // 按下处 9:00
+    fireEvent.pointerMove(block, { pointerId: 1, clientX: 50, clientY: 100.5 }); // +1 分钟
+    fireEvent.pointerUp(block, { pointerId: 1 });
+    expect(onMove).toHaveBeenCalledWith("a", {
+      date: "2026-08-03",
+      time: "09:05",
+      endTime: "10:05",
+    });
+  });
+
   it("纵向拖拽钳制在当天内（不越过午夜）", () => {
     const onMove = vi.fn();
     const a = ev("a", "夜跑", "23:00", "23:30");
@@ -547,5 +574,45 @@ describe("WeekTimeline (拖拽时间气泡)", () => {
     expect(screen.getByText("8月4日 10:20–11:20")).toBeInTheDocument();
     fireEvent.pointerUp(block, { pointerId: 1 });
     expect(screen.queryByText("8月4日 10:20–11:20")).toBeNull();
+  });
+});
+
+describe("WeekTimeline (重叠事件并排)", () => {
+  it("同一时段重叠事件按轨道并排，宽度均分", () => {
+    const a = ev("a", "会议", "09:00", "10:30");
+    const b = ev("b", "访谈", "09:30", "10:00");
+    renderTimeline([[a, b], ...emptyWeek.slice(1)]);
+    const ba = screen.getByRole("button", { name: /日程 会议/ });
+    const bb = screen.getByRole("button", { name: /日程 访谈/ });
+    // 起点早的占左轨道，宽各 50%
+    expect(ba.style.left).toBe("0%");
+    expect(ba.style.width).toBe("calc(50% - 2px)");
+    expect(bb.style.left).toBe("50%");
+    expect(bb.style.width).toBe("calc(50% - 2px)");
+  });
+
+  it("链式重叠归入同一簇：A 结束后 C 复用其轨道（簇内最大并发 2）", () => {
+    const a = ev("a", "A", "09:00", "10:00");
+    const b = ev("b", "B", "09:30", "10:30");
+    const c = ev("c", "C", "10:00", "11:00");
+    renderTimeline([[a, b, c], ...emptyWeek.slice(1)]);
+    const ba = screen.getByRole("button", { name: /日程 A/ });
+    const bb = screen.getByRole("button", { name: /日程 B/ });
+    const bc = screen.getByRole("button", { name: /日程 C/ });
+    // 簇内最大并发 2：A、C 在左轨，B 在右轨，各宽 50%
+    expect(ba.style.left).toBe("0%");
+    expect(bb.style.left).toBe("50%");
+    expect(bb.style.width).toBe("calc(50% - 2px)");
+    expect(bc.style.left).toBe("0%");
+    expect(bc.style.width).toBe("calc(50% - 2px)");
+  });
+
+  it("不重叠事件占满整列宽度", () => {
+    const a = ev("a", "晨会", "09:00", "10:00");
+    const b = ev("b", "评审", "11:00", "12:00");
+    renderTimeline([[a, b], ...emptyWeek.slice(1)]);
+    const ba = screen.getByRole("button", { name: /日程 晨会/ });
+    expect(ba.style.left).toBe("0%");
+    expect(ba.style.width).toBe("calc(100% - 2px)");
   });
 });

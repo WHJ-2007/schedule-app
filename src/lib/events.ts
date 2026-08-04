@@ -1,4 +1,7 @@
-export type RepeatFreq = "daily" | "weekly" | "monthly";
+export type RepeatFreq = "daily" | "weekly" | "monthly" | "weekday" | "weekend";
+
+// 重复规则：until 为重复截止日期（含），缺省 = 无限重复（展开时由视图范围兜底）
+export type RepeatRule = { freq: RepeatFreq; until?: string };
 
 export type ScheduleEvent = {
   id: string;
@@ -8,7 +11,7 @@ export type ScheduleEvent = {
   endTime?: string; // "HH:mm"，缺省时按 1 小时显示
   description: string;
   done: boolean;
-  repeat?: { freq: RepeatFreq; until: string }; // 重复规则：until 为重复截止日期（含）
+  repeat?: RepeatRule;
 };
 
 export type EventInput = {
@@ -17,7 +20,7 @@ export type EventInput = {
   time?: string;
   endTime?: string;
   description?: string;
-  repeat?: { freq: RepeatFreq; until: string };
+  repeat?: RepeatRule;
 };
 
 export const STORAGE_KEY = "schedule-demo-events";
@@ -65,24 +68,36 @@ export function buildSampleEvents(now: Date): ScheduleEvent[] {
   return events;
 }
 
-// 重复事件展开为全部实例日期（含起点，截至 until；无 repeat 时仅自身日期）
-export function expandEventDates(e: ScheduleEvent): string[] {
+// 重复事件展开为全部实例日期（含起点；until 缺省 = 无限，展开到 horizon 兜底；
+// 两者都不存在时仅自身日期）。工作日 = 周一至周五，周末 = 周六、周日。
+export function expandEventDates(e: ScheduleEvent, horizon?: string): string[] {
   if (!e.repeat) return [e.date];
   const repeat = e.repeat;
-  const out = [e.date];
-  if (repeat.until < e.date) return out;
+  // 工作日/周末重复只保留符合条件的日期（起点也参与过滤，保证输出全符合频率）
+  const isAllowed = (d: Date) => {
+    const dow = d.getDay();
+    if (repeat.freq === "weekday") return dow !== 0 && dow !== 6;
+    if (repeat.freq === "weekend") return dow === 0 || dow === 6;
+    return true;
+  };
   const [y0, m0, d0] = e.date.split("-").map(Number);
-  const [y1, m1, d1] = repeat.until.split("-").map(Number);
+  const out = isAllowed(new Date(y0, m0 - 1, d0)) ? [e.date] : [];
+  const until = repeat.until ?? horizon;
+  if (!until || until < e.date) return out;
+  const [y1, m1, d1] = until.split("-").map(Number);
   const limit = new Date(y1, m1 - 1, d1);
   let cur = new Date(y0, m0 - 1, d0);
   const step = () => {
-    if (repeat.freq === "daily") return new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1);
+    if (repeat.freq === "daily" || repeat.freq === "weekday" || repeat.freq === "weekend") {
+      return new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1);
+    }
     if (repeat.freq === "weekly") return new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 7);
     // 每月按起点同日；目标月没有该日（如 31 日在 2 月）则取月末，下月恢复起点日
     const daysInTarget = new Date(cur.getFullYear(), cur.getMonth() + 2, 0).getDate();
     return new Date(cur.getFullYear(), cur.getMonth() + 1, Math.min(d0, daysInTarget));
   };
   for (cur = step(); cur <= limit; cur = step()) {
+    if (!isAllowed(cur)) continue;
     out.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`);
   }
   return out;
@@ -122,6 +137,33 @@ export function isValidEvent(e: unknown): e is ScheduleEvent {
   if (typeof e !== "object" || e === null) return false;
   const o = e as Record<string, unknown>;
   return typeof o.id === "string" && typeof o.title === "string" && typeof o.date === "string";
+}
+
+// 导入校验：逐条清洗为结构合法的干净日程（未知字段丢弃，重复频率只认合法值）
+export function sanitizeImportedEvents(raw: unknown): ScheduleEvent[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ScheduleEvent[] = [];
+  for (const item of raw) {
+    if (!isValidEvent(item)) continue;
+    const o = item as Record<string, unknown>;
+    const r = o.repeat as Record<string, unknown> | undefined;
+    const freq = typeof r?.freq === "string" ? r.freq : "";
+    const repeat: RepeatRule | undefined =
+      r && (freq === "daily" || freq === "weekly" || freq === "monthly" || freq === "weekday" || freq === "weekend")
+        ? { freq, until: typeof r.until === "string" && r.until ? r.until : undefined }
+        : undefined;
+    out.push({
+      id: o.id as string,
+      title: o.title as string,
+      date: o.date as string,
+      time: typeof o.time === "string" ? o.time : "",
+      endTime: typeof o.endTime === "string" && o.endTime ? o.endTime : undefined,
+      description: typeof o.description === "string" ? o.description : "",
+      done: Boolean(o.done),
+      repeat,
+    });
+  }
+  return out;
 }
 
 export function saveEvents(list: ScheduleEvent[]): void {

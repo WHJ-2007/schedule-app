@@ -16,7 +16,7 @@ import type { ThemeTokens } from "./theme-tokens";
 
 const HOUR_PX = 30; // 每小时高度（像素）：一屏能放下所有时间
 const SNAP_MIN = 30; // 拖选初始占位时长（未移动时选区的最小显示宽度）
-const MOVE_SNAP_MIN = 5; // 事件挪动松手落点吸附单位：偏移取整到 5 分钟
+const MOVE_SNAP_MIN = 5; // 事件挪动松手落点吸附单位：事件时间本身对齐到 5 分钟倍数（0/5/10 结尾）
 const MIN_DRAG_MIN = 5; // 拖选新建的最小时长：更短视为单击不误建
 const GUTTER = 48; // 左侧刻度列宽度
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -53,6 +53,60 @@ type MoveState = {
 };
 
 export type EventMovePatch = { date: string; time: string; endTime?: string };
+
+// 同一时段重叠事件并排分列（Google 日历风格）：链式重叠归入同一簇，
+// 簇内按起点贪心分轨道，簇内全部事件宽度 = 100/簇内最大并发轨道数
+function layoutColumns(list: ScheduleEvent[]): Map<string, { track: number; tracks: number }> {
+  const sorted = [...list].sort((a, b) => {
+    const as = parseTimeToMinutes(a.time);
+    const bs = parseTimeToMinutes(b.time);
+    if (as !== bs) return as - bs;
+    const ae = a.endTime ? parseTimeToMinutes(a.endTime) : as + 60;
+    const be = b.endTime ? parseTimeToMinutes(b.endTime) : bs + 60;
+    return be - ae; // 同起点时长长的靠前，占用左侧轨道
+  });
+  const starts = sorted.map((e) => parseTimeToMinutes(e.time));
+  const ends = sorted.map((e, i) => (e.endTime ? parseTimeToMinutes(e.endTime) : starts[i] + 60));
+  // 并查集式分簇：事件 i 与任一更早的 j 重叠即同簇（重叠沿链传递）
+  const cluster = new Array<number>(sorted.length).fill(-1);
+  let cid = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    for (let j = 0; j < i; j++) {
+      if (starts[i] < ends[j] && starts[j] < ends[i]) {
+        if (cluster[i] === -1) cluster[i] = cluster[j];
+        else if (cluster[i] !== cluster[j]) {
+          const old = cluster[j];
+          for (let k = 0; k < i; k++) if (cluster[k] === old) cluster[k] = cluster[i];
+        }
+      }
+    }
+    if (cluster[i] === -1) cluster[i] = cid++;
+  }
+  const groups = new Map<number, number[]>();
+  sorted.forEach((_, i) => {
+    const arr = groups.get(cluster[i]) ?? [];
+    arr.push(i);
+    groups.set(cluster[i], arr);
+  });
+  const result = new Map<string, { track: number; tracks: number }>();
+  for (const idxs of groups.values()) {
+    const endsByTrack: number[] = [];
+    const trackOf = new Map<number, number>();
+    let max = 1;
+    for (const i of idxs) {
+      let track = endsByTrack.findIndex((t) => t <= starts[i]);
+      if (track === -1) {
+        track = endsByTrack.length;
+        endsByTrack.push(starts[i]);
+      }
+      endsByTrack[track] = ends[i];
+      trackOf.set(i, track);
+      max = Math.max(max, endsByTrack.length);
+    }
+    for (const i of idxs) result.set(sorted[i].id, { track: trackOf.get(i)!, tracks: max });
+  }
+  return result;
+}
 
 export default function WeekTimeline({
   tokens,
@@ -163,8 +217,12 @@ export default function WeekTimeline({
     0
   );
 
+  // 只查时间轴自身的列：document 级查询会捕获月视图的 42 个月历格子（同样带 data-date），
+  // 导致 rects[col].top 取到月历格子的坐标、拖选/挪动位置与鼠标错位
   const colRects = () =>
-    Array.from(document.querySelectorAll("[data-date]")).map((el) => el.getBoundingClientRect());
+    Array.from(timelineRef.current?.querySelectorAll("[data-date]") ?? []).map((el) =>
+      el.getBoundingClientRect()
+    );
 
   const colFromX = (x: number, rects: DOMRect[]) => {
     for (let i = 0; i < rects.length; i++) if (x < rects[i].right) return i;
@@ -183,28 +241,30 @@ export default function WeekTimeline({
     const m = moveRef.current;
     if (m) {
       const dx = Math.max(m.dxMin, Math.min(m.dxMax, colFromX(e.clientX, m.colRects) - m.downCol));
+      // 参考事件（选中组里第一个可见的）：绝对对齐以事件时间为基准
+      const first = selectedRef.current
+        .map((id) => eventsRef.current.flat().find((x) => x.id === id))
+        .find((x) => x && x.time && !isHidden(x));
+      const refStart = first ? parseTimeToMinutes(first.time) : m.downMin;
       const curMin = rawMinAtY(e.clientY - m.top);
-      // 落点偏移吸附到 5 分钟：先按原始偏移取整再钳制，避免吸附把落点推出边界
-      const dyRaw = curMin == null ? m.dy : Math.max(m.dyMin, Math.min(m.dyMax, curMin - m.downMin));
-      const dy = Math.max(m.dyMin, Math.min(m.dyMax, Math.round(dyRaw / MOVE_SNAP_MIN) * MOVE_SNAP_MIN));
+      // 落点绝对对齐 5 分钟：事件时间本身取整到 5 的倍数（0/5/10 结尾），
+      // 不再对相对偏移取整（否则起点非 5 倍数时会累计出 1/6/11 这类结尾）
+      const dyRaw = curMin == null ? m.dy : curMin - m.downMin;
+      const target = Math.round((refStart + dyRaw) / MOVE_SNAP_MIN) * MOVE_SNAP_MIN;
+      const dy = Math.max(m.dyMin, Math.min(m.dyMax, target - refStart));
       const next = { ...m, dx, dy };
       moveRef.current = next;
       setMove(next);
-      if (rect) {
-        const first = selectedRef.current
-          .map((id) => eventsRef.current.flat().find((x) => x.id === id))
-          .find((x) => x && x.time && !isHidden(x));
-        if (first) {
-          const s = parseTimeToMinutes(first.time);
-          const en = first.endTime ? parseTimeToMinutes(first.endTime) : s + 60;
-          const day = parseDateKey(first.date);
-          const nd = addDays(day.getFullYear(), day.getMonth(), day.getDate(), next.dx);
-          setTip({
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top,
-            text: `${nd.getMonth() + 1}月${nd.getDate()}日 ${minutesToTime(s + next.dy)}–${minutesToTime(en + next.dy)}`,
-          });
-        }
+      if (rect && first) {
+        const s = parseTimeToMinutes(first.time);
+        const en = first.endTime ? parseTimeToMinutes(first.endTime) : s + 60;
+        const day = parseDateKey(first.date);
+        const nd = addDays(day.getFullYear(), day.getMonth(), day.getDate(), next.dx);
+        setTip({
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+          text: `${nd.getMonth() + 1}月${nd.getDate()}日 ${minutesToTime(s + next.dy)}–${minutesToTime(en + next.dy)}`,
+        });
       }
       return;
     }
@@ -439,6 +499,7 @@ export default function WeekTimeline({
                 <div className="flex items-center justify-between gap-1">
                   <button
                     type="button"
+                    data-day-num={key}
                     onClick={() => onJumpToMonth(d)}
                     aria-label={`跳转到${d.getMonth() + 1}月${d.getDate()}日`}
                     className={tokens.weekView.columnHeader}
@@ -524,6 +585,7 @@ export default function WeekTimeline({
           {dates.map((d, i) => {
             const key = toDateKey(d);
             const timed = (eventsByDay[i] ?? []).filter((e) => e.time);
+            const layout = layoutColumns(timed);
             const isAnchor = key === anchorKey;
             return (
               <div
@@ -565,6 +627,7 @@ export default function WeekTimeline({
                   if (folded && start < FOLD_END && end > FOLD_START) return null;
                   const isSelected = selectedIds.includes(e.id);
                   const moving = move != null && isSelected;
+                  const { track, tracks } = layout.get(e.id) ?? { track: 0, tracks: 1 };
                   return (
                     <div
                       key={e.id}
@@ -586,6 +649,9 @@ export default function WeekTimeline({
                       }
                       style={{
                         top: yOf(start),
+                        // 重叠并排：按轨道百分比定位，块间留 2px 缝隙
+                        left: `${(track / tracks) * 100}%`,
+                        width: `calc(${100 / tracks}% - 2px)`,
                         height: (duration * HOUR_PX) / 60,
                         transform:
                           moving && move

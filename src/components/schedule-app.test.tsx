@@ -29,7 +29,36 @@ describe("ScheduleApp (month view)", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
     expect(screen.getByRole("heading", { name: /极简日程/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /今天/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "＋ 添加日程" })).toBeInTheDocument();
+    // 月视图大按钮已删除，改用当日时间轴列头的 ＋
+    expect(screen.queryByRole("button", { name: "＋ 添加日程" })).toBeNull();
+  });
+
+  it("月视图当日时间轴拖选位置与鼠标一致（不受月历格子干扰）", () => {
+    const spy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        // 月历格子（BUTTON 带 data-date）top 200 模拟真实布局；时间轴列（DIV data-date）top 0
+        const col = this.closest("[data-date]") as HTMLElement | null;
+        if (col && this.tagName === "BUTTON") {
+          const r = { left: 0, top: 200, width: 100, height: 40 };
+          return { ...r, right: r.left + r.width, bottom: r.top + r.height } as DOMRect;
+        }
+        if (col) {
+          const r = { left: 0, top: 0, width: 100, height: 500 };
+          return { ...r, right: r.left + r.width, bottom: r.top + r.height } as DOMRect;
+        }
+        return { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 } as DOMRect;
+      }
+    );
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: /展开凌晨时段/ }));
+    const col = document.querySelector("div[data-date]")!; // 时间轴列是 DIV，月历格是 BUTTON
+    fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 60 }); // 2:00
+    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 90 }); // 3:00
+    fireEvent.pointerUp(col, { pointerId: 1 });
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText(/开始时间/)).toHaveValue("02:00");
+    expect(screen.getByLabelText(/结束时间/)).toHaveValue("03:00");
+    spy.mockRestore();
   });
 
   it("点日期格显示当日标题", () => {
@@ -47,9 +76,12 @@ describe("ScheduleApp (month view)", () => {
     expect(screen.getByText(formatDayLabel(target))).toBeInTheDocument();
   });
 
-  it("添加日程到选中日", () => {
+  it("添加日程到选中日（当日时间轴列头 ＋）", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
-    fireEvent.click(screen.getByRole("button", { name: "＋ 添加日程" }));
+    const now = new Date();
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
+    );
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "测试日程" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     expect(screen.getAllByText("测试日程").length).toBeGreaterThan(0);
@@ -134,7 +166,10 @@ describe("ScheduleApp (switcher & week view)", () => {
 
   it("周视图点事件直接打开编辑弹窗", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
-    fireEvent.click(screen.getByRole("button", { name: "＋ 添加日程" }));
+    const now = new Date();
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
+    );
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "周视图事件" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
@@ -209,7 +244,10 @@ describe("ScheduleApp (switcher & week view)", () => {
 
   it("周视图时间轴事件块点击打开编辑弹窗并回填结束时间", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
-    fireEvent.click(screen.getByRole("button", { name: "＋ 添加日程" }));
+    const now = new Date();
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
+    );
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "时间段事件" } });
     fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "10:00" } });
     fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:30" } });
@@ -477,6 +515,22 @@ describe("ScheduleApp (view zoom transition)", () => {
     fireEvent.animationEnd(wrap());
     expect(screen.getByTestId("selection-bubble")).toBeInTheDocument();
   });
+
+  it("月→周切换：7 个日期数字飞行轨道覆盖本周全部日期，动画结束移除", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const fly = screen.getByTestId("week-num-fly");
+    const week = getWeekDates(new Date());
+    expect(fly.querySelectorAll('[data-testid="week-num-fly-item"]')).toHaveLength(7);
+    for (const d of week) {
+      expect(fly.querySelector(`[data-day-num="${toDateKey(d)}"]`)).not.toBeNull();
+    }
+    // 动画结束后移除
+    for (const el of Array.from(fly.querySelectorAll('[data-testid="week-num-fly-item"]'))) {
+      fireEvent.animationEnd(el);
+    }
+    expect(screen.queryByTestId("week-num-fly")).toBeNull();
+  });
 });
 
 describe("ScheduleApp (page-turn animation)", () => {
@@ -546,10 +600,12 @@ describe("ScheduleApp (page-turn animation)", () => {
 describe("ScheduleApp (recurring & day timeline)", () => {
   it("创建每天重复日程：周视图多天出现，编辑弹窗回填重复字段", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
-    fireEvent.click(screen.getByRole("button", { name: "＋ 添加日程" }));
-    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "每日冥想" } });
-    fireEvent.change(screen.getByLabelText(/重复/), { target: { value: "daily" } });
     const now = new Date();
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
+    );
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "每日冥想" } });
+    fireEvent.change(screen.getByLabelText("重复"), { target: { value: "daily" } });
     const until = toDateKey(addDays(now.getFullYear(), now.getMonth(), now.getDate(), 5));
     fireEvent.change(screen.getByLabelText(/重复至/), { target: { value: until } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
@@ -564,10 +620,12 @@ describe("ScheduleApp (recurring & day timeline)", () => {
 
   it("编辑弹窗删除按钮删除整组重复日程", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
-    fireEvent.click(screen.getByRole("button", { name: "＋ 添加日程" }));
-    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "待删除" } });
-    fireEvent.change(screen.getByLabelText(/重复/), { target: { value: "weekly" } });
     const now = new Date();
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
+    );
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "待删除" } });
+    fireEvent.change(screen.getByLabelText("重复"), { target: { value: "weekly" } });
     const until = toDateKey(addDays(now.getFullYear(), now.getMonth(), now.getDate(), 14));
     fireEvent.change(screen.getByLabelText(/重复至/), { target: { value: until } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
@@ -601,5 +659,94 @@ describe("ScheduleApp (recurring & day timeline)", () => {
     expect(
       screen.getByText(formatMonthTitle(now.getFullYear() - 1, now.getMonth()))
     ).toBeInTheDocument();
+  });
+
+  it("无限重复（重复至留空）在周视图每天显示、月视图有小卡片", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    const now = new Date();
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
+    );
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "无限重复" } });
+    fireEvent.change(screen.getByLabelText("重复"), { target: { value: "daily" } });
+    fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "09:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    // 本周从今天到周日每天一个实例
+    const week = getWeekDates(now);
+    const remaining = week.filter((d) => toDateKey(d) >= toDateKey(now)).length;
+    expect(screen.getAllByRole("button", { name: /日程 无限重复/ })).toHaveLength(remaining);
+    fireEvent.click(screen.getByRole("button", { name: "月" }));
+    expect(screen.getAllByText("无限重复").length).toBeGreaterThan(0);
+  });
+
+  it("工作日/周末重复只在对应日子显示（本周各 5/2 个实例）", () => {
+    const now = new Date();
+    const week = getWeekDates(now);
+    const monday = toDateKey(week[0]);
+    const saturday = toDateKey(week[5]);
+    localStorage.setItem(
+      "schedule-demo-events",
+      JSON.stringify([
+        { id: "wd", title: "工作日事件", date: monday, time: "09:00", description: "", done: false, repeat: { freq: "weekday" } },
+        { id: "we", title: "周末事件", date: saturday, time: "09:00", description: "", done: false, repeat: { freq: "weekend" } },
+      ])
+    );
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    expect(screen.getAllByRole("button", { name: /日程 工作日事件/ })).toHaveLength(5);
+    expect(screen.getAllByRole("button", { name: /日程 周末事件/ })).toHaveLength(2);
+  });
+});
+
+describe("ScheduleApp (设置导出/导入)", () => {
+  it("设置中一键导出：生成 JSON 下载", () => {
+    const urlAny = URL as unknown as Record<string, unknown>;
+    const origCreate = urlAny.createObjectURL;
+    const origRevoke = urlAny.revokeObjectURL;
+    urlAny.createObjectURL = vi.fn(() => "blob:mock");
+    urlAny.revokeObjectURL = vi.fn();
+    try {
+      render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+      fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
+      fireEvent.click(screen.getByRole("button", { name: "数据" }));
+      expect(screen.getByRole("button", { name: /导出全部日程/ }).textContent).toContain("条日程");
+      fireEvent.click(screen.getByRole("button", { name: /导出全部日程/ }));
+      expect(urlAny.createObjectURL as ReturnType<typeof vi.fn>).toHaveBeenCalled();
+    } finally {
+      urlAny.createObjectURL = origCreate;
+      urlAny.revokeObjectURL = origRevoke;
+    }
+  });
+
+  it("设置中一键导入：JSON 文件恢复日程并覆盖当前", async () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
+    fireEvent.click(screen.getByRole("button", { name: "数据" }));
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(
+      [
+        JSON.stringify([
+          { id: "imp-1", title: "导入日程", date: toDateKey(new Date()), time: "10:00", description: "", done: false },
+        ]),
+      ],
+      "events.json",
+      { type: "application/json" }
+    );
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect(screen.getByText(/已导入 1 条日程/)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "关闭设置" }));
+    expect(screen.getAllByText("导入日程").length).toBeGreaterThan(0);
+  });
+
+  it("导入非法 JSON 提示失败", async () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
+    fireEvent.click(screen.getByRole("button", { name: "数据" }));
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { files: [new File(["{{{not json"], "bad.json", { type: "application/json" })] },
+    });
+    await waitFor(() => expect(screen.getByText(/导入失败/)).toBeInTheDocument());
   });
 });

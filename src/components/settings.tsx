@@ -1,17 +1,64 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { THEMES, saveThemePath, getSavedThemePath } from "@/lib/themes";
 import { getChangelogPage, getChangelogPageCount } from "@/lib/changelog";
+import { sanitizeImportedEvents } from "@/lib/events";
+import type { ScheduleEvent } from "@/lib/events";
 
-type Tab = "theme" | "log";
+type Tab = "theme" | "log" | "data";
 
-export default function Settings() {
+export default function Settings({
+  events,
+  onImport,
+}: {
+  events: ScheduleEvent[];
+  onImport: (list: ScheduleEvent[]) => void;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("theme");
   const [page, setPage] = useState(1);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  // 一键导出：全部日程序列化为 JSON 文件下载
+  const exportAll = () => {
+    const payload = JSON.stringify(
+      { version: 1, exportedAt: new Date().toISOString(), events },
+      null,
+      2
+    );
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `日程导出-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  // 一键导入：读取 JSON 文件，清洗校验后整体替换
+  const handleImportFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const list = sanitizeImportedEvents(JSON.parse(String(reader.result)));
+        if (list.length === 0) {
+          setImportMsg("文件里没有可导入的日程数据");
+          return;
+        }
+        onImport(list);
+        setImportMsg(`已导入 ${list.length} 条日程`);
+      } catch {
+        setImportMsg("导入失败：文件不是有效的 JSON");
+      }
+    };
+    reader.readAsText(file);
+  };
 
   const current = getSavedThemePath();
   const pageCount = getChangelogPageCount();
@@ -82,6 +129,18 @@ export default function Settings() {
               >
                 更新日志
               </button>
+              <button
+                type="button"
+                onClick={() => setTab("data")}
+                className={
+                  "rounded-full px-4 py-1.5 text-sm transition " +
+                  (tab === "data"
+                    ? "bg-neutral-900 text-white"
+                    : "text-neutral-500 hover:bg-neutral-100")
+                }
+              >
+                数据
+              </button>
             </div>
 
             {tab === "theme" ? (
@@ -121,7 +180,7 @@ export default function Settings() {
                   );
                 })}
               </ul>
-            ) : (
+            ) : tab === "log" ? (
               <div className="mt-4">
                 {entries.length === 0 ? (
                   <p className="py-8 text-center text-sm text-neutral-400">暂无日志</p>
@@ -164,6 +223,41 @@ export default function Settings() {
                     下一页 ›
                   </button>
                 </div>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3">
+                <button
+                  type="button"
+                  onClick={exportAll}
+                  className="w-full rounded-xl border border-neutral-200 p-3 text-left transition hover:border-neutral-400"
+                >
+                  <span className="text-sm font-medium text-neutral-800">导出全部日程</span>
+                  <p className="mt-0.5 text-xs text-neutral-500">
+                    保存为 JSON 文件（共 {events.length} 条日程）
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="w-full rounded-xl border border-neutral-200 p-3 text-left transition hover:border-neutral-400"
+                >
+                  <span className="text-sm font-medium text-neutral-800">导入日程</span>
+                  <p className="mt-0.5 text-xs text-neutral-500">
+                    从 JSON 文件恢复，覆盖当前全部日程
+                  </p>
+                </button>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".json,application/json"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleImportFile(f);
+                    e.target.value = "";
+                  }}
+                />
+                {importMsg && <p className="text-xs text-neutral-500">{importMsg}</p>}
               </div>
             )}
           </div>

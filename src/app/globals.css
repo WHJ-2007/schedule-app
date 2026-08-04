@@ -66,6 +66,13 @@ body {
 }
 .anim-ghost-morph { animation: ghost-morph 420ms cubic-bezier(0.4, 0, 0.2, 1) both; }
 
+/* 月→周切换：月历里的 7 个日期数字先飞到周视图对应列头，周视图随后从锚点展开 */
+@keyframes num-fly {
+  from { transform: translate(0, 0) scale(1); opacity: 1; }
+  to { transform: translate(var(--f-tx), var(--f-ty)) scale(var(--f-s)); opacity: 0.15; }
+}
+.anim-num-fly { animation: num-fly 320ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+
 /* 全局按钮反馈动画：悬停轻微放大、按下收缩 */
 button {
   transition-duration: 150ms;

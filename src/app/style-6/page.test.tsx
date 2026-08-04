@@ -38,7 +38,10 @@ describe("style-6 page", () => {
 
   it("adds an event to the selected day via the form", () => {
     render(<Style6 />);
-    fireEvent.click(screen.getByRole("button", { name: "＋ 添加日程" }));
+    const now = new Date();
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
+    );
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "手账补记" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     expect(screen.getAllByText("手账补记").length).toBeGreaterThan(0);
@@ -48,7 +51,10 @@ describe("style-6 page", () => {
     // 清空事件存储，避免样本数据/前序用例污染
     localStorage.setItem(STORAGE_KEY, "[]");
     render(<Style6 />);
-    fireEvent.click(screen.getByRole("button", { name: "＋ 添加日程" }));
+    const now = new Date();
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
+    );
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "手账条目" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     const item = screen.getByRole("button", { name: /编辑 手账条目/ });

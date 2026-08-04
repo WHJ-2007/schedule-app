@@ -54,5 +54,10 @@ export function useEvents() {
     setEvents((prev) => toggleEventDone(prev, id));
   }, []);
 
-  return { events, addEvent, updateEvent, deleteEvent, toggleDone };
+  // 导入：整体替换全部日程（已校验清洗）
+  const replaceEvents = useCallback((list: ScheduleEvent[]) => {
+    setEvents(list);
+  }, []);
+
+  return { events, addEvent, updateEvent, deleteEvent, toggleDone, replaceEvents };
 }

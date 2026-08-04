@@ -9,6 +9,7 @@ import {
   saveEvents,
   loadEvents,
   expandEventDates,
+  sanitizeImportedEvents,
   STORAGE_KEY,
 } from "./events";
 
@@ -124,6 +125,93 @@ describe("expandEventDates", () => {
 
   it("截止早于起点：仅起点", () => {
     expect(expandEventDates(base({ freq: "daily", until: "2026-08-02" }))).toEqual(["2026-08-03"]);
+  });
+
+  it("weekday 工作日重复只展开周一至周五（2026-08-03 是周一）", () => {
+    expect(expandEventDates(base({ freq: "weekday", until: "2026-08-09" }))).toEqual([
+      "2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07",
+    ]);
+  });
+
+  it("weekend 周末重复只展开周六、周日", () => {
+    expect(expandEventDates(base({ freq: "weekend", until: "2026-08-09" }))).toEqual([
+      "2026-08-08", "2026-08-09",
+    ]);
+  });
+
+  it("无限重复（无 until）展开到 horizon 兜底", () => {
+    expect(expandEventDates(base({ freq: "daily" }), "2026-08-05")).toEqual([
+      "2026-08-03", "2026-08-04", "2026-08-05",
+    ]);
+  });
+
+  it("无 until 且无 horizon 时仅自身日期", () => {
+    expect(expandEventDates(base({ freq: "weekly" }))).toEqual(["2026-08-03"]);
+  });
+});
+
+describe("sanitizeImportedEvents", () => {
+  it("非数组返回空列表", () => {
+    expect(sanitizeImportedEvents("nope")).toEqual([]);
+    expect(sanitizeImportedEvents({ id: "a" })).toEqual([]);
+  });
+
+  it("清洗为干净结构：丢弃缺字段与非法重复频率", () => {
+    expect(
+      sanitizeImportedEvents([
+        { id: "a", title: "晨会", date: "2026-08-03", time: "09:00", description: "", done: false },
+        { id: 123, title: "坏数据", date: "2026-08-03" },
+        {
+          id: "b",
+          title: "重复项",
+          date: "2026-08-04",
+          time: "10:00",
+          endTime: "11:00",
+          description: "d",
+          done: true,
+          repeat: { freq: "nonsense", until: "2026-09-01" },
+          extra: "未知字段被丢弃",
+        },
+        {
+          id: "c",
+          title: "无限重复",
+          date: "2026-08-05",
+          time: "",
+          repeat: { freq: "weekday", until: "" },
+        },
+      ])
+    ).toEqual([
+      {
+        id: "a",
+        title: "晨会",
+        date: "2026-08-03",
+        time: "09:00",
+        endTime: undefined,
+        description: "",
+        done: false,
+        repeat: undefined,
+      },
+      {
+        id: "b",
+        title: "重复项",
+        date: "2026-08-04",
+        time: "10:00",
+        endTime: "11:00",
+        description: "d",
+        done: true,
+        repeat: undefined,
+      },
+      {
+        id: "c",
+        title: "无限重复",
+        date: "2026-08-05",
+        time: "",
+        endTime: undefined,
+        description: "",
+        done: false,
+        repeat: { freq: "weekday", until: undefined },
+      },
+    ]);
   });
 });
 

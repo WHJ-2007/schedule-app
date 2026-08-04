@@ -51,6 +51,29 @@ function sortByTime(list: ScheduleEvent[]): ScheduleEvent[] {
   });
 }
 
+// offsetLeft/Top 链坐标（相对 stop 元素）：CSS transform 不影响布局坐标，
+// 视图缩放动画期间也能量到元素的真实布局位置（getBoundingClientRect 会包含缩放变换）
+function layoutPos(el: HTMLElement, stop: HTMLElement): { x: number; y: number } {
+  let x = 0;
+  let y = 0;
+  let node: HTMLElement | null = el;
+  while (node && node !== stop) {
+    x += node.offsetLeft;
+    y += node.offsetTop;
+    node = node.offsetParent as HTMLElement | null;
+  }
+  return { x, y };
+}
+
+// 飞行数字容器：把克隆的旧数字节点放入盒内（克隆保留主题样式类）
+function NumFlyNode({ node }: { node: HTMLElement }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    ref.current?.replaceChildren(node);
+  }, [node]);
+  return <div ref={ref} className="h-full w-full" />;
+}
+
 // 旧视图快照残影：把克隆的 DOM 放入原位容器，缩小移动到锚点元素位置后淡出
 function GhostLayer({
   ghost,
@@ -96,7 +119,7 @@ function GhostLayer({
 }
 
 export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
-  const { events, addEvent, updateEvent, deleteEvent, toggleDone } = useEvents();
+  const { events, addEvent, updateEvent, deleteEvent, toggleDone, replaceEvents } = useEvents();
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
   const [selectedDateKey, setSelectedDateKey] = useState(() => todayKey());
@@ -128,6 +151,29 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   } | null;
   const [ghost, setGhost] = useState<Ghost>(null);
   const ghostSrcRef = useRef<{ ax: number; ay: number; aw: number; ah: number } | null>(null);
+  // 月→周切换：月历里的 7 个日期数字克隆飞向周视图对应列头（先行），周视图随后从锚点展开
+  type WeekNumFlyItem = {
+    key: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    tx: number;
+    ty: number;
+    s: number;
+    node: HTMLElement;
+  };
+  const [weekNumFly, setWeekNumFly] = useState<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    items: WeekNumFlyItem[];
+  } | null>(null);
+  const weekNumFlyPendingRef = useRef(false);
+  const weekNumSrcRef = useRef<
+    { key: string; x: number; y: number; w: number; h: number; node: HTMLElement }[]
+  >([]);
 
   // 锚点规格：date = 单日 data-date；month = 年历月卡 data-ym；week = 本周 7 格合并区域
   type AnchorSpec = { kind: "date" | "month" | "week"; key?: string };
@@ -191,23 +237,28 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     setViewMode(getSavedView());
   }, []);
 
+  const grid = useMemo(() => getMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
+  const today = new Date();
+  const selectedDate = parseDateKey(selectedDateKey);
+  const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 无限重复（无 until）的展开兜底：只展开到当前视图可见的最远日期，避免无限展开
+  const byDayHorizon = useMemo(() => {
+    if (viewMode === "year") return `${viewYear}-12-31`;
+    if (viewMode === "week") return toDateKey(weekDates[6]);
+    return toDateKey(grid[grid.length - 1]);
+  }, [viewMode, viewYear, weekDates, grid]);
   const byDay = useMemo(() => {
     const m = new Map<string, ScheduleEvent[]>();
     for (const e of events) {
       // 重复事件展开到全部实例日期（同一条记录，编辑/删除/完成作用于整组）
-      for (const d of expandEventDates(e)) {
+      for (const d of expandEventDates(e, byDayHorizon)) {
         const arr = m.get(d) ?? [];
         arr.push(e);
         m.set(d, arr);
       }
     }
     return m;
-  }, [events]);
-
-  const grid = useMemo(() => getMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
-  const today = new Date();
-  const selectedDate = parseDateKey(selectedDateKey);
-  const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [events, byDayHorizon]);
   const weekEvents = useMemo(
     () => weekDates.map((d) => sortByTime(byDay.get(toDateKey(d)) ?? [])),
     [weekDates, byDay]
@@ -242,12 +293,40 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     return from === "year" ? "in" : "out";
   };
 
+  // 月→周：记录本周 7 个日期数字在月历格里的位置与克隆（相对 wrap 的布局坐标）
+  const captureWeekNumbers = () => {
+    const wrap = viewWrapRef.current;
+    const grid = gridRef.current;
+    if (!wrap || !grid) return;
+    const out: { key: string; x: number; y: number; w: number; h: number; node: HTMLElement }[] = [];
+    for (const d of weekDates) {
+      const key = toDateKey(d);
+      const el = grid.querySelector<HTMLElement>(`[data-day-num="${key}"]`);
+      if (!el) continue;
+      const p = layoutPos(el, wrap);
+      out.push({
+        key,
+        x: p.x,
+        y: p.y,
+        w: el.offsetWidth,
+        h: el.offsetHeight,
+        node: el.cloneNode(true) as HTMLElement,
+      });
+    }
+    weekNumSrcRef.current = out;
+  };
+
   const pickView = (v: ViewMode) => {
     const from = viewMode;
     // 源锚点：月→周=本周 7 格区域；年→月=年历里正在查看的月卡。其余方向残影回退到新视图锚点
     let anchor: AnchorSpec | null = null;
-    if (from === "month" && v === "week") anchor = { kind: "week" };
-    else if (from === "year" && v === "month") anchor = { kind: "month", key: `${viewYear}-${viewMonth}` };
+    if (from === "month" && v === "week") {
+      anchor = { kind: "week" };
+      weekNumFlyPendingRef.current = true;
+      captureWeekNumbers();
+    } else if (from === "year" && v === "month") {
+      anchor = { kind: "month", key: `${viewYear}-${viewMonth}` };
+    }
     captureGhost(anchor);
     saveView(v);
     if (v === "month" && from !== "year") {
@@ -337,6 +416,32 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
       }
     }
     setViewZoom({ mode: a.mode, ox: ox ?? wrap.offsetWidth / 2, oy: oy ?? wrap.offsetHeight / 2 });
+    // 月→周：测量 7 个日期数字在周视图列头的位置，生成飞行轨迹
+    if (weekNumFlyPendingRef.current) {
+      weekNumFlyPendingRef.current = false;
+      const items: WeekNumFlyItem[] = [];
+      for (const s of weekNumSrcRef.current) {
+        const el = wrap.querySelector<HTMLElement>(`[data-day-num="${s.key}"]`);
+        if (!el) continue;
+        const t = layoutPos(el, wrap);
+        items.push({
+          key: s.key,
+          x: s.x,
+          y: s.y,
+          w: s.w,
+          h: s.h,
+          tx: t.x - s.x,
+          ty: t.y - s.y,
+          s: s.w > 0 && el.offsetWidth > 0 ? Math.max(0.5, Math.min(2, el.offsetWidth / s.w)) : 1,
+          node: s.node,
+        });
+      }
+      setWeekNumFly(
+        items.length > 0
+          ? { x: wrap.offsetLeft, y: wrap.offsetTop, w: wrap.offsetWidth, h: wrap.offsetHeight, items }
+          : null
+      );
+    }
   }, [viewMode]);
 
   const goPrevWeek = () => {
@@ -391,21 +496,24 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
       time: e.time,
       endTime: e.endTime ?? "",
       description: e.description,
-      repeat: e.repeat ?? { freq: "", until: "" },
+      repeat: e.repeat
+        ? { freq: e.repeat.freq, until: e.repeat.until ?? "" }
+        : { freq: "", until: "" },
     });
 
   const handleSave = () => {
     if (!form) return;
     const title = form.title.trim();
     if (!title) return;
-    // 重复规则：频率空或截止早于起点 → 视为不重复
-    const repeat =
-      form.repeat.freq && form.repeat.until >= form.dates[0]
-        ? { freq: form.repeat.freq as RepeatFreq, until: form.repeat.until }
-        : undefined;
+    // 重复规则：频率空 → 不重复；重复开始即事件日期（表单"重复开始"可改）；
+    // 重复至留空 = 无限重复（展开时由视图范围兜底）
+    const repeat = form.repeat.freq
+      ? { freq: form.repeat.freq as RepeatFreq, until: form.repeat.until || undefined }
+      : undefined;
     if (form.id) {
       updateEvent(form.id, {
         title,
+        date: form.dates[0], // 编辑时"重复开始"改动会迁移整组起始日
         time: form.time,
         endTime: form.endTime || undefined,
         description: form.description,
@@ -460,7 +568,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
             onAnimationEnd={(e) => {
               if (e.target === e.currentTarget) setViewZoom(null);
             }}
-            className={viewZoom ? (viewZoom.mode === "in" ? "view-zoom-in" : "view-zoom-out") : ""}
+            className={"relative " + (viewZoom ? (viewZoom.mode === "in" ? "view-zoom-in" : "view-zoom-out") : "")}
             style={viewZoom ? { transformOrigin: `${viewZoom.ox}px ${viewZoom.oy}px` } : undefined}
           >
             {viewMode === "month" && (
@@ -533,7 +641,11 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                           (selectedOnCell && isSelected ? tokens.cell.selected : tokens.cell.hover)
                         }
                       >
-                        <span data-selected={isSelected ? "" : undefined} className={numClass}>
+                        <span
+                          data-selected={isSelected ? "" : undefined}
+                          data-day-num={key}
+                          className={numClass}
+                        >
                           {d.getDate()}
                         </span>
                         {dayList.length > 0 && (
@@ -567,13 +679,6 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
               {/* 当日日程：单列时间轴，交互与周视图一致 */}
               <section className={tokens.card + " flex flex-col"}>
                 <p className={tokens.dayList.dateLabel}>{formatDayLabel(selectedDate)}</p>
-                <button
-                  type="button"
-                  onClick={() => openAdd(selectedDateKey)}
-                  className={tokens.button.primary + " mt-4 w-full"}
-                >
-                  ＋ 添加日程
-                </button>
                 <div className="mt-4 flex min-h-0 flex-1 flex-col">
                   <WeekTimeline
                     tokens={tokens}
@@ -722,6 +827,38 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
               </section>
             )}
           </div>
+          {/* 月→周：日期数字从月历格飞到周视图列头的轨道（浮在残影上方） */}
+          {weekNumFly && (
+            <div
+              data-testid="week-num-fly"
+              aria-hidden
+              className="pointer-events-none absolute z-50 overflow-hidden"
+              style={{ left: weekNumFly.x, top: weekNumFly.y, width: weekNumFly.w, height: weekNumFly.h }}
+            >
+              {weekNumFly.items.map((f) => (
+                <div
+                  key={f.key}
+                  data-testid="week-num-fly-item"
+                  data-day-num={f.key}
+                  className="anim-num-fly absolute"
+                  style={
+                    {
+                      left: f.x,
+                      top: f.y,
+                      width: f.w,
+                      height: f.h,
+                      "--f-tx": `${f.tx}px`,
+                      "--f-ty": `${f.ty}px`,
+                      "--f-s": `${f.s}`,
+                    } as React.CSSProperties
+                  }
+                  onAnimationEnd={() => setWeekNumFly(null)}
+                >
+                  <NumFlyNode node={f.node} />
+                </div>
+              ))}
+            </div>
+          )}
           {ghost && <GhostLayer ghost={ghost} onDone={() => setGhost(null)} />}
         </div>
       </div>
@@ -795,38 +932,55 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                     className={tokens.dialog.input + " resize-none"}
                   />
                 </label>
-                <div className="flex gap-3">
-                  <label htmlFor="repeatFreq" className="block flex-1">
-                    <span className={tokens.dialog.inputLabel}>重复</span>
-                    <select
-                      id="repeatFreq"
-                      value={form.repeat.freq}
-                      onChange={(e) =>
-                        setForm({ ...form, repeat: { ...form.repeat, freq: e.target.value as RepeatFreq | "" } })
-                      }
-                      className={tokens.dialog.input}
-                    >
-                      <option value="">不重复</option>
-                      <option value="daily">每天</option>
-                      <option value="weekly">每周</option>
-                      <option value="monthly">每月</option>
-                    </select>
-                  </label>
-                  {form.repeat.freq !== "" && (
-                    <label htmlFor="repeatUntil" className="block flex-1">
-                      <span className={tokens.dialog.inputLabel}>重复至</span>
-                      <input
-                        id="repeatUntil"
-                        type="date"
-                        value={form.repeat.until}
-                        onChange={(e) =>
-                          setForm({ ...form, repeat: { ...form.repeat, until: e.target.value } })
-                        }
-                        className={tokens.dialog.input}
-                      />
-                    </label>
-                  )}
-                </div>
+                <label htmlFor="repeatFreq" className="block">
+                  <span className={tokens.dialog.inputLabel}>重复</span>
+                  <select
+                    id="repeatFreq"
+                    value={form.repeat.freq}
+                    onChange={(e) =>
+                      setForm({ ...form, repeat: { ...form.repeat, freq: e.target.value as RepeatFreq | "" } })
+                    }
+                    className={tokens.dialog.input}
+                  >
+                    <option value="">不重复</option>
+                    <option value="daily">每天</option>
+                    <option value="weekly">每周</option>
+                    <option value="monthly">每月</option>
+                    <option value="weekday">工作日（周一至周五）</option>
+                    <option value="weekend">周末（周六、周日）</option>
+                  </select>
+                </label>
+                {form.repeat.freq !== "" && (
+                  <>
+                    <div className="flex gap-3">
+                      <label htmlFor="repeatStart" className="block flex-1">
+                        <span className={tokens.dialog.inputLabel}>重复开始</span>
+                        <input
+                          id="repeatStart"
+                          type="date"
+                          value={form.dates[0]}
+                          onChange={(e) =>
+                            setForm({ ...form, dates: [e.target.value, ...form.dates.slice(1)] })
+                          }
+                          className={tokens.dialog.input}
+                        />
+                      </label>
+                      <label htmlFor="repeatUntil" className="block flex-1">
+                        <span className={tokens.dialog.inputLabel}>重复至</span>
+                        <input
+                          id="repeatUntil"
+                          type="date"
+                          value={form.repeat.until}
+                          onChange={(e) =>
+                            setForm({ ...form, repeat: { ...form.repeat, until: e.target.value } })
+                          }
+                          className={tokens.dialog.input}
+                        />
+                      </label>
+                    </div>
+                    <p className="text-xs text-neutral-400">重复开始默认为所选卡片的开始日期；重复至留空表示无限重复</p>
+                  </>
+                )}
               </div>
               <div className="mt-6 flex items-center justify-between gap-3">
                 {form.id ? (
@@ -860,7 +1014,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
           </form>
         </div>
       )}
-      <Settings />
+      <Settings events={events} onImport={replaceEvents} />
     </main>
   );
 }
