@@ -112,6 +112,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const viewWrapRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
   // 视图切换残影：旧视图 DOM 快照缩小移动到锚点元素位置并淡出，新视图从同一锚点缩放
+  // src = 源视图锚点区域（相对 wrap 的像素矩形）：年→月用年历月卡、月→周用本周 7 格合并区域
   type Ghost = {
     node: HTMLElement;
     x: number;
@@ -123,11 +124,18 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     tx: number;
     ty: number;
     s: number;
+    src: { ax: number; ay: number; aw: number; ah: number } | null;
   } | null;
   const [ghost, setGhost] = useState<Ghost>(null);
+  const ghostSrcRef = useRef<{ ax: number; ay: number; aw: number; ah: number } | null>(null);
 
-  // 切换前克隆旧视图容器：残影固定在原位置；父容器相对坐标（滚动时残影跟随内容）
-  const captureGhost = () => {
+  // 锚点规格：date = 单日 data-date；month = 年历月卡 data-ym；week = 本周 7 格合并区域
+  type AnchorSpec = { kind: "date" | "month" | "week"; key?: string };
+
+  // 切换前克隆旧视图容器：残影固定在原位置；父容器相对坐标（滚动时残影跟随内容）。
+  // 锚点优先取源视图坐标（此时旧视图还在 DOM）：月→周=本周 7 格、年→月=被点月卡，
+  // 残影缩向那里、新视图从同一位置展开，两个方向的数字/月卡位置才能对上
+  const captureGhost = (anchor: AnchorSpec | null = null) => {
     const wrap = viewWrapRef.current;
     if (!wrap) return;
     const node = wrap.cloneNode(true) as HTMLElement;
@@ -139,6 +147,31 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     node.querySelectorAll('[data-testid="selection-bubble"]').forEach((el) => el.remove());
     const pr = wrap.parentElement?.getBoundingClientRect();
     const r = wrap.getBoundingClientRect();
+    let src: { ax: number; ay: number; aw: number; ah: number } | null = null;
+    if (anchor) {
+      const sel =
+        anchor.kind === "week"
+          ? weekDates.map((d) => `[data-date="${toDateKey(d)}"]`).join(",")
+          : anchor.kind === "date"
+            ? `[data-date="${anchor.key}"]`
+            : `[data-ym="${anchor.key}"]`;
+      const els = wrap.querySelectorAll(sel);
+      if (els.length > 0) {
+        let l = Infinity;
+        let t = Infinity;
+        let rr = -Infinity;
+        let b = -Infinity;
+        for (const el of els) {
+          const rc = el.getBoundingClientRect();
+          l = Math.min(l, rc.left);
+          t = Math.min(t, rc.top);
+          rr = Math.max(rr, rc.right);
+          b = Math.max(b, rc.bottom);
+        }
+        if (rr > l || b > t) src = { ax: l - r.left, ay: t - r.top, aw: rr - l, ah: b - t };
+      }
+    }
+    ghostSrcRef.current = src;
     setGhost({
       node,
       x: r.left - (pr?.left ?? 0),
@@ -150,6 +183,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
       tx: 0,
       ty: 0,
       s: 0.4,
+      src,
     });
   };
 
@@ -209,15 +243,20 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   };
 
   const pickView = (v: ViewMode) => {
-    captureGhost();
+    const from = viewMode;
+    // 源锚点：月→周=本周 7 格区域；年→月=年历里正在查看的月卡。其余方向残影回退到新视图锚点
+    let anchor: AnchorSpec | null = null;
+    if (from === "month" && v === "week") anchor = { kind: "week" };
+    else if (from === "year" && v === "month") anchor = { kind: "month", key: `${viewYear}-${viewMonth}` };
+    captureGhost(anchor);
     saveView(v);
-    if (v === "month") {
-      // 切月时定位到选中日期所在月：否则锚点日期可能不在月网格内（如年视图翻年后），动画位置不对
+    if (v === "month" && from !== "year") {
+      // 周→月等：定位到选中日期所在月（保证锚点日期在网格内）；年→月保持正在查看的年月
       setViewYear(selectedDate.getFullYear());
       setViewMonth(selectedDate.getMonth());
     }
     zoomAnchorRef.current = {
-      mode: zoomModeFor(viewMode, v),
+      mode: zoomModeFor(from, v),
       kind: v === "year" ? "month" : "date",
       key: v === "year" ? `${viewYear}-${viewMonth}` : toDateKey(selectedDate),
     };
@@ -225,7 +264,11 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   };
 
   const jumpToMonth = (d: Date) => {
-    captureGhost();
+    const from = viewMode;
+    // 从年历点月卡/迷你日期：残影缩向被点的那张月卡
+    const anchor: AnchorSpec | null =
+      from === "year" ? { kind: "month", key: `${d.getFullYear()}-${d.getMonth()}` } : null;
+    captureGhost(anchor);
     setNavDir(null);
     const year = d.getFullYear();
     const month = d.getMonth();
@@ -233,14 +276,16 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     setViewMonth(month);
     setSelectedDateKey(toDateKey(d));
     zoomAnchorRef.current = {
-      mode: zoomModeFor(viewMode, "month"),
+      mode: zoomModeFor(from, "month"),
       kind: "date",
       key: toDateKey(d),
     };
     setViewMode("month");
   };
 
-  // 新视图渲染后实测锚点矩形 → transform-origin 百分比；测不到（jsdom 等）回退中心
+  // 新视图渲染后确定锚点与缩放中心。优先用源视图锚点（captureGhost 已记录，
+  // 相对 wrap 顶左的像素坐标：wrap 位置不随切换移动，像素 origin 与残影终点严格同屏），
+  // 否则回退到新视图里实测锚点元素；都测不到（jsdom 等）回退中心
   useLayoutEffect(() => {
     const a = zoomAnchorRef.current;
     zoomAnchorRef.current = null;
@@ -250,31 +295,48 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
       setViewZoom(null);
       return;
     }
-    let ox = 50;
-    let oy = 50;
-    const el = wrap.querySelector<HTMLElement>(
-      a.kind === "date" ? `[data-date="${a.key}"]` : `[data-ym="${a.key}"]`
-    );
-    if (el) {
-      const wr = wrap.getBoundingClientRect();
-      const r = el.getBoundingClientRect();
-      if (wr.width > 0 && wr.height > 0 && (r.width > 0 || r.height > 0)) {
-        ox = ((r.left + r.width / 2 - wr.left) / wr.width) * 100;
-        oy = ((r.top + r.height / 2 - wr.top) / wr.height) * 100;
-        // 残影缩向锚点元素：中心对齐、缩到锚点宽度比例（旧视图"缩小放进那个位置"）
-        setGhost((g) =>
-          g
-            ? {
-                ...g,
-                tx: r.left + r.width / 2 - g.cx,
-                ty: r.top + r.height / 2 - g.cy,
-                s: r.width / g.w,
-              }
-            : g
-        );
+    let ox: number | null = null;
+    let oy: number | null = null;
+    const src = ghostSrcRef.current;
+    ghostSrcRef.current = null;
+    if (src) {
+      ox = src.ax + src.aw / 2;
+      oy = src.ay + src.ah / 2;
+      setGhost((g) =>
+        g
+          ? {
+              ...g,
+              // 残影中心移到锚点区域中心、缩到区域宽度比例（旧视图"缩小放进那个位置"）
+              tx: src.ax + src.aw / 2 - g.w / 2,
+              ty: src.ay + src.ah / 2 - g.h / 2,
+              s: src.aw / g.w,
+            }
+          : g
+      );
+    } else {
+      const el = wrap.querySelector<HTMLElement>(
+        a.kind === "date" ? `[data-date="${a.key}"]` : `[data-ym="${a.key}"]`
+      );
+      if (el) {
+        const wr = wrap.getBoundingClientRect();
+        const r = el.getBoundingClientRect();
+        if (wr.width > 0 && wr.height > 0 && (r.width > 0 || r.height > 0)) {
+          ox = r.left + r.width / 2 - wr.left;
+          oy = r.top + r.height / 2 - wr.top;
+          setGhost((g) =>
+            g
+              ? {
+                  ...g,
+                  tx: r.left + r.width / 2 - g.cx,
+                  ty: r.top + r.height / 2 - g.cy,
+                  s: r.width / g.w,
+                }
+              : g
+          );
+        }
       }
     }
-    setViewZoom({ mode: a.mode, ox, oy });
+    setViewZoom({ mode: a.mode, ox: ox ?? wrap.offsetWidth / 2, oy: oy ?? wrap.offsetHeight / 2 });
   }, [viewMode]);
 
   const goPrevWeek = () => {
@@ -399,7 +461,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
               if (e.target === e.currentTarget) setViewZoom(null);
             }}
             className={viewZoom ? (viewZoom.mode === "in" ? "view-zoom-in" : "view-zoom-out") : ""}
-            style={viewZoom ? { transformOrigin: `${viewZoom.ox}% ${viewZoom.oy}%` } : undefined}
+            style={viewZoom ? { transformOrigin: `${viewZoom.ox}px ${viewZoom.oy}px` } : undefined}
           >
             {viewMode === "month" && (
             <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
@@ -491,11 +553,14 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                       </button>
                     );
                   })}
-                  <SelectionBubble
-                    gridRef={gridRef}
-                    className={tokens.cell.num + " " + tokens.cell.selected}
-                    label={selectedDate.getDate()}
-                  />
+                  {/* 切换动画期间隐藏：泡泡不随缩放乱跑，动画结束后重新定位到选中格 */}
+                  {viewZoom === null && (
+                    <SelectionBubble
+                      gridRef={gridRef}
+                      className={tokens.cell.num + " " + tokens.cell.selected}
+                      label={selectedDate.getDate()}
+                    />
+                  )}
                 </div>
               </section>
 

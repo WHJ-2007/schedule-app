@@ -348,12 +348,12 @@ describe("ScheduleApp (view zoom transition)", () => {
     expect(wrap().className).toContain("view-zoom-out");
   });
 
-  it("jsdom 下锚点测不到时回退中心（transform-origin 50% 50%）", () => {
+  it("jsdom 下锚点测不到时回退中心（transform-origin 0px 0px）", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     fireEvent.animationEnd(wrap());
     fireEvent.click(screen.getByRole("button", { name: "月" }));
-    expect(wrap().style.transformOrigin).toBe("50% 50%");
+    expect(wrap().style.transformOrigin).toBe("0px 0px");
   });
 
   it("月视图日期格带 data-date，年视图卡片带 data-ym", () => {
@@ -418,6 +418,64 @@ describe("ScheduleApp (view zoom transition)", () => {
     expect(ghost.style.getPropertyValue("--g-ty")).toBe("-86px");
     expect(ghost.style.getPropertyValue("--g-s")).toBe("0.035");
     spy.mockRestore();
+  });
+
+  it("年→月残影缩向源视图月卡（年历里那张卡的坐标）", () => {
+    const spy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        // 月卡 → (300,200,200,120)；其余（视图容器等）→ 大矩形
+        if (this.getAttribute("data-ym")) {
+          const r = { left: 300, top: 200, width: 200, height: 120 };
+          return { ...r, right: r.left + r.width, bottom: r.top + r.height } as DOMRect;
+        }
+        const r = { left: 0, top: 0, width: 800, height: 600 };
+        return { ...r, right: r.left + r.width, bottom: r.top + r.height } as DOMRect;
+      }
+    );
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "年" }));
+    fireEvent.animationEnd(wrap());
+    fireEvent.click(screen.getByRole("button", { name: "月" }));
+    const ghost = screen.getByTestId("view-ghost");
+    // 残影中心 (400,300) → 月卡中心 (400,260)：仅纵移 -40，缩到 200/800
+    expect(ghost.style.getPropertyValue("--g-tx")).toBe("0px");
+    expect(ghost.style.getPropertyValue("--g-ty")).toBe("-40px");
+    expect(ghost.style.getPropertyValue("--g-s")).toBe("0.25");
+    // 新月视图从月卡位置展开（像素 origin）
+    expect(wrap().style.transformOrigin).toBe("400px 260px");
+    spy.mockRestore();
+  });
+
+  it("月→周残影缩向本周 7 格合并区域中心", () => {
+    const spy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        if (this.getAttribute("data-date")) {
+          // 本周 7 格分布在同一行：left 300–528，top 200（各 28 宽，间隔错开）
+          return { left: 300, top: 200, width: 28, height: 28 } as DOMRect;
+        }
+        return { left: 0, top: 0, width: 800, height: 600 } as DOMRect;
+      }
+    );
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const ghost = screen.getByTestId("view-ghost");
+    // 合并区域 (300,200,28,28) → 中心 (314,214)：与单日锚点结果一致（mock 下 7 格同点）
+    expect(ghost.style.getPropertyValue("--g-tx")).toBe("-86px");
+    expect(ghost.style.getPropertyValue("--g-ty")).toBe("-86px");
+    expect(ghost.style.getPropertyValue("--g-s")).toBe("0.035");
+    spy.mockRestore();
+  });
+
+  it("视图切换动画期间选中高亮泡泡隐藏，动画结束后恢复", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    expect(screen.getByTestId("selection-bubble")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    expect(screen.queryByTestId("selection-bubble")).toBeNull(); // 动画期间不渲染
+    fireEvent.animationEnd(wrap());
+    fireEvent.click(screen.getByRole("button", { name: "月" }));
+    expect(screen.queryByTestId("selection-bubble")).toBeNull();
+    fireEvent.animationEnd(wrap());
+    expect(screen.getByTestId("selection-bubble")).toBeInTheDocument();
   });
 });
 
@@ -533,14 +591,15 @@ describe("ScheduleApp (recurring & day timeline)", () => {
     expect(screen.getByText("+1")).toBeInTheDocument(); // 超出 3 条上限
   });
 
-  it("年视图翻年后点月标签：月视图定位到选中日期所在月", () => {
+  it("年视图翻年后点月标签：月视图定位到正在查看的月", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
     fireEvent.click(screen.getByRole("button", { name: "年" }));
     fireEvent.click(screen.getByRole("button", { name: /上一年/ }));
     fireEvent.click(screen.getByRole("button", { name: "月" }));
     const now = new Date();
+    // 打开年视图里正在浏览的那一月（2025 年当前月），而不是跳到选中日期所在月
     expect(
-      screen.getByText(formatMonthTitle(now.getFullYear(), now.getMonth()))
+      screen.getByText(formatMonthTitle(now.getFullYear() - 1, now.getMonth()))
     ).toBeInTheDocument();
   });
 });
