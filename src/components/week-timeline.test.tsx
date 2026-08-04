@@ -61,6 +61,18 @@ function expandFold() {
 }
 
 describe("WeekTimeline", () => {
+  it("滚动条压缩内部列时，表头行同步留白保持列对齐", () => {
+    renderTimeline(emptyWeek);
+    const scroller = screen.getByTestId("timeline-scroll") as HTMLElement;
+    // 模拟右侧滚动条占 30px：内部可见宽度比外框窄
+    Object.defineProperty(scroller, "offsetWidth", { value: 700, configurable: true });
+    Object.defineProperty(scroller, "clientWidth", { value: 670, configurable: true });
+    // 折叠状态变化触发 useLayoutEffect 重新测量（deps: dates/folded）
+    fireEvent.click(screen.getByRole("button", { name: /展开凌晨时段/ }));
+    fireEvent.click(screen.getByRole("button", { name: /收起凌晨时段/ }));
+    expect(screen.getByTestId("header-scrollbar-gap")).toHaveStyle({ width: "30px" });
+  });
+
   it("渲染小时刻度（默认折叠凌晨时段）", () => {
     renderTimeline(emptyWeek);
     expect(screen.getByText("7:00")).toBeInTheDocument();

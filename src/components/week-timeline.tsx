@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   WEEKDAY_NAMES,
   toDateKey,
@@ -170,6 +170,15 @@ export default function WeekTimeline({
   const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null); // 拖拽时间气泡
   const [now, setNow] = useState(() => new Date()); // 当前时间：驱动现在线与进行中日程高亮
   const timelineRef = useRef<HTMLDivElement | null>(null);
+  // 滚动条占位宽度：滚动区右侧滚动条压缩内部列，表头行同步留白避免列错位
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [sbWidth, setSbWidth] = useState(0);
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const w = scroller.offsetWidth - scroller.clientWidth;
+    setSbWidth((prev) => (prev === w ? prev : w));
+  }, [dates, folded]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30_000);
@@ -723,10 +732,14 @@ export default function WeekTimeline({
             );
           })}
         </div>
+        {/* 滚动条占位：滚动区右侧滚动条压缩内部列，这里同步留白保持列对齐 */}
+        <div aria-hidden data-testid="header-scrollbar-gap" style={{ width: sbWidth }} />
       </div>
 
       {/* 滚动区：左侧小时刻度 ＋ 右侧 7 列时间轴 ＋ 凌晨折叠条 */}
       <div
+        ref={scrollRef}
+        data-testid="timeline-scroll"
         className={"relative flex select-none touch-none overflow-y-auto" + (scrollClass ? " " + scrollClass : "")}
         style={scrollMaxHeight !== "none" ? { maxHeight: scrollMaxHeight } : undefined}
         onMouseMove={handleTimelineMove}
