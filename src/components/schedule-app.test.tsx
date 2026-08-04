@@ -328,6 +328,43 @@ describe("ScheduleApp (selection bubble)", () => {
   });
 });
 
+describe("ScheduleApp (view zoom transition)", () => {
+  const wrap = () => screen.getByTestId("view-zoom-wrap");
+
+  it("月→年缩小进入、年→月放大进入、月→周放大进入、周→月缩小进入", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "年" }));
+    expect(wrap().className).toContain("view-zoom-out");
+    fireEvent.animationEnd(wrap());
+    expect(wrap().className).not.toContain("view-zoom");
+    fireEvent.click(screen.getByRole("button", { name: "月" }));
+    expect(wrap().className).toContain("view-zoom-in");
+    fireEvent.animationEnd(wrap());
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    expect(wrap().className).toContain("view-zoom-in");
+    fireEvent.animationEnd(wrap());
+    fireEvent.click(screen.getByRole("button", { name: "月" }));
+    expect(wrap().className).toContain("view-zoom-out");
+  });
+
+  it("jsdom 下锚点测不到时回退中心（transform-origin 50% 50%）", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.animationEnd(wrap());
+    fireEvent.click(screen.getByRole("button", { name: "月" }));
+    expect(wrap().style.transformOrigin).toBe("50% 50%");
+  });
+
+  it("月视图日期格带 data-date，年视图卡片带 data-ym", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    const now = new Date();
+    const todayBtn = screen.getByRole("button", { name: `${now.getMonth() + 1}月${now.getDate()}日` });
+    expect(todayBtn).toHaveAttribute("data-date", toDateKey(now));
+    fireEvent.click(screen.getByRole("button", { name: "年" }));
+    expect(document.querySelector(`[data-ym="${now.getFullYear()}-${now.getMonth()}"]`)).not.toBeNull();
+  });
+});
+
 describe("ScheduleApp (page-turn animation)", () => {
   // 动画只作用于日期区域容器（data-testid="view-anim"），标题与导航按钮不参与
   const animArea = () => screen.getByTestId("view-anim");

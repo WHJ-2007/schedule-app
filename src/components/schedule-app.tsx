@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useEvents } from "@/lib/use-events";
 import {
   WEEKDAY_NAMES,
@@ -59,6 +59,12 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   // 初始恒为 month：SSR 无 localStorage，直接读保存视图会导致服务端 HTML 与客户端首帧不一致而水合失败
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [navDir, setNavDir] = useState<"left" | "right" | null>(null);
+  // 周/月/年切换锚点缩放：目标锚点在切换时记入 ref，新视图渲染后实测矩形
+  type ZoomAnchor = { mode: "in" | "out"; kind: "date" | "month"; key: string } | null;
+  type ViewZoom = { mode: "in" | "out"; ox: number; oy: number } | null;
+  const [viewZoom, setViewZoom] = useState<ViewZoom>(null);
+  const zoomAnchorRef = useRef<ZoomAnchor>(null);
+  const viewWrapRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -107,18 +113,63 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     setSelectedDateKey(todayKey());
   };
 
+  // 更细致视图（年→月/月→周）放大进入；更宏观视图（周→月/月→年）缩小退出
+  const zoomModeFor = (from: ViewMode, to: ViewMode): "in" | "out" => {
+    if (to === "year") return "out";
+    if (to === "week") return "in";
+    return from === "year" ? "in" : "out";
+  };
+
   const pickView = (v: ViewMode) => {
     saveView(v);
+    zoomAnchorRef.current = {
+      mode: zoomModeFor(viewMode, v),
+      kind: v === "year" ? "month" : "date",
+      key: v === "year" ? `${viewYear}-${viewMonth}` : toDateKey(selectedDate),
+    };
     setViewMode(v);
   };
 
   const jumpToMonth = (d: Date) => {
     setNavDir(null);
-    setViewYear(d.getFullYear());
-    setViewMonth(d.getMonth());
+    const year = d.getFullYear();
+    const month = d.getMonth();
+    setViewYear(year);
+    setViewMonth(month);
     setSelectedDateKey(toDateKey(d));
+    zoomAnchorRef.current = {
+      mode: zoomModeFor(viewMode, "month"),
+      kind: "date",
+      key: toDateKey(d),
+    };
     setViewMode("month");
   };
+
+  // 新视图渲染后实测锚点矩形 → transform-origin 百分比；测不到（jsdom 等）回退中心
+  useLayoutEffect(() => {
+    const a = zoomAnchorRef.current;
+    zoomAnchorRef.current = null;
+    if (!a) return;
+    const wrap = viewWrapRef.current;
+    if (!wrap) {
+      setViewZoom(null);
+      return;
+    }
+    let ox = 50;
+    let oy = 50;
+    const el = wrap.querySelector<HTMLElement>(
+      a.kind === "date" ? `[data-date="${a.key}"]` : `[data-ym="${a.key}"]`
+    );
+    if (el) {
+      const wr = wrap.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      if (wr.width > 0 && wr.height > 0 && (r.width > 0 || r.height > 0)) {
+        ox = ((r.left + r.width / 2 - wr.left) / wr.width) * 100;
+        oy = ((r.top + r.height / 2 - wr.top) / wr.height) * 100;
+      }
+    }
+    setViewZoom({ mode: a.mode, ox, oy });
+  }, [viewMode]);
 
   const goPrevWeek = () => {
     setNavDir("left");
@@ -226,7 +277,16 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
             ))}
           </div>
 
-          <div key={viewMode} className="anim-fade-in">
+          <div
+            ref={viewWrapRef}
+            key={viewMode}
+            data-testid="view-zoom-wrap"
+            onAnimationEnd={(e) => {
+              if (e.target === e.currentTarget) setViewZoom(null);
+            }}
+            className={viewZoom ? (viewZoom.mode === "in" ? "view-zoom-in" : "view-zoom-out") : ""}
+            style={viewZoom ? { transformOrigin: `${viewZoom.ox}% ${viewZoom.oy}%` } : undefined}
+          >
             {viewMode === "month" && (
             <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
               {/* 月历 */}
@@ -288,6 +348,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                       <button
                         key={key}
                         type="button"
+                        data-date={key}
                         onClick={() => setSelectedDateKey(key)}
                         aria-label={`${d.getMonth() + 1}月${d.getDate()}日`}
                         className={
@@ -483,6 +544,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                   {yearMonths.map((m, mi) => (
                     <div
                       key={m.getMonth()}
+                      data-ym={`${viewYear}-${m.getMonth()}`}
                       className={"anim-fade-in " + tokens.yearView.monthCard}
                       style={{ animationDelay: `${Math.min(mi, 3) * 40}ms` }}
                     >
