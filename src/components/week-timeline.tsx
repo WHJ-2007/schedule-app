@@ -65,6 +65,10 @@ export default function WeekTimeline({
   onToggleDone,
   onDelete,
   onMove,
+  cols = 7,
+  rootClass,
+  scrollClass,
+  scrollMaxHeight = "calc(100vh - 300px)",
 }: {
   tokens: ThemeTokens;
   dates: Date[];
@@ -77,6 +81,10 @@ export default function WeekTimeline({
   onToggleDone: (id: string) => void;
   onDelete: (id: string) => void;
   onMove: (id: string, patch: EventMovePatch) => void;
+  cols?: number; // 列数：周视图 7 列，月视图当日面板 1 列
+  rootClass?: string; // 追加到根容器 className（如 flex-1 min-h-0 供父 flex 撑满）
+  scrollClass?: string; // 追加到滚动区 className（如 flex-1 min-h-0 供父 flex 撑满）
+  scrollMaxHeight?: string; // 滚动区最大高度；传 "none" 由父容器决定
 }) {
   const [drag, setDrag] = useState<RegionState | null>(null);
   const [move, setMove] = useState<MoveState | null>(null);
@@ -412,11 +420,19 @@ export default function WeekTimeline({
     : undefined;
 
   return (
-    <div ref={timelineRef} className={"relative " + tokens.weekView.timeline}>
+    <div
+      ref={timelineRef}
+      className={
+        "relative flex flex-col " + tokens.weekView.timeline + (rootClass ? " " + rootClass : "")
+      }
+    >
       {/* 列头行：日期跳月视图 ＋ 全天事件胶囊 */}
       <div className="flex border-b border-neutral-200">
         <div style={{ width: GUTTER }} />
-        <div className="grid flex-1 grid-cols-7">
+        <div
+          className="grid flex-1"
+          style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+        >
           {dates.map((d, i) => {
             const key = toDateKey(d);
             const allDay = (eventsByDay[i] ?? []).filter((e) => !e.time);
@@ -487,8 +503,8 @@ export default function WeekTimeline({
 
       {/* 滚动区：左侧小时刻度 ＋ 右侧 7 列时间轴 ＋ 凌晨折叠条 */}
       <div
-        className="relative flex select-none touch-none overflow-y-auto"
-        style={{ maxHeight: "calc(100vh - 300px)" }}
+        className={"relative flex select-none touch-none overflow-y-auto" + (scrollClass ? " " + scrollClass : "")}
+        style={scrollMaxHeight !== "none" ? { maxHeight: scrollMaxHeight } : undefined}
         onMouseMove={handleTimelineMove}
         onMouseLeave={() => setHover(null)}
         onDragStart={(e) => e.preventDefault()}
@@ -510,7 +526,10 @@ export default function WeekTimeline({
             </div>
           ))}
         </div>
-        <div className="anim-fold grid flex-1 grid-cols-7" style={{ height: dayHeight }}>
+        <div
+          className="anim-fold grid flex-1"
+          style={{ height: dayHeight, gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+        >
           {dates.map((d, i) => {
             const key = toDateKey(d);
             const timed = (eventsByDay[i] ?? []).filter((e) => e.time);

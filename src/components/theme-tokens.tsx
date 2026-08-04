@@ -10,9 +10,9 @@ export type ThemeTokens = {
   card: string;                          // 当日日程白卡片
   button: { primary: string };           // "＋ 添加日程"（使用处拼 w-full）
   cell: { base: string; hover: string; num: string; plain: string; outside: string; today: string; selected: string;
-          indicatorCap?: number;          // 事件指示器上限（默认 3）
-          indicatorPills?: boolean;       // true = 用时间药丸而非空圆点
-          indicatorArea?: string;         // 事件指示区容器类（默认 "mt-1.5 flex h-4 items-center justify-center gap-1"）
+          indicatorCap?: number;          // 每日小卡片上限（默认 3）
+          eventChipArea?: string;         // 小卡片容器类（默认 "mt-1 w-full space-y-0.5 px-0.5"）
+          eventChip?: string;             // 单条日程小卡片类
           selectedOnCell?: boolean;       // true = selected 高亮作用于整个格子按钮而非数字圈
           todayWins?: boolean };          // true = 今天样式优先于选中样式
   dot: string;                           // 事件数量圆点
@@ -68,13 +68,15 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
     card: "rounded-lg border border-neutral-200 bg-white p-5",
     button: { primary: "rounded-md bg-blue-600 px-4 py-2 text-sm text-white transition hover:bg-blue-700" },
     cell: {
-      base: "flex h-24 flex-col items-center rounded-lg pt-2 transition",
+      base: "flex h-28 flex-col items-center rounded-lg pt-2 transition",
       hover: "hover:bg-neutral-100",
       num: "inline-flex h-7 w-7 items-center justify-center rounded-full text-sm",
       plain: "text-neutral-900",
       outside: "text-neutral-300",
       today: "border-2 border-blue-600 text-neutral-900",
       selected: "bg-blue-600 text-white",
+      eventChipArea: "mt-1 w-full space-y-0.5 px-0.5",
+      eventChip: "truncate rounded-sm bg-neutral-100 px-1 text-left text-[10px] leading-4 text-neutral-600",
     },
     dot: "h-1.5 w-1.5 rounded-full bg-blue-600",
     dotMore: "text-[10px] text-blue-600",
@@ -171,13 +173,15 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
     card: "rotate-[0.5deg] rounded-lg border border-[#e5dcc8] bg-[#fffdf5] p-5 shadow-sm transition",
     button: { primary: "font-hand -rotate-1 rounded-lg bg-[#e05a5a] px-5 py-2 text-white shadow-md transition hover:rotate-0" },
     cell: {
-      base: "flex h-24 flex-col items-center rounded-md border border-dashed border-[#dfd3b8] pt-2 transition",
+      base: "flex h-28 flex-col items-center rounded-md border border-dashed border-[#dfd3b8] pt-2 transition",
       hover: "hover:bg-[#f5edda]",
       num: "font-kai inline-flex h-7 w-7 items-center justify-center rounded-full",
       plain: "text-[#4a3f35]",
       outside: "text-neutral-500",
       today: "ring-2 ring-[#e05a5a] text-[#4a3f35]",
       selected: "bg-[#dbe9f5] text-[#4a3f35]",
+      eventChipArea: "mt-1 w-full space-y-0.5 px-0.5",
+      eventChip: "font-kai truncate rounded-sm bg-[#f5edda] px-1 text-left text-[10px] leading-4 text-[#4a3f35]",
     },
     dot: "h-1.5 w-1.5 rounded-full bg-[#e05a5a]",
     dotMore: "text-[10px] text-[#4a7bb5]",

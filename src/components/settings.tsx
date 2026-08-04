@@ -43,7 +43,7 @@ export default function Settings() {
           onMouseDown={() => setOpen(false)}
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl max-h-[75vh] overflow-y-auto anim-scale-in"
+            className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto anim-scale-in"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
@@ -126,15 +126,15 @@ export default function Settings() {
                 {entries.length === 0 ? (
                   <p className="py-8 text-center text-sm text-neutral-400">暂无日志</p>
                 ) : (
-                  <ul className="space-y-4">
+                  <ul className="space-y-3">
                     {entries.map((e) => (
-                      <li key={e.version} className="rounded-xl border border-neutral-200 p-4">
+                      <li key={e.version} className="rounded-xl border border-neutral-200 p-3">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-semibold text-neutral-900">{e.title}</span>
                           <span className="font-mono text-xs text-neutral-400">{e.version}</span>
                         </div>
                         <p className="mt-0.5 text-xs text-neutral-400">{e.date}</p>
-                        <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-neutral-600">
+                        <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-xs leading-5 text-neutral-600">
                           {e.changes.map((c, i) => (
                             <li key={i}>{c}</li>
                           ))}

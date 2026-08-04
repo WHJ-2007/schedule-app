@@ -22,7 +22,7 @@ import {
   formatYearTitle,
   addYears,
 } from "@/lib/date";
-import type { ScheduleEvent } from "@/lib/events";
+import { expandEventDates, type RepeatFreq, type ScheduleEvent } from "@/lib/events";
 import { getSavedView, saveView, type ViewMode } from "@/lib/views";
 import type { ThemeTokens } from "./theme-tokens";
 import Settings from "./settings";
@@ -36,10 +36,11 @@ type FormState = {
   time: string;
   endTime: string;
   description: string;
+  repeat: { freq: RepeatFreq | ""; until: string }; // 重复规则；freq 空 = 不重复
 };
 
 function emptyForm(dates: string[]): FormState {
-  return { id: null, dates, title: "", time: "", endTime: "", description: "" };
+  return { id: null, dates, title: "", time: "", endTime: "", description: "", repeat: { freq: "", until: "" } };
 }
 
 function sortByTime(list: ScheduleEvent[]): ScheduleEvent[] {
@@ -134,6 +135,8 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     for (const el of [node, ...Array.from(node.querySelectorAll("[data-testid]"))]) {
       el.removeAttribute("data-testid");
     }
+    // 交互辅助层（月历选中高亮等）不属于内容：残影缩放时剔除，避免异常残留
+    node.querySelectorAll('[data-testid="selection-bubble"]').forEach((el) => el.remove());
     const pr = wrap.parentElement?.getBoundingClientRect();
     const r = wrap.getBoundingClientRect();
     setGhost({
@@ -157,9 +160,12 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const byDay = useMemo(() => {
     const m = new Map<string, ScheduleEvent[]>();
     for (const e of events) {
-      const arr = m.get(e.date) ?? [];
-      arr.push(e);
-      m.set(e.date, arr);
+      // 重复事件展开到全部实例日期（同一条记录，编辑/删除/完成作用于整组）
+      for (const d of expandEventDates(e)) {
+        const arr = m.get(d) ?? [];
+        arr.push(e);
+        m.set(d, arr);
+      }
     }
     return m;
   }, [events]);
@@ -173,8 +179,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     [weekDates, byDay]
   );
   const dayEvents = sortByTime(byDay.get(selectedDateKey) ?? []);
-  const indicatorCap = tokens.cell.indicatorCap ?? 3;
-  const indicatorArea = tokens.cell.indicatorArea ?? "mt-1.5 flex h-4 items-center justify-center gap-1";
+  const indicatorCap = tokens.cell.indicatorCap ?? 3; // 每日小卡片上限
 
   const goPrev = () => {
     setNavDir("left");
@@ -206,6 +211,11 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const pickView = (v: ViewMode) => {
     captureGhost();
     saveView(v);
+    if (v === "month") {
+      // 切月时定位到选中日期所在月：否则锚点日期可能不在月网格内（如年视图翻年后），动画位置不对
+      setViewYear(selectedDate.getFullYear());
+      setViewMonth(selectedDate.getMonth());
+    }
     zoomAnchorRef.current = {
       mode: zoomModeFor(viewMode, v),
       kind: v === "year" ? "month" : "date",
@@ -319,18 +329,25 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
       time: e.time,
       endTime: e.endTime ?? "",
       description: e.description,
+      repeat: e.repeat ?? { freq: "", until: "" },
     });
 
   const handleSave = () => {
     if (!form) return;
     const title = form.title.trim();
     if (!title) return;
+    // 重复规则：频率空或截止早于起点 → 视为不重复
+    const repeat =
+      form.repeat.freq && form.repeat.until >= form.dates[0]
+        ? { freq: form.repeat.freq as RepeatFreq, until: form.repeat.until }
+        : undefined;
     if (form.id) {
       updateEvent(form.id, {
         title,
         time: form.time,
         endTime: form.endTime || undefined,
         description: form.description,
+        repeat,
       });
     } else {
       for (const d of form.dates) {
@@ -340,6 +357,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
           time: form.time,
           endTime: form.endTime || undefined,
           description: form.description,
+          repeat,
         });
       }
       setSelectedDateKey(form.dates[0]);
@@ -433,7 +451,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                     const inMonth = isSameMonth(d, viewYear, viewMonth);
                     const isToday = isSameDay(d, today);
                     const isSelected = key === selectedDateKey;
-                    const n = (byDay.get(key) ?? []).length;
+                    const dayList = sortByTime(byDay.get(key) ?? []);
                     const selectedOnCell = Boolean(tokens.cell.selectedOnCell);
                     const numClass =
                       tokens.cell.num +
@@ -456,31 +474,20 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                         <span data-selected={isSelected ? "" : undefined} className={numClass}>
                           {d.getDate()}
                         </span>
-                        <span className={indicatorArea}>
-                          {tokens.cell.indicatorPills
-                            ? Array.from({ length: Math.min(n, indicatorCap) }).map((_, i) => {
-                                const ev = byDay.get(key)?.[i];
-                                return (
-                                  <span key={i} className={tokens.dot}>
-                                    {ev ? formatEventTime(ev.time) : "·"}
-                                  </span>
-                                );
-                              })
-                            : Array.from({ length: Math.min(n, indicatorCap) }).map((_, i) => (
-                                <span
-                                  key={i}
-                                  className={tokens.dot}
-                                  style={
-                                    tokens.dotColors
-                                      ? { backgroundColor: tokens.dotColors[i % tokens.dotColors.length] }
-                                      : undefined
-                                  }
-                                />
-                              ))}
-                          {n > indicatorCap && (
-                            <span className={tokens.dotMore}>+{n - indicatorCap}</span>
-                          )}
-                        </span>
+                        {dayList.length > 0 && (
+                          <span className={tokens.cell.eventChipArea ?? "mt-1 w-full space-y-0.5 px-0.5"}>
+                            {dayList.slice(0, indicatorCap).map((e) => (
+                              <span key={e.id} className={tokens.cell.eventChip}>
+                                {e.title}
+                              </span>
+                            ))}
+                            {dayList.length > indicatorCap && (
+                              <span className={"truncate text-left text-[10px] " + tokens.dotMore}>
+                                +{dayList.length - indicatorCap}
+                              </span>
+                            )}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
@@ -492,8 +499,8 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                 </div>
               </section>
 
-              {/* 当日日程 */}
-              <section className={tokens.card}>
+              {/* 当日日程：单列时间轴，交互与周视图一致 */}
+              <section className={tokens.card + " flex flex-col"}>
                 <p className={tokens.dayList.dateLabel}>{formatDayLabel(selectedDate)}</p>
                 <button
                   type="button"
@@ -502,56 +509,25 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                 >
                   ＋ 添加日程
                 </button>
-
-                {dayEvents.length === 0 ? (
-                  <p className={tokens.dayList.empty}>这一天没有日程</p>
-                ) : (
-                  <ul className={tokens.dayListSpacing ?? "mt-4 space-y-3"}>
-                    {dayEvents.map((e, i) => (
-                      <li
-                        key={e.id}
-                        className={"anim-slide-up " + tokens.dayList.itemRow}
-                        style={{
-                          animationDelay: `${Math.min(i, 2) * 40}ms`,
-                          borderLeftColor: tokens.itemColors
-                            ? tokens.itemColors[i % tokens.itemColors.length]
-                            : undefined,
-                        }}
-                      >
-                        {tokens.itemDecor}
-                        <input
-                          type="checkbox"
-                          checked={e.done}
-                          onChange={() => toggleDone(e.id)}
-                          aria-label={e.done ? `取消完成：${e.title}` : `标记完成：${e.title}`}
-                          className={tokens.dayList.checkbox}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => openEdit(e)}
-                          aria-label={`编辑 ${e.title}`}
-                          className={tokens.dayList.editButton}
-                        >
-                          <div className={tokens.dayList.time}>{formatEventTime(e.time)}</div>
-                          <div className={e.done ? tokens.dayList.doneTitle : tokens.dayList.title}>
-                            {e.title}
-                          </div>
-                          {e.description && (
-                            <div className={tokens.dayList.desc}>{e.description}</div>
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteEvent(e.id)}
-                          aria-label="删除"
-                          className={tokens.dayList.delete}
-                        >
-                          ✕
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <div className="mt-4 flex min-h-0 flex-1 flex-col">
+                  <WeekTimeline
+                    tokens={tokens}
+                    dates={[selectedDate]}
+                    eventsByDay={[dayEvents]}
+                    anchorKey={selectedDateKey}
+                    today={today}
+                    onJumpToMonth={() => {}}
+                    onAddDay={openAdd}
+                    onEdit={openEdit}
+                    onToggleDone={toggleDone}
+                    onDelete={deleteEvent}
+                    onMove={(id, patch) => updateEvent(id, patch)}
+                    cols={1}
+                    rootClass="min-h-0 flex-1"
+                    scrollClass="min-h-0 flex-1"
+                    scrollMaxHeight="none"
+                  />
+                </div>
               </section>
             </div>
             )}
@@ -754,18 +730,66 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                     className={tokens.dialog.input + " resize-none"}
                   />
                 </label>
+                <div className="flex gap-3">
+                  <label htmlFor="repeatFreq" className="block flex-1">
+                    <span className={tokens.dialog.inputLabel}>重复</span>
+                    <select
+                      id="repeatFreq"
+                      value={form.repeat.freq}
+                      onChange={(e) =>
+                        setForm({ ...form, repeat: { ...form.repeat, freq: e.target.value as RepeatFreq | "" } })
+                      }
+                      className={tokens.dialog.input}
+                    >
+                      <option value="">不重复</option>
+                      <option value="daily">每天</option>
+                      <option value="weekly">每周</option>
+                      <option value="monthly">每月</option>
+                    </select>
+                  </label>
+                  {form.repeat.freq !== "" && (
+                    <label htmlFor="repeatUntil" className="block flex-1">
+                      <span className={tokens.dialog.inputLabel}>重复至</span>
+                      <input
+                        id="repeatUntil"
+                        type="date"
+                        value={form.repeat.until}
+                        onChange={(e) =>
+                          setForm({ ...form, repeat: { ...form.repeat, until: e.target.value } })
+                        }
+                        className={tokens.dialog.input}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
-              <div className="mt-6 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setForm(null)}
-                  className={tokens.dialog.cancel}
-                >
-                  取消
-                </button>
-                <button type="submit" className={tokens.dialog.save}>
-                  保存
-                </button>
+              <div className="mt-6 flex items-center justify-between gap-3">
+                {form.id ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (form.id) deleteEvent(form.id);
+                      setForm(null);
+                    }}
+                    className="text-sm text-red-500 transition hover:text-red-700"
+                  >
+                    删除
+                  </button>
+                ) : (
+                  <span />
+                )}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setForm(null)}
+                    className={tokens.dialog.cancel}
+                  >
+                    取消
+                  </button>
+                  <button type="submit" className={tokens.dialog.save}>
+                    保存
+                  </button>
+                </div>
               </div>
             </div>
           </form>

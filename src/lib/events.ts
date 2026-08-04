@@ -1,3 +1,5 @@
+export type RepeatFreq = "daily" | "weekly" | "monthly";
+
 export type ScheduleEvent = {
   id: string;
   title: string;
@@ -6,6 +8,7 @@ export type ScheduleEvent = {
   endTime?: string; // "HH:mm"，缺省时按 1 小时显示
   description: string;
   done: boolean;
+  repeat?: { freq: RepeatFreq; until: string }; // 重复规则：until 为重复截止日期（含）
 };
 
 export type EventInput = {
@@ -14,6 +17,7 @@ export type EventInput = {
   time?: string;
   endTime?: string;
   description?: string;
+  repeat?: { freq: RepeatFreq; until: string };
 };
 
 export const STORAGE_KEY = "schedule-demo-events";
@@ -61,6 +65,29 @@ export function buildSampleEvents(now: Date): ScheduleEvent[] {
   return events;
 }
 
+// 重复事件展开为全部实例日期（含起点，截至 until；无 repeat 时仅自身日期）
+export function expandEventDates(e: ScheduleEvent): string[] {
+  if (!e.repeat) return [e.date];
+  const repeat = e.repeat;
+  const out = [e.date];
+  if (repeat.until < e.date) return out;
+  const [y0, m0, d0] = e.date.split("-").map(Number);
+  const [y1, m1, d1] = repeat.until.split("-").map(Number);
+  const limit = new Date(y1, m1 - 1, d1);
+  let cur = new Date(y0, m0 - 1, d0);
+  const step = () => {
+    if (repeat.freq === "daily") return new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1);
+    if (repeat.freq === "weekly") return new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 7);
+    // 每月按起点同日；目标月没有该日（如 31 日在 2 月）则取月末，下月恢复起点日
+    const daysInTarget = new Date(cur.getFullYear(), cur.getMonth() + 2, 0).getDate();
+    return new Date(cur.getFullYear(), cur.getMonth() + 1, Math.min(d0, daysInTarget));
+  };
+  for (cur = step(); cur <= limit; cur = step()) {
+    out.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`);
+  }
+  return out;
+}
+
 export function addEventToList(list: ScheduleEvent[], input: EventInput): ScheduleEvent[] {
   const event: ScheduleEvent = {
     id: createId(),
@@ -70,6 +97,7 @@ export function addEventToList(list: ScheduleEvent[], input: EventInput): Schedu
     endTime: input.endTime || undefined,
     description: input.description ?? "",
     done: false,
+    repeat: input.repeat,
   };
   return [...list, event];
 }

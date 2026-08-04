@@ -38,20 +38,20 @@ describe("style-6 page", () => {
 
   it("adds an event to the selected day via the form", () => {
     render(<Style6 />);
-    fireEvent.click(screen.getByRole("button", { name: /添加日程/ }));
+    fireEvent.click(screen.getByRole("button", { name: "＋ 添加日程" }));
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "手账补记" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
-    expect(screen.getByText("手账补记")).toBeInTheDocument();
+    expect(screen.getAllByText("手账补记").length).toBeGreaterThan(0);
   });
 
-  it("日程条目左边框颜色按主题色轮换", () => {
-    // 清空事件存储，避免样本数据/前序用例污染：保证新增条目是当天第一条
+  it("全天日程显示在当日时间轴列头胶囊", () => {
+    // 清空事件存储，避免样本数据/前序用例污染
     localStorage.setItem(STORAGE_KEY, "[]");
     render(<Style6 />);
-    fireEvent.click(screen.getByRole("button", { name: /添加日程/ }));
+    fireEvent.click(screen.getByRole("button", { name: "＋ 添加日程" }));
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "手账条目" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
-    const li = screen.getByText("手账条目").closest("li");
-    expect(li?.getAttribute("style")).toMatch(/rgb\(224, 90, 90\)/);
+    const item = screen.getByRole("button", { name: /编辑 手账条目/ });
+    expect(item.className).toContain("bg-[#f5edda]"); // 手账主题胶囊底色
   });
 });

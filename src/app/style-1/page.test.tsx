@@ -37,9 +37,9 @@ describe("style-1 page", () => {
 
   it("adds an event to the selected day via the form", () => {
     render(<Style1 />);
-    fireEvent.click(screen.getByRole("button", { name: /添加日程/ }));
+    fireEvent.click(screen.getByRole("button", { name: "＋ 添加日程" }));
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "测试日程" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
-    expect(screen.getByText("测试日程")).toBeInTheDocument();
+    expect(screen.getAllByText("测试日程").length).toBeGreaterThan(0);
   });
 });

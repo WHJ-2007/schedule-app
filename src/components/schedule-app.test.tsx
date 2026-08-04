@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, waitFor, within } from "@testing-library/react";
 import ScheduleApp from "./schedule-app";
 import { THEME_TOKENS } from "./theme-tokens";
 import {
@@ -29,7 +29,7 @@ describe("ScheduleApp (month view)", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
     expect(screen.getByRole("heading", { name: /极简日程/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /今天/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /添加日程/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "＋ 添加日程" })).toBeInTheDocument();
   });
 
   it("点日期格显示当日标题", () => {
@@ -49,10 +49,10 @@ describe("ScheduleApp (month view)", () => {
 
   it("添加日程到选中日", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
-    fireEvent.click(screen.getByRole("button", { name: /添加日程/ }));
+    fireEvent.click(screen.getByRole("button", { name: "＋ 添加日程" }));
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "测试日程" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
-    expect(screen.getByText("测试日程")).toBeInTheDocument();
+    expect(screen.getAllByText("测试日程").length).toBeGreaterThan(0);
   });
 });
 
@@ -134,7 +134,7 @@ describe("ScheduleApp (switcher & week view)", () => {
 
   it("周视图点事件直接打开编辑弹窗", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
-    fireEvent.click(screen.getByRole("button", { name: /添加日程/ }));
+    fireEvent.click(screen.getByRole("button", { name: "＋ 添加日程" }));
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "周视图事件" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
@@ -209,7 +209,7 @@ describe("ScheduleApp (switcher & week view)", () => {
 
   it("周视图时间轴事件块点击打开编辑弹窗并回填结束时间", () => {
     render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
-    fireEvent.click(screen.getByRole("button", { name: /添加日程/ }));
+    fireEvent.click(screen.getByRole("button", { name: "＋ 添加日程" }));
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "时间段事件" } });
     fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "10:00" } });
     fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:30" } });
@@ -482,5 +482,65 @@ describe("ScheduleApp (page-turn animation)", () => {
       screen.getByRole("button", { name: `${target.getMonth() + 1}月${target.getDate()}日` })
     );
     expect(screen.getByText(formatDayLabel(target))).toBeInTheDocument();
+  });
+});
+
+describe("ScheduleApp (recurring & day timeline)", () => {
+  it("创建每天重复日程：周视图多天出现，编辑弹窗回填重复字段", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "＋ 添加日程" }));
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "每日冥想" } });
+    fireEvent.change(screen.getByLabelText(/重复/), { target: { value: "daily" } });
+    const now = new Date();
+    const until = toDateKey(addDays(now.getFullYear(), now.getMonth(), now.getDate(), 5));
+    fireEvent.change(screen.getByLabelText(/重复至/), { target: { value: until } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    // 展开后本周内至少出现 2 个实例（含今天）
+    expect(screen.getAllByRole("button", { name: /编辑 每日冥想/ }).length).toBeGreaterThanOrEqual(2);
+    fireEvent.click(screen.getAllByRole("button", { name: /编辑 每日冥想/ })[0]);
+    // 弹窗打开后"重复"与"重复至"两个 label 同时存在，需精确匹配
+    expect(screen.getByLabelText("重复")).toHaveValue("daily");
+    expect(screen.getByLabelText("重复至")).toHaveValue(until);
+  });
+
+  it("编辑弹窗删除按钮删除整组重复日程", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "＋ 添加日程" }));
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "待删除" } });
+    fireEvent.change(screen.getByLabelText(/重复/), { target: { value: "weekly" } });
+    const now = new Date();
+    const until = toDateKey(addDays(now.getFullYear(), now.getMonth(), now.getDate(), 14));
+    fireEvent.change(screen.getByLabelText(/重复至/), { target: { value: until } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.click(screen.getAllByRole("button", { name: /编辑 待删除/ })[0]);
+    // 弹窗内的删除按钮（时间轴全天条目也有 aria-label="删除" 的 ✕ 按钮，需限定在弹窗内）
+    fireEvent.click(within(screen.getByRole("dialog", { name: "编辑日程" })).getByRole("button", { name: "删除" }));
+    expect(screen.queryByRole("button", { name: /编辑 待删除/ })).toBeNull();
+  });
+
+  it("月视图小卡片显示当日日程标题（仅标题，超出 +N）", () => {
+    localStorage.setItem("schedule-demo-events", JSON.stringify([
+      { id: "a", title: "晨会", date: toDateKey(new Date()), time: "09:30", description: "", done: false },
+      { id: "b", title: "评审", date: toDateKey(new Date()), time: "14:00", description: "", done: false },
+      { id: "c", title: "健身", date: toDateKey(new Date()), time: "19:00", description: "", done: false },
+      { id: "d", title: "读书", date: toDateKey(new Date()), time: "21:00", description: "", done: false },
+    ]));
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    const chips = screen.getAllByText("晨会");
+    expect(chips.length).toBeGreaterThan(0); // 月历格子小卡片
+    expect(screen.getByText("+1")).toBeInTheDocument(); // 超出 3 条上限
+  });
+
+  it("年视图翻年后点月标签：月视图定位到选中日期所在月", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "年" }));
+    fireEvent.click(screen.getByRole("button", { name: /上一年/ }));
+    fireEvent.click(screen.getByRole("button", { name: "月" }));
+    const now = new Date();
+    expect(
+      screen.getByText(formatMonthTitle(now.getFullYear(), now.getMonth()))
+    ).toBeInTheDocument();
   });
 });

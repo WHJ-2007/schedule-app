@@ -36,6 +36,7 @@ export function useEvents() {
       endTime: input.endTime || undefined,
       description: input.description ?? "",
       done: false,
+      repeat: input.repeat,
     };
     setEvents((prev) => [...prev, event]);
     return event;

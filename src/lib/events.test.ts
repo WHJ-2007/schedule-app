@@ -8,6 +8,7 @@ import {
   toggleEventDone,
   saveEvents,
   loadEvents,
+  expandEventDates,
   STORAGE_KEY,
 } from "./events";
 
@@ -79,6 +80,50 @@ describe("list operations", () => {
   it("toggles done flag", () => {
     expect(toggleEventDone([base], "a")[0].done).toBe(true);
     expect(toggleEventDone([{ ...base, done: true }], "a")[0].done).toBe(false);
+  });
+});
+
+describe("expandEventDates", () => {
+  const base = (repeat?: ScheduleEvent["repeat"]): ScheduleEvent => ({
+    id: "a",
+    title: "晨会",
+    date: "2026-08-03",
+    time: "09:30",
+    description: "",
+    done: false,
+    repeat,
+  });
+
+  it("无 repeat 只返回自身日期", () => {
+    expect(expandEventDates(base())).toEqual(["2026-08-03"]);
+  });
+
+  it("daily 展开到截止日期（含）", () => {
+    expect(expandEventDates(base({ freq: "daily", until: "2026-08-06" }))).toEqual([
+      "2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06",
+    ]);
+  });
+
+  it("weekly 每 7 天一次", () => {
+    expect(expandEventDates(base({ freq: "weekly", until: "2026-08-24" }))).toEqual([
+      "2026-08-03", "2026-08-10", "2026-08-17", "2026-08-24",
+    ]);
+  });
+
+  it("monthly 每月同日，跨年正常", () => {
+    const e = { ...base({ freq: "monthly", until: "2026-12-03" }), date: "2026-08-03" };
+    expect(expandEventDates(e)).toEqual([
+      "2026-08-03", "2026-09-03", "2026-10-03", "2026-11-03", "2026-12-03",
+    ]);
+  });
+
+  it("monthly 目标月无该日（31 日）取月末", () => {
+    const e = { ...base({ freq: "monthly", until: "2026-04-30" }), date: "2026-01-31" };
+    expect(expandEventDates(e)).toEqual(["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]);
+  });
+
+  it("截止早于起点：仅起点", () => {
+    expect(expandEventDates(base({ freq: "daily", until: "2026-08-02" }))).toEqual(["2026-08-03"]);
   });
 });
 
