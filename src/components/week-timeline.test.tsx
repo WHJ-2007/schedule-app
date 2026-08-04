@@ -265,7 +265,7 @@ describe("WeekTimeline (选择与框选)", () => {
     expect(screen.queryByRole("button", { name: /编辑 评审/ })).toBeNull();
   });
 
-  it("框选覆盖多事件：松开变为选中而非新建", () => {
+  it("框选覆盖多事件：松开变为选中而非新建，且不弹编辑按钮", () => {
     const onAddDay = vi.fn();
     const a = ev("a", "晨会", "09:00", "10:00");
     const b = ev("b", "评审", "11:00", "12:00");
@@ -275,10 +275,11 @@ describe("WeekTimeline (选择与框选)", () => {
     fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 304 }); // 12:30
     fireEvent.pointerUp(col, { pointerId: 1 });
     expect(onAddDay).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: /编辑 晨会/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /编辑 晨会/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /编辑 评审/ })).toBeNull();
   });
 
-  it("横向框选跨列选中两列事件", () => {
+  it("横向框选跨列选中两列事件，不弹编辑按钮", () => {
     const a = ev("a", "晨会", "09:00", "10:00", 0);
     const b = ev("b", "评审", "11:00", "12:00", 1);
     const days = [...emptyWeek];
@@ -296,7 +297,7 @@ describe("WeekTimeline (选择与框选)", () => {
       clientY: 304,
     });
     fireEvent.pointerUp(document.querySelector('[data-date="2026-08-04"]')!, { pointerId: 1 });
-    expect(screen.getByRole("button", { name: /编辑 晨会/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /编辑 晨会/ })).toBeNull();
   });
 
   it("横向拖拽空白区批量创建（同时间段多天）", () => {

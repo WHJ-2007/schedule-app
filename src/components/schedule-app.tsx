@@ -50,6 +50,30 @@ function sortByTime(list: ScheduleEvent[]): ScheduleEvent[] {
   });
 }
 
+// 旧视图快照残影：把克隆的 DOM 放入原位容器，淡出后清除
+function GhostLayer({
+  ghost,
+  onDone,
+}: {
+  ghost: { node: HTMLElement; x: number; y: number; w: number; h: number };
+  onDone: () => void;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    ref.current?.replaceChildren(ghost.node);
+  }, [ghost]);
+  return (
+    <div
+      ref={ref}
+      data-testid="view-ghost"
+      aria-hidden
+      className="pointer-events-none absolute z-40 overflow-hidden anim-ghost-fade"
+      style={{ left: ghost.x, top: ghost.y, width: ghost.w, height: ghost.h }}
+      onAnimationEnd={onDone}
+    />
+  );
+}
+
 export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const { events, addEvent, updateEvent, deleteEvent, toggleDone } = useEvents();
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
@@ -66,6 +90,29 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const zoomAnchorRef = useRef<ZoomAnchor>(null);
   const viewWrapRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
+  // 视图切换残影：旧视图 DOM 快照原位淡出，新视图从锚点缩放进入（能看出元素缩小放在了哪）
+  type Ghost = { node: HTMLElement; x: number; y: number; w: number; h: number } | null;
+  const [ghost, setGhost] = useState<Ghost>(null);
+
+  // 切换前克隆旧视图容器：残影固定在原位置淡出；父容器相对坐标（滚动时残影跟随内容）
+  const captureGhost = () => {
+    const wrap = viewWrapRef.current;
+    if (!wrap) return;
+    const node = wrap.cloneNode(true) as HTMLElement;
+    // 残影只是视觉快照：移除测试钩子（含自身），避免克隆副本干扰 getByTestId 等查询
+    for (const el of [node, ...Array.from(node.querySelectorAll("[data-testid]"))]) {
+      el.removeAttribute("data-testid");
+    }
+    const pr = wrap.parentElement?.getBoundingClientRect();
+    const r = wrap.getBoundingClientRect();
+    setGhost({
+      node,
+      x: r.left - (pr?.left ?? 0),
+      y: r.top - (pr?.top ?? 0),
+      w: r.width,
+      h: r.height,
+    });
+  };
 
   useEffect(() => {
     setViewMode(getSavedView());
@@ -121,6 +168,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   };
 
   const pickView = (v: ViewMode) => {
+    captureGhost();
     saveView(v);
     zoomAnchorRef.current = {
       mode: zoomModeFor(viewMode, v),
@@ -131,6 +179,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   };
 
   const jumpToMonth = (d: Date) => {
+    captureGhost();
     setNavDir(null);
     const year = d.getFullYear();
     const month = d.getMonth();
@@ -585,6 +634,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
               </section>
             )}
           </div>
+          {ghost && <GhostLayer ghost={ghost} onDone={() => setGhost(null)} />}
         </div>
       </div>
 

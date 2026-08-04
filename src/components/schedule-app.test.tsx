@@ -156,7 +156,8 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "该日新增" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: `跳转到${target.getMonth() + 1}月${target.getDate()}日` }));
-    expect(screen.getByText("该日新增")).toBeInTheDocument();
+    // 残影层克隆了旧周视图（aria-hidden 被 getByRole 忽略），用 role 查询当日日程条目
+    expect(screen.getByRole("button", { name: /编辑 该日新增/ })).toBeInTheDocument();
   });
 
   it("周视图连续翻周跨月后切回月视图显示对应月份", () => {
@@ -362,6 +363,40 @@ describe("ScheduleApp (view zoom transition)", () => {
     expect(todayBtn).toHaveAttribute("data-date", toDateKey(now));
     fireEvent.click(screen.getByRole("button", { name: "年" }));
     expect(document.querySelector(`[data-ym="${now.getFullYear()}-${now.getMonth()}"]`)).not.toBeNull();
+  });
+
+  it("月→周切换出现旧视图残影，内容为旧月视图，动画结束后移除", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    const now = new Date();
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const ghost = screen.getByTestId("view-ghost");
+    expect(ghost).toBeInTheDocument();
+    // 残影克隆了旧月视图：含月历日期格（jsdom rect 全 0 → 原位 0,0）
+    expect(ghost.querySelector(`[data-date="${toDateKey(now)}"]`)).not.toBeNull();
+    expect(ghost.style.left).toBe("0px");
+    expect(ghost.style.top).toBe("0px");
+    fireEvent.animationEnd(ghost);
+    expect(screen.queryByTestId("view-ghost")).toBeNull();
+  });
+
+  it("周→月切换残影为旧周视图（7 列时间轴）", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const week = getWeekDates(new Date());
+    fireEvent.click(
+      screen.getByRole("button", { name: `跳转到${week[0].getMonth() + 1}月${week[0].getDate()}日` })
+    );
+    expect(screen.getByTestId("view-ghost").querySelectorAll("[data-date]")).toHaveLength(7);
+  });
+
+  it("仅视图切换产生残影：翻月/翻周等导航不产生", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    fireEvent.click(screen.getByRole("button", { name: /下月/ }));
+    expect(screen.queryByTestId("view-ghost")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.animationEnd(screen.getByTestId("view-ghost"));
+    fireEvent.click(screen.getByRole("button", { name: /下一周/ }));
+    expect(screen.queryByTestId("view-ghost")).toBeNull();
   });
 });
 

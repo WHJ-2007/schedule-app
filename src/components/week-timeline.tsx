@@ -268,9 +268,13 @@ export default function WeekTimeline({
       moveRef.current = null;
       setMove(null);
       setTip(null);
-      // 挪动（或点击选中）结束后编辑按钮弹出在光标旁
-      const r = timelineRef.current?.getBoundingClientRect();
-      setEditAnchor({ x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) });
+      // 单事件（点击选中/拖动单个）结束后编辑按钮弹出在光标旁；批量挪动不弹
+      if (selectedRef.current.length === 1) {
+        const r = timelineRef.current?.getBoundingClientRect();
+        setEditAnchor({ x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) });
+      } else {
+        setEditAnchor(null);
+      }
       return;
     }
     // 空白拖拽提交：矩形内有日程 → 框选；否则批量新建（横向跨几天）
@@ -297,8 +301,13 @@ export default function WeekTimeline({
     }
     if (hit.length > 0) {
       setSelectedIds(hit);
-      const r = timelineRef.current?.getBoundingClientRect();
-      setEditAnchor({ x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) });
+      // 编辑按钮只服务单选：框选多个时不弹
+      if (hit.length === 1) {
+        const r = timelineRef.current?.getBoundingClientRect();
+        setEditAnchor({ x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) });
+      } else {
+        setEditAnchor(null);
+      }
     } else {
       setSelectedIds([]); // 拖选空白新建：清掉残留选中
       setEditAnchor(null);

@@ -45,17 +45,25 @@ body {
 .anim-slide-in-left { animation: slide-in-left 220ms ease-out both; }
 .anim-slide-in-right { animation: slide-in-right 220ms ease-out both; }
 
-/* 周/月/年切换：锚点缩放（更细致视图放大进入、更宏观视图缩小退出） */
+/* 周/月/年切换：锚点缩放（更细致视图放大进入、更宏观视图缩小退出）。
+   缩放比与残影淡出配合：0.12 ≈ 月视图一周格子的比例，2.6 ≈ 周视图缩回日期格的比例 */
 @keyframes view-zoom-in {
-  from { opacity: 0; transform: scale(0.3); }
+  from { opacity: 0; transform: scale(0.12); }
   to { opacity: 1; transform: scale(1); }
 }
 @keyframes view-zoom-out {
-  from { opacity: 0; transform: scale(2.4); }
+  from { opacity: 0; transform: scale(2.6); }
   to { opacity: 1; transform: scale(1); }
 }
-.view-zoom-in { animation: view-zoom-in 300ms cubic-bezier(0.4, 0, 0.2, 1) both; }
-.view-zoom-out { animation: view-zoom-out 300ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+.view-zoom-in { animation: view-zoom-in 450ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.view-zoom-out { animation: view-zoom-out 450ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* 视图切换残影：旧视图快照停在被点击元素的原位淡出，新视图从该位置缩放进入 */
+@keyframes ghost-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.anim-ghost-fade { animation: ghost-fade 340ms ease-out both; }
 
 /* 全局按钮反馈动画：悬停轻微放大、按下收缩 */
 button {
