@@ -52,6 +52,7 @@ type ResizeState = {
 
 // 事件整体挪动：相对按下位置的日/分钟偏移
 type MoveState = {
+  pressId: string; // 按下的事件 id（单击未移动时用于打开编辑面板）
   top: number;
   downCol: number;
   downMin: number;
@@ -188,6 +189,9 @@ export default function WeekTimeline({
   onSelectDateRef.current = onSelectDate;
   // 拖动提交后抑制随后的 click：避免把事件拖到新时间后意外弹出编辑面板
   const justMovedRef = useRef(false);
+  // 提交渲染时 transform 加入过渡列表：松手瞬间新 top 与 transform 同时过渡，
+  // 否则 transform 骤降（不在列表里）会让块先跳回起点再滑向落点
+  const settleRef = useRef(false);
   const foldedRef = useRef(folded);
   foldedRef.current = folded;
   const eventsRef = useRef(eventsByDay);
@@ -293,6 +297,18 @@ export default function WeekTimeline({
           const curMin = Math.max(lo, Math.min(hi, snapSelect(raw)));
           resizeRef.current = { ...rz, curMin };
           setResize({ ...rz, curMin });
+          // 实时写时间：气泡跟随鼠标显示调整后的起止区间
+          const rect = timelineRef.current?.getBoundingClientRect();
+          if (rect) {
+            setTip({
+              x: e.clientX - rect.left,
+              y: e.clientY - rect.top,
+              text:
+                rz.edge === "start"
+                  ? `${minutesToTime(curMin)}–${minutesToTime(en)}`
+                  : `${minutesToTime(s)}–${minutesToTime(curMin)}`,
+            });
+          }
         }
       }
       return;
@@ -380,11 +396,25 @@ export default function WeekTimeline({
       }
       resizeRef.current = null;
       setResize(null);
+      setTip(null);
       return;
     }
-    // 事件挪动提交
+    // 事件挪动：单击（未移动）在此打开编辑面板
     const m = moveRef.current;
     if (m) {
+      if (m.dx === 0 && m.dy === 0) {
+        // 指针捕获后浏览器把 click 派发到捕获元素（列）而非事件块，onClick 收不到：
+        // 单击事件块 → 选中并打开编辑面板改在 pointerup 处理
+        const ev = eventsRef.current.flat().find((x) => x.id === m.pressId);
+        if (ev) {
+          applySelection([m.pressId]);
+          onEdit(ev);
+        }
+        moveRef.current = null;
+        setMove(null);
+        setTip(null);
+        return;
+      }
       if (m.dx !== 0 || m.dy !== 0) {
         const patches: EventMovePatch[] = [];
         for (const id of selectedRef.current) {
@@ -404,6 +434,8 @@ export default function WeekTimeline({
         // 整组一次提交：撤销/重做按一次操作记录
         onMoveAllRef.current(patches);
         justMovedRef.current = true; // 抑制紧随的 click，避免误开编辑面板
+        // 提交渲染时 transform 参与过渡：块从松手位置平滑落到吸附落点，不跳回起点
+        settleRef.current = true;
       }
       moveRef.current = null;
       setMove(null);
@@ -466,7 +498,9 @@ export default function WeekTimeline({
     if (dragRef.current || moveRef.current) return;
     const rects = colRects();
     const col = colFromX(e.clientX, rects);
-    const min = rawMinAtY(e.clientY - rects[col].top);
+    // 光标时刻与拖选一致：吸附到 5 分钟刻度（左侧时刻标签与横线跟着走）
+    const raw = rawMinAtY(e.clientY - rects[col].top);
+    const min = raw == null ? null : snapSelect(raw);
     setHover((prev) => (prev && prev.col === col && prev.min === min ? prev : { col, min }));
   };
 
@@ -519,6 +553,7 @@ export default function WeekTimeline({
     const downMin = rawMinAtY(e.clientY - rects[col].top); // 基准也按精确分钟
     if (downMin == null) return;
     (e.currentTarget as HTMLElement).closest("[data-date]")?.setPointerCapture(e.pointerId);
+    settleRef.current = false; // 新一次拖拽：落位过渡已结束，恢复正常过渡列表
     // 未选中 → 只挪这一个；已选中 → 挪整个选中组
     const ids = selectedIds.includes(ev.id) ? selectedIds : [ev.id];
     if (!selectedIds.includes(ev.id)) applySelection(ids);
@@ -539,6 +574,7 @@ export default function WeekTimeline({
       dyMax = Math.min(dyMax, 1439 - en);
     }
     const m: MoveState = {
+      pressId: ev.id,
       top: rects[col].top,
       downCol: col,
       downMin,
@@ -617,10 +653,11 @@ export default function WeekTimeline({
                           type="button"
                           onClick={() => onEdit(e)}
                           aria-label={`编辑 ${e.title}`}
-                          className={
-                            tokens.weekView.allDayItem + (e.color ? " text-white!" : "")
-                          }
-                          style={{ backgroundColor: e.color }}
+                          className={tokens.weekView.allDayItem}
+                          style={{
+                            backgroundColor: e.color ? e.color + "59" : undefined,
+                            borderLeft: e.color ? `3px solid ${e.color}` : undefined,
+                          }}
                         >
                           {e.title}
                         </button>
@@ -779,8 +816,7 @@ export default function WeekTimeline({
                       className={
                         tokens.weekView.eventBlock +
                         (moving || isResizing ? " !transition-none" : "") +
-                        (isSelected ? " " + tokens.weekView.eventSelected : "") +
-                        (e.color ? " text-white!" : "")
+                        (isSelected ? " " + tokens.weekView.eventSelected : "")
                       }
                       style={{
                         top: blockTop,
@@ -788,10 +824,17 @@ export default function WeekTimeline({
                         left: `${(track / tracks) * 100}%`,
                         width: `calc(${100 / tracks}% - 2px)`,
                         height: blockH,
-                        backgroundColor: e.color,
+                        // 毛玻璃日程：彩色事件半透明底 + 左侧色条
+                        backgroundColor: e.color ? e.color + "59" : undefined,
+                        borderLeft: e.color ? `3px solid ${e.color}` : undefined,
                         transform:
                           moving && move
                             ? `translate(${move.dx * move.colW}px, ${move.dy * (HOUR_PX / 60)}px)`
+                            : undefined,
+                        // 提交渲染：transform 参与过渡，块从松手位置平滑落到吸附落点
+                        transitionProperty:
+                          settleRef.current && !moving
+                            ? "top,left,width,height,transform"
                             : undefined,
                         zIndex: moving ? 30 : isSelected ? 10 : undefined,
                       }}
@@ -806,7 +849,12 @@ export default function WeekTimeline({
                         {e.title}
                       </span>
                       <span className="block truncate text-[10px] opacity-80">
-                        {formatEventTime(e.time)}–{formatEventTime(e.endTime ?? "")}
+                        {/* 拖边缘实时写时间：块内时间标签跟随预览 */}
+                        {isResizing && resize
+                          ? resize.edge === "start"
+                            ? `${minutesToTime(resize.curMin)}–${formatEventTime(e.endTime ?? "")}`
+                            : `${formatEventTime(e.time)}–${minutesToTime(resize.curMin)}`
+                          : `${formatEventTime(e.time)}–${formatEventTime(e.endTime ?? "")}`}
                       </span>
                       {isSelected && e.time && !isHidden(e) && (
                         <>

@@ -528,14 +528,15 @@ describe("WeekTimeline (光标横线与时刻标签)", () => {
   const col1 = () => document.querySelector('[data-date="2026-08-04"]')!;
   const timelineContainer = () => screen.getByRole("button", { name: /展开凌晨时段/ }).parentElement!;
 
-  it("悬停显示横向光标线与精确时刻标签（不吸附）", () => {
+  it("悬停显示横向光标线，时刻标签吸附到 5 分钟刻度", () => {
     renderTimeline(emptyWeek);
-    fireEvent.mouseMove(col1(), { clientX: 150, clientY: 140 }); // 原始分钟 620 → 10:20
+    fireEvent.mouseMove(col1(), { clientX: 150, clientY: 138 }); // 原始分钟 616 → 吸附 615 = 10:15
     const line = document.querySelector('[data-testid="cursor-line"]');
     expect(line).not.toBeNull();
-    // 折叠后 (620-420)*0.5+40 = 140px
-    expect((line as HTMLElement).style.top).toBe("140px");
-    expect(screen.getByTestId("cursor-label").textContent).toBe("10:20");
+    // 折叠后 (615-420)*0.5+40 = 137.5px
+    expect((line as HTMLElement).style.top).toBe("137.5px");
+    expect(screen.getByTestId("cursor-label").textContent).toBe("10:15");
+    expect(screen.queryByText("10:16")).toBeNull();
   });
 
   it("鼠标离开时间轴后横线与标签消失", () => {
@@ -550,6 +551,55 @@ describe("WeekTimeline (光标横线与时刻标签)", () => {
     renderTimeline(emptyWeek);
     fireEvent.mouseMove(col1(), { clientX: 150, clientY: 20 }); // 条带内 0–40px
     expect(document.querySelector('[data-testid="cursor-line"]')).toBeNull();
+  });
+
+  it("单击事件块（指针序列，不派发 click）也选中并打开编辑面板", () => {
+    const onEdit = vi.fn();
+    const onSelectionChange = vi.fn();
+    const a = ev("a", "晨会", "09:00", "10:00");
+    renderTimeline([[a], ...emptyWeek.slice(1)], { onEdit, onSelectionChange });
+    const block = screen.getByRole("button", { name: /日程 晨会/ });
+    // 真实浏览器中 pointer capture 把 click 重派发到列而非事件块，onClick 收不到：
+    // 单击路径改由 pointerup 处理（dx=0 且 dy=0）
+    fireEvent.pointerDown(block, { pointerId: 1, clientX: 50, clientY: 100 }); // 9:00
+    fireEvent.pointerUp(block, { pointerId: 1, clientX: 50, clientY: 100 });
+    expect(onEdit).toHaveBeenCalledWith(a);
+    expect(onSelectionChange).toHaveBeenCalledWith(["a"]);
+  });
+
+  it("松手提交渲染时 transform 参与过渡，块从松手位置平滑落到落点", () => {
+    renderTimeline([[ev("a", "晨会", "09:00", "10:00")], ...emptyWeek.slice(1)]);
+    const block = screen.getByRole("button", { name: /日程 晨会/ });
+    expect(block.style.transitionProperty).toBe("");
+    fireEvent.pointerDown(block, { pointerId: 1, clientX: 50, clientY: 100 }); // 9:00
+    expect(block.style.transitionProperty).toBe("");
+    fireEvent.pointerMove(block, { pointerId: 1, clientX: 150, clientY: 140 }); // +80 分钟、+1 天
+    fireEvent.pointerUp(block, { pointerId: 1 });
+    // 提交渲染：transform 与 top 一起过渡，视觉上直接落到吸附落点而非跳回起点
+    expect(block.style.transitionProperty).toBe("top,left,width,height,transform");
+    // 新一次拖拽按下：落位过渡结束，恢复正常过渡列表
+    fireEvent.pointerDown(block, { pointerId: 1, clientX: 150, clientY: 140 });
+    expect(block.style.transitionProperty).toBe("");
+    fireEvent.pointerUp(block, { pointerId: 1 });
+  });
+
+  it("拖边缘调整时块内时间标签实时跟随、气泡显示调整后区间，松手提交", () => {
+    const onMoveAll = vi.fn();
+    renderTimeline([[ev("a", "晨会", "09:00", "10:00")], ...emptyWeek.slice(1)], { onMoveAll });
+    fireEvent.click(screen.getByRole("button", { name: /日程 晨会/ }));
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    const block = screen.getByRole("button", { name: /日程 晨会/ });
+    const handle = screen.getByTestId("resize-handle-end");
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 50, clientY: 130 }); // 10:00
+    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 150 }); // (150-40)*2+420=640 → 10:40
+    expect(block.textContent).toContain("09:00–10:40"); // 块内实时写时间
+    // 拖拽气泡与块内标签同时显示同一区间
+    expect(screen.getAllByText("09:00–10:40").length).toBeGreaterThanOrEqual(2);
+    fireEvent.pointerUp(col, { pointerId: 1 });
+    expect(screen.queryByText("09:00–10:40")).toBeNull();
+    expect(onMoveAll).toHaveBeenCalledWith([
+      { id: "a", date: "2026-08-03", time: "09:00", endTime: "10:40" },
+    ]);
   });
 
   it("拖拽期间不显示横线", () => {
@@ -728,20 +778,24 @@ describe("WeekTimeline (重叠事件并排)", () => {
     expect(onBatchColor).toHaveBeenCalledWith(["a", "b"], "#ef4444");
   });
 
-  it("自定义颜色的日程块内联背景色，未设色不覆盖主题色", () => {
+  it("自定义颜色的日程块半透明底色＋左侧色条，未设色不覆盖主题色", () => {
     const colored = { ...ev("a", "晨会", "09:30", "11:00"), color: "#ef4444" };
     renderTimeline([[colored, ev("b", "评审", "09:00", "10:00")], ...emptyWeek.slice(1)]);
     const coloredBlock = screen.getByRole("button", { name: /日程 晨会/ });
-    expect(coloredBlock.style.backgroundColor).toMatch(/239, 68, 68/);
+    expect(coloredBlock.style.backgroundColor).toBe("rgba(239, 68, 68, 0.35)"); // 色值 + 35% 透明度
+    expect(coloredBlock.style.borderLeft).toBe("3px solid rgb(239, 68, 68)");
+    expect(coloredBlock.className).toContain("glass-hover"); // 毛玻璃
     const plainBlock = screen.getByRole("button", { name: /日程 评审/ });
     expect(plainBlock.style.backgroundColor).toBe("");
   });
 
-  it("自定义颜色的全天条目实心背景白字", () => {
+  it("自定义颜色的全天条目毛玻璃半透明底＋色条", () => {
     const colored = { ...ev("c", "全天事项", ""), color: "#22c55e" };
     renderTimeline([[colored], ...emptyWeek.slice(1)]);
     const item = screen.getByRole("button", { name: /编辑 全天事项/ });
-    expect(item.style.backgroundColor).toMatch(/34, 197, 94/);
-    expect(item.className).toContain("text-white!");
+    expect(item.style.backgroundColor).toBe("rgba(34, 197, 94, 0.35)");
+    expect(item.style.borderLeft).toBe("3px solid rgb(34, 197, 94)");
+    expect(item.className).toContain("glass-hover");
+    expect(item.className).not.toContain("text-white!");
   });
 });

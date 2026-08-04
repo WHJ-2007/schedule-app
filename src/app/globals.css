@@ -22,6 +22,17 @@ body {
 }
 .anim-fade-in { animation: fade-in 180ms ease-out both; }
 .anim-scale-in { animation: scale-in 200ms ease-out both; }
+/* 设置面板关闭：与打开动画倒放 */
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes scale-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.96); }
+}
+.anim-fade-out { animation: fade-out 160ms ease-out both; }
+.anim-scale-out { animation: scale-out 180ms ease-out both; }
 .anim-slide-up { animation: slide-up 220ms ease-out both; }
 @keyframes slide-in-left {
   from { opacity: 0; transform: translateX(-24px); }
@@ -78,6 +89,23 @@ button {
   button:hover:not(:disabled) { transform: scale(1.02); }
 }
 button:active:not(:disabled) { transform: scale(0.96); }
+
+/* 可触发项悬停毛玻璃浮现：白色磨砂覆盖 + 背景模糊，仿佛从玻璃后浮现 */
+.glass-hover { position: relative; }
+.glass-hover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0);
+  backdrop-filter: blur(0);
+  transition: background-color 200ms ease-out, backdrop-filter 200ms ease-out;
+  pointer-events: none;
+}
+.glass-hover:hover::after {
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(3px);
+}
 
 /* 周视图折叠条展开/收起：刻度/网格线/事件块/条带随布局平滑过渡（不含 transform，避免拖拽预览延迟） */
 .anim-fold {
