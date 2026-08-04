@@ -194,7 +194,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     const week = getWeekDates(now);
     for (const d of week) {
       expect(
-        screen.getByRole("button", { name: `跳转到${d.getMonth() + 1}月${d.getDate()}日` })
+        screen.getByRole("button", { name: `选择${d.getMonth() + 1}月${d.getDate()}日` })
       ).toBeInTheDocument();
     }
     expect(localStorage.getItem("schedule-view")).toBe("week");
@@ -207,24 +207,32 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.click(screen.getByRole("button", { name: /上一周/ }));
     const prevWeek = getWeekDates(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7));
     expect(
-      screen.getByRole("button", { name: `跳转到${prevWeek[0].getMonth() + 1}月${prevWeek[0].getDate()}日` })
+      screen.getByRole("button", { name: `选择${prevWeek[0].getMonth() + 1}月${prevWeek[0].getDate()}日` })
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /下一周/ }));
     const nextWeek = getWeekDates(now);
     expect(
-      screen.getByRole("button", { name: `跳转到${nextWeek[0].getMonth() + 1}月${nextWeek[0].getDate()}日` })
+      screen.getByRole("button", { name: `选择${nextWeek[0].getMonth() + 1}月${nextWeek[0].getDate()}日` })
     ).toBeInTheDocument();
   });
 
-  it("点周视图列头日期切到月视图并选中那天", () => {
+  it("周视图列头单击选中该天（浅蓝竖条跟随）、双击切到月视图", () => {
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const now = new Date();
     const week = getWeekDates(now);
     const target = week[2];
-    fireEvent.click(
-      screen.getByRole("button", { name: `跳转到${target.getMonth() + 1}月${target.getDate()}日` })
-    );
+    const targetKey = toDateKey(target);
+    const btn = screen.getByRole("button", {
+      name: `选择${target.getMonth() + 1}月${target.getDate()}日`,
+    });
+    // 单击：选中该天，仍在周视图（该列出现浅蓝竖条高亮）
+    fireEvent.click(btn);
+    const col = document.querySelector(`[data-date="${targetKey}"]`)!;
+    expect(col.className).toContain("border-blue-200");
+    expect(screen.getByRole("button", { name: "月" })).toHaveAttribute("aria-pressed", "false");
+    // 双击：切到月视图并选中那天
+    fireEvent.doubleClick(btn);
     expect(screen.getByRole("button", { name: "月" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText(formatDayLabel(target))).toBeInTheDocument();
   });
@@ -269,7 +277,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "该日新增" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
-    fireEvent.click(screen.getByRole("button", { name: `跳转到${target.getMonth() + 1}月${target.getDate()}日` }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: `选择${target.getMonth() + 1}月${target.getDate()}日` }));
     // 残影层克隆了旧周视图（aria-hidden 被 getByRole 忽略），用 role 查询当日日程条目
     expect(screen.getByRole("button", { name: /编辑 该日新增/ })).toBeInTheDocument();
   });
@@ -544,8 +552,8 @@ describe("ScheduleApp (view zoom transition)", () => {
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const week = getWeekDates(new Date());
-    fireEvent.click(
-      screen.getByRole("button", { name: `跳转到${week[0].getMonth() + 1}月${week[0].getDate()}日` })
+    fireEvent.doubleClick(
+      screen.getByRole("button", { name: `选择${week[0].getMonth() + 1}月${week[0].getDate()}日` })
     );
     expect(screen.getByTestId("view-ghost").querySelectorAll("[data-date]")).toHaveLength(7);
   });

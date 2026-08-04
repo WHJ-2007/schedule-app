@@ -184,14 +184,27 @@ describe("WeekTimeline", () => {
     expect(onSelectionChange).toHaveBeenCalledWith(["d"]);
   });
 
-  it("列头跳月视图与 ＋ 添加", () => {
+  it("双击列头跳月视图，单击列头选中该天，＋ 添加", () => {
     const onJumpToMonth = vi.fn();
     const onAddDay = vi.fn();
-    renderTimeline(emptyWeek, { onJumpToMonth, onAddDay });
-    fireEvent.click(screen.getByRole("button", { name: "跳转到8月3日" }));
+    const onSelectDate = vi.fn();
+    renderTimeline(emptyWeek, { onJumpToMonth, onAddDay, onSelectDate });
+    fireEvent.doubleClick(screen.getByRole("button", { name: "选择8月3日" }));
     expect(onJumpToMonth).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "选择8月4日" }));
+    expect(onSelectDate).toHaveBeenCalledWith("2026-08-04");
     fireEvent.click(screen.getByRole("button", { name: "在8月3日添加日程" }));
     expect(onAddDay).toHaveBeenCalledWith(["2026-08-03"]);
+  });
+
+  it("空白单击选中该列日期", () => {
+    const onSelectDate = vi.fn();
+    renderTimeline(emptyWeek, { onSelectDate });
+    expandFold();
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 60 }); // 2:00
+    fireEvent.pointerUp(col, { pointerId: 1 });
+    expect(onSelectDate).toHaveBeenCalledWith("2026-08-03");
   });
 
   it("选中日列为高亮（anchor）", () => {
@@ -202,8 +215,8 @@ describe("WeekTimeline", () => {
 
   it("列头“今”标记：今天在本周时显示在当天列", () => {
     renderTimeline(emptyWeek, { today: new Date(2026, 7, 4) }); // 8/4 在本周 8/3–8/9
-    expect(screen.getByRole("button", { name: "跳转到8月4日" }).textContent).toContain("今");
-    expect(screen.getByRole("button", { name: "跳转到8月3日" }).textContent).not.toContain("今");
+    expect(screen.getByRole("button", { name: "选择8月4日" }).textContent).toContain("今");
+    expect(screen.getByRole("button", { name: "选择8月3日" }).textContent).not.toContain("今");
   });
 
   it("列头“今”标记：今天不在本周时全部隐藏", () => {

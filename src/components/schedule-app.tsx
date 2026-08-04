@@ -848,6 +848,8 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                     anchorKey={selectedDateKey}
                     today={today}
                     onJumpToMonth={jumpToMonth}
+                    onSelectDate={setSelectedDateKey}
+                    selectedDate={selectedDateKey}
                     onAddDay={openAdd}
                     onEdit={openEdit}
                     onToggleDone={toggleDone}

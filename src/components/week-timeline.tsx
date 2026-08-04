@@ -115,6 +115,8 @@ export default function WeekTimeline({
   anchorKey,
   today,
   onJumpToMonth,
+  onSelectDate,
+  selectedDate,
   onAddDay,
   onEdit,
   onToggleDone,
@@ -132,6 +134,8 @@ export default function WeekTimeline({
   anchorKey: string;
   today: Date;
   onJumpToMonth: (d: Date) => void;
+  onSelectDate?: (dateKey: string) => void; // 单击列头选中该天（浅蓝竖条跟随）
+  selectedDate?: string; // 选中日 key：该列显示浅蓝竖条高亮
   onAddDay: (dates: string[], time?: string, endTime?: string) => void;
   onEdit: (e: ScheduleEvent) => void;
   onToggleDone: (id: string) => void;
@@ -163,6 +167,8 @@ export default function WeekTimeline({
   onMoveAllRef.current = onMoveAll;
   const onSelectionChangeRef = useRef(onSelectionChange);
   onSelectionChangeRef.current = onSelectionChange;
+  const onSelectDateRef = useRef(onSelectDate);
+  onSelectDateRef.current = onSelectDate;
   // 拖动提交后抑制随后的 click：避免把事件拖到新时间后意外弹出编辑面板
   const justMovedRef = useRef(false);
   const foldedRef = useRef(folded);
@@ -360,7 +366,8 @@ export default function WeekTimeline({
     setDrag(null);
     setTip(null);
     if (!d.moved || d.end - d.start < MIN_DRAG_MIN) {
-      applySelection([]); // 空白单击：取消选中
+      applySelection([]); // 空白单击：取消选中，并选中该列日期
+      onSelectDateRef.current?.(weekKeysRef.current[d.startCol]);
       return;
     }
     const colMin = Math.min(d.startCol, d.curCol);
@@ -505,8 +512,9 @@ export default function WeekTimeline({
                   <button
                     type="button"
                     data-day-num={key}
-                    onClick={() => onJumpToMonth(d)}
-                    aria-label={`跳转到${d.getMonth() + 1}月${d.getDate()}日`}
+                    onClick={() => onSelectDateRef.current?.(key)}
+                    onDoubleClick={() => onJumpToMonth(d)}
+                    aria-label={`选择${d.getMonth() + 1}月${d.getDate()}日`}
                     className={tokens.weekView.columnHeader}
                   >
                     {WEEKDAY_NAMES[i]} {d.getDate()}
@@ -598,11 +606,13 @@ export default function WeekTimeline({
                 data-date={key}
                 className={
                   "relative min-w-0 " +
-                  (isAnchor
-                    ? tokens.weekView.columnHighlight
-                    : hover?.col === i
-                      ? tokens.weekView.columnHover
-                      : "")
+                  (selectedDate === key
+                    ? "border-blue-200 bg-blue-50/40"
+                    : isAnchor
+                      ? tokens.weekView.columnHighlight
+                      : hover?.col === i
+                        ? tokens.weekView.columnHover
+                        : "")
                 }
                 onPointerDown={(e) => handleColumnDown(e, i)}
                 onPointerMove={handlePointerMove}
