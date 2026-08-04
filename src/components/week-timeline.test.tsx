@@ -438,6 +438,46 @@ describe("WeekTimeline (悬停高亮)", () => {
   });
 });
 
+describe("WeekTimeline (光标横线与时刻标签)", () => {
+  const col1 = () => document.querySelector('[data-date="2026-08-04"]')!;
+  const timelineContainer = () => screen.getByRole("button", { name: /展开凌晨时段/ }).parentElement!;
+
+  it("悬停显示横向光标线与精确时刻标签（不吸附）", () => {
+    renderTimeline(emptyWeek);
+    fireEvent.mouseMove(col1(), { clientX: 150, clientY: 200 }); // 原始分钟 620 → 10:20
+    const line = document.querySelector('[data-testid="cursor-line"]');
+    expect(line).not.toBeNull();
+    // 折叠后 (620-420)*0.8+40 = 200px
+    expect((line as HTMLElement).style.top).toBe("200px");
+    expect(screen.getByTestId("cursor-label").textContent).toBe("10:20");
+  });
+
+  it("鼠标离开时间轴后横线与标签消失", () => {
+    renderTimeline(emptyWeek);
+    fireEvent.mouseMove(col1(), { clientX: 150, clientY: 200 });
+    fireEvent.mouseOut(timelineContainer(), { relatedTarget: document.body });
+    expect(document.querySelector('[data-testid="cursor-line"]')).toBeNull();
+    expect(screen.queryByTestId("cursor-label")).toBeNull();
+  });
+
+  it("折叠条上悬停不显示横线", () => {
+    renderTimeline(emptyWeek);
+    fireEvent.mouseMove(col1(), { clientX: 150, clientY: 20 }); // 条带内 0–40px
+    expect(document.querySelector('[data-testid="cursor-line"]')).toBeNull();
+  });
+
+  it("拖拽期间不显示横线", () => {
+    renderTimeline(emptyWeek);
+    expandFold();
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    fireEvent.mouseMove(col, { clientX: 50, clientY: 96 });
+    expect(document.querySelector('[data-testid="cursor-line"]')).not.toBeNull();
+    fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 96 });
+    expect(document.querySelector('[data-testid="cursor-line"]')).toBeNull();
+    fireEvent.pointerUp(col, { pointerId: 1 });
+  });
+});
+
 describe("WeekTimeline (拖拽时间气泡)", () => {
   it("拖选时跟随显示起止时间，松手后消失", () => {
     renderTimeline(emptyWeek);

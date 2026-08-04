@@ -132,6 +132,16 @@ export default function WeekTimeline({
     return snap(((y - bTop - bH) / HOUR_PX) * 60 + FOLD_END);
   };
 
+  // 原始分钟（不吸附）：供光标横线与时刻标签使用；条带区域返回 null
+  const rawMinAtY = (y: number) => {
+    const f = foldedRef.current;
+    const bTop = f ? 0 : 7 * HOUR_PX;
+    const bH = f ? FOLD_BAND_H : EXPAND_BAND_H;
+    if (y < bTop) return Math.round((y / HOUR_PX) * 60);
+    if (y < bTop + bH) return null;
+    return Math.round(((y - bTop - bH) / HOUR_PX) * 60 + FOLD_END);
+  };
+
   const hourTop = (h: number) => {
     if (h >= 7) return bandTop + bandH + (h - 7) * HOUR_PX;
     return folded ? null : h * HOUR_PX; // 折叠区内刻度（0:00–6:00）
@@ -310,7 +320,7 @@ export default function WeekTimeline({
     if (dragRef.current || moveRef.current) return;
     const rects = colRects();
     const col = colFromX(e.clientX, rects);
-    const min = minutesAtY(e.clientY - rects[col].top);
+    const min = rawMinAtY(e.clientY - rects[col].top);
     setHover((prev) => (prev && prev.col === col && prev.min === min ? prev : { col, min }));
   };
 
@@ -573,6 +583,23 @@ export default function WeekTimeline({
             );
           })}
         </div>
+        {/* 光标横线与时刻标签：悬停时横向高亮当前时刻，左侧显示精确分钟 */}
+        {hover?.min != null && (
+          <>
+            <div
+              data-testid="cursor-line"
+              className={tokens.weekView.cursorLine}
+              style={{ top: yOf(hover.min) }}
+            />
+            <div
+              data-testid="cursor-label"
+              className={tokens.weekView.cursorLabel}
+              style={{ top: yOf(hover.min) }}
+            >
+              {minutesToTime(hover.min)}
+            </div>
+          </>
+        )}
         {/* 凌晨折叠条：点击展开/收起 */}
         <button
           type="button"
