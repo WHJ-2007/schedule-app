@@ -65,7 +65,7 @@ export default function EventPanel({
     <div
       role="dialog"
       aria-label={form.id ? "编辑日程" : "添加日程"}
-      className="anim-panel-in fixed inset-y-0 right-0 z-50 flex w-80 max-w-[92vw] flex-col border-l border-neutral-200 bg-white shadow-xl"
+      className="anim-panel-in fixed inset-y-0 right-0 z-50 flex w-80 max-w-[92vw] flex-col border-l border-white/40 bg-white/70 shadow-xl backdrop-blur-xl"
     >
       <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-4">
         <h3 className={dialog.title}>{form.id ? "编辑日程" : "添加日程"}</h3>

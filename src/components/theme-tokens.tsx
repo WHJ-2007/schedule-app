@@ -114,7 +114,7 @@ export const THEME_TOKENS: ThemeTokens = {
       timeline: "rounded-lg border border-neutral-100 bg-white",
       hourLabel: "absolute right-2 -translate-y-1/2 text-[10px] text-neutral-400 tabular-nums",
       gridLine: "absolute inset-x-0 border-t border-neutral-100",
-      eventBlock: "absolute inset-x-0.5 overflow-hidden rounded-md bg-blue-600 px-1.5 py-0.5 text-left text-white shadow-sm transition hover:bg-blue-700",
+      eventBlock: "absolute inset-x-0.5 overflow-hidden rounded-md bg-blue-600 px-1.5 py-0.5 text-left text-white shadow-sm transition-[top,left,width,height,background-color,opacity,filter] duration-200 ease-out hover:bg-blue-700",
       dragSelect: "pointer-events-none absolute inset-x-0.5 rounded-md bg-blue-600/25",
       allDayItem: "block w-full truncate rounded bg-neutral-100 px-1.5 py-0.5 text-left text-[10px] text-neutral-700 transition hover:bg-neutral-200",
       foldBand: "flex items-center justify-center gap-2 border-y border-dashed border-neutral-200/80 bg-white/60 text-[10px] text-neutral-400 transition hover:bg-white/90 hover:text-neutral-600",

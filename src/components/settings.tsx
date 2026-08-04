@@ -91,7 +91,7 @@ export default function Settings({
           onMouseDown={() => setOpen(false)}
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto anim-scale-in"
+            className="w-full max-w-md rounded-2xl border border-white/40 bg-white/70 p-6 shadow-xl max-h-[90vh] overflow-y-auto anim-scale-in backdrop-blur-xl"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">

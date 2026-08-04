@@ -637,6 +637,15 @@ describe("WeekTimeline (重叠事件并排)", () => {
     expect(ba.style.width).toBe("calc(100% - 2px)");
   });
 
+  it("事件块带平滑过渡类，拖动/调整中禁过渡", () => {
+    renderTimeline([[ev("a", "晨会", "09:30", "11:00")], ...emptyWeek.slice(1)]);
+    const block = screen.getByRole("button", { name: /日程 晨会/ });
+    expect(block.className).toContain(
+      "transition-[top,left,width,height,background-color,opacity,filter]"
+    );
+    expect(block.className).not.toContain("anim-fold");
+  });
+
   it("选中事件块出现上下调整手柄", () => {
     renderTimeline([[ev("a", "晨会", "09:30", "11:00")], ...emptyWeek.slice(1)]);
     fireEvent.click(screen.getByRole("button", { name: /日程 晨会/ }));

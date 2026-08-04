@@ -8,7 +8,7 @@ export default function UndoToast({
   return (
     <div
       role="status"
-      className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 overflow-hidden rounded-full bg-neutral-900 px-4 py-2 text-sm text-white shadow-lg anim-slide-up"
+      className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 overflow-hidden rounded-full border border-white/40 bg-white/70 px-4 py-2 text-sm text-neutral-900 shadow-xl backdrop-blur-xl anim-slide-up"
     >
       <div className="flex items-center gap-3">
         <span>{text}</span>
@@ -16,13 +16,13 @@ export default function UndoToast({
           type="button"
           aria-label="撤销删除"
           onClick={onUndo}
-          className="font-medium text-white underline underline-offset-2"
+          className="font-medium text-neutral-900 underline underline-offset-2"
         >
           撤销
         </button>
       </div>
-      <div className="absolute inset-x-0 bottom-0 h-0.5 bg-white/20">
-        <div className="h-full bg-white anim-toast-progress" />
+      <div className="absolute inset-x-0 bottom-0 h-0.5 bg-neutral-900/20">
+        <div className="h-full bg-neutral-900 anim-toast-progress" />
       </div>
     </div>
   );

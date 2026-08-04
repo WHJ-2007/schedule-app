@@ -144,6 +144,11 @@ describe("EventPanel", () => {
     );
   });
 
+  it("面板容器带毛玻璃效果", () => {
+    renderPanel();
+    expect(screen.getByRole("dialog", { name: "添加日程" }).className).toContain("backdrop-blur");
+  });
+
   it("无开始时时长输入保持可用且不崩溃", () => {
     const onChange = vi.fn();
     renderPanel(emptyForm(["2026-08-05"]), { onChange });

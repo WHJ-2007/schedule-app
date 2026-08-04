@@ -65,4 +65,10 @@ describe("theme tokens", () => {
     expect(w.cursorLine.length).toBeGreaterThan(0);
     expect(w.cursorLabel.length).toBeGreaterThan(0);
   });
+
+  it("事件块使用显式过渡类（含 top/left/width/height）", () => {
+    const b = THEME_TOKENS.weekView.eventBlock;
+    expect(b).toContain("transition-[top,left,width,height,background-color,opacity,filter]");
+    expect(b).toContain("duration-200");
+  });
 });

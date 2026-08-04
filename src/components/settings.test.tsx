@@ -28,7 +28,9 @@ describe("settings", () => {
   it("齿轮按钮打开设置弹窗", () => {
     renderSettings();
     fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
-    expect(screen.getByRole("dialog", { name: "设置" })).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "设置" });
+    expect(dialog).toBeInTheDocument();
+    expect(dialog.querySelector(".backdrop-blur-xl")).not.toBeNull();
   });
 
   it("tab 切换：高亮块跟随选中按钮滑动，内容区带缩放动画", () => {

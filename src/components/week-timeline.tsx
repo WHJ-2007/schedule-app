@@ -777,7 +777,6 @@ export default function WeekTimeline({
                       draggable={false}
                       onPointerDown={(ev) => handleBlockDown(ev, e, i)}
                       className={
-                        "anim-fold " +
                         tokens.weekView.eventBlock +
                         (moving || isResizing ? " !transition-none" : "") +
                         (isSelected ? " " + tokens.weekView.eventSelected : "") +
