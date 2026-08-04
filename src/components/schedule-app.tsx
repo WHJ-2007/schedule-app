@@ -556,7 +556,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
             </div>
             )}
             {viewMode === "week" && (
-              <section className={tokens.viewPanel}>
+              <section className="flex flex-col">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className={tokens.sectionTitle}>{formatWeekTitle(weekDates)}</h2>
                   <div className="flex gap-2">

@@ -14,8 +14,8 @@ import {
 import type { ScheduleEvent } from "@/lib/events";
 import type { ThemeTokens } from "./theme-tokens";
 
-const HOUR_PX = 48; // 每小时高度（像素）
-const SNAP_MIN = 30; // 事件挪动吸附粒度（分钟）
+const HOUR_PX = 30; // 每小时高度（像素）：一屏能放下所有时间
+const SNAP_MIN = 30; // 拖选初始占位时长（未移动时选区的最小显示宽度）
 const MIN_DRAG_MIN = 5; // 拖选新建的最小时长：更短视为单击不误建
 const GUTTER = 48; // 左侧刻度列宽度
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -186,7 +186,7 @@ export default function WeekTimeline({
     const m = moveRef.current;
     if (m) {
       const dx = Math.max(m.dxMin, Math.min(m.dxMax, colFromX(e.clientX, m.colRects) - m.downCol));
-      const curMin = minutesAtY(e.clientY - m.top);
+      const curMin = rawMinAtY(e.clientY - m.top); // 事件挪动按精确分钟，与拖选新建一致
       const dy = curMin == null ? m.dy : Math.max(m.dyMin, Math.min(m.dyMax, curMin - m.downMin));
       const next = { ...m, dx, dy };
       moveRef.current = next;
@@ -368,7 +368,7 @@ export default function WeekTimeline({
     e.preventDefault();
     setHover(null);
     const rects = colRects();
-    const downMin = minutesAtY(e.clientY - rects[col].top);
+    const downMin = rawMinAtY(e.clientY - rects[col].top); // 基准也按精确分钟
     if (downMin == null) return;
     (e.currentTarget as HTMLElement).closest("[data-date]")?.setPointerCapture(e.pointerId);
     // 未选中 → 只挪这一个；已选中 → 挪整个选中组
@@ -488,7 +488,7 @@ export default function WeekTimeline({
       {/* 滚动区：左侧小时刻度 ＋ 右侧 7 列时间轴 ＋ 凌晨折叠条 */}
       <div
         className="relative flex select-none touch-none overflow-y-auto"
-        style={{ maxHeight: 560 }}
+        style={{ maxHeight: "calc(100vh - 300px)" }}
         onMouseMove={handleTimelineMove}
         onMouseLeave={() => setHover(null)}
         onDragStart={(e) => e.preventDefault()}
