@@ -636,4 +636,62 @@ describe("WeekTimeline (重叠事件并排)", () => {
     expect(ba.style.left).toBe("0%");
     expect(ba.style.width).toBe("calc(100% - 2px)");
   });
+
+  it("选中事件块出现上下调整手柄", () => {
+    renderTimeline([[ev("a", "晨会", "09:30", "11:00")], ...emptyWeek.slice(1)]);
+    fireEvent.click(screen.getByRole("button", { name: /日程 晨会/ }));
+    const block = screen.getByRole("button", { name: /日程 晨会/ });
+    expect(block.querySelector('[data-testid="resize-handle-start"]')).not.toBeNull();
+    expect(block.querySelector('[data-testid="resize-handle-end"]')).not.toBeNull();
+  });
+
+  it("未选中时无调整手柄", () => {
+    renderTimeline([[ev("a", "晨会", "09:30", "11:00")], ...emptyWeek.slice(1)]);
+    const block = screen.getByRole("button", { name: /日程 晨会/ });
+    expect(block.querySelector('[data-testid="resize-handle-start"]')).toBeNull();
+  });
+
+  it("拖下边缘调整结束时间：松手提交新 endTime", () => {
+    const onMoveAll = vi.fn();
+    renderTimeline([[ev("a", "晨会", "09:00", "10:00")], ...emptyWeek.slice(1)], { onMoveAll });
+    fireEvent.click(screen.getByRole("button", { name: /日程 晨会/ }));
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    const handle = screen.getByTestId("resize-handle-end");
+    // 折叠态 rawMinAtY = (y-40)*2+420：块底端 130px = 10:00，拖到 190px = 12:00
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 50, clientY: 130 });
+    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 190 });
+    fireEvent.pointerUp(col, { pointerId: 1 });
+    expect(onMoveAll).toHaveBeenCalledWith([
+      { id: "a", date: "2026-08-03", time: "09:00", endTime: "12:00" },
+    ]);
+  });
+
+  it("拖上边缘调整开始时间：松手提交新 time，结束不变", () => {
+    const onMoveAll = vi.fn();
+    renderTimeline([[ev("a", "晨会", "09:00", "10:00")], ...emptyWeek.slice(1)], { onMoveAll });
+    fireEvent.click(screen.getByRole("button", { name: /日程 晨会/ }));
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    const handle = screen.getByTestId("resize-handle-start");
+    // 块顶 100px = 09:00，拖到 115px = 09:30
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 50, clientY: 100 });
+    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 115 });
+    fireEvent.pointerUp(col, { pointerId: 1 });
+    expect(onMoveAll).toHaveBeenCalledWith([
+      { id: "a", date: "2026-08-03", time: "09:30", endTime: "10:00" },
+    ]);
+  });
+
+  it("调整时长不小于 5 分钟：拖过开始时刻被钳制", () => {
+    const onMoveAll = vi.fn();
+    renderTimeline([[ev("a", "晨会", "09:00", "10:00")], ...emptyWeek.slice(1)], { onMoveAll });
+    fireEvent.click(screen.getByRole("button", { name: /日程 晨会/ }));
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    const handle = screen.getByTestId("resize-handle-end");
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 50, clientY: 130 });
+    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 102 }); // 09:02 → 钳制 09:05
+    fireEvent.pointerUp(col, { pointerId: 1 });
+    expect(onMoveAll).toHaveBeenCalledWith([
+      { id: "a", date: "2026-08-03", time: "09:00", endTime: "09:05" },
+    ]);
+  });
 });

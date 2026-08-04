@@ -39,6 +39,16 @@ type RegionState = {
   colRects: DOMRect[]; // 7 列矩形快照
 };
 
+// 拖边缘调整大小：edge = 调整哪条边；curMin = 当前吸附分钟（预览用）
+type ResizeState = {
+  id: string;
+  edge: "start" | "end";
+  top: number; // 列顶视口 y
+  downMin: number; // 按下分钟
+  curMin: number; // 当前预览分钟（已吸附与钳制）
+  colRects: DOMRect[];
+};
+
 // 事件整体挪动：相对按下位置的日/分钟偏移
 type MoveState = {
   top: number;
@@ -149,6 +159,7 @@ export default function WeekTimeline({
 }) {
   const [drag, setDrag] = useState<RegionState | null>(null);
   const [move, setMove] = useState<MoveState | null>(null);
+  const [resize, setResize] = useState<ResizeState | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [folded, setFolded] = useState(true); // 默认折叠凌晨 0:00–6:00
   const [hover, setHover] = useState<{ col: number; min: number | null } | null>(null); // 悬停高亮：列 + 分钟
@@ -159,6 +170,7 @@ export default function WeekTimeline({
   // 快速单击时 mouseup 也能被捕获（useEffect 被动绑定在真实浏览器是异步的）
   const dragRef = useRef<RegionState | null>(null);
   const moveRef = useRef<MoveState | null>(null);
+  const resizeRef = useRef<ResizeState | null>(null);
   const selectedRef = useRef(selectedIds);
   selectedRef.current = selectedIds;
   const onAddDayRef = useRef(onAddDay);
@@ -262,6 +274,24 @@ export default function WeekTimeline({
   // 指针捕获：按下即捕获，指针移出窗口/在窗外松手也持续收到事件，释放可靠
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const rect = timelineRef.current?.getBoundingClientRect();
+    // 拖边缘调整：预览吸附分钟（钳制 0 ≤ start、end ≤ 1439、时长 ≥ 5 分钟）
+    const rz = resizeRef.current;
+    if (rz) {
+      const raw = rawMinAtY(e.clientY - rz.top);
+      if (raw != null) {
+        const ev = eventsRef.current.flat().find((x) => x.id === rz.id);
+        if (ev) {
+          const s = parseTimeToMinutes(ev.time);
+          const en = ev.endTime ? parseTimeToMinutes(ev.endTime) : s + 60;
+          const lo = rz.edge === "start" ? 0 : s + MIN_DRAG_MIN;
+          const hi = rz.edge === "start" ? en - MIN_DRAG_MIN : 1439;
+          const curMin = Math.max(lo, Math.min(hi, snapSelect(raw)));
+          resizeRef.current = { ...rz, curMin };
+          setResize({ ...rz, curMin });
+        }
+      }
+      return;
+    }
     const m = moveRef.current;
     if (m) {
       const dx = Math.max(m.dxMin, Math.min(m.dxMax, colFromX(e.clientX, m.colRects) - m.downCol));
@@ -331,6 +361,22 @@ export default function WeekTimeline({
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    // 调整大小提交：一次 commit（撤销一条记录）
+    const rz = resizeRef.current;
+    if (rz) {
+      const ev = eventsRef.current.flat().find((x) => x.id === rz.id);
+      if (ev && rz.curMin !== rz.downMin) {
+        onMoveAllRef.current([
+          rz.edge === "start"
+            ? { id: rz.id, date: ev.date, time: minutesToTime(rz.curMin), endTime: ev.endTime }
+            : { id: rz.id, date: ev.date, time: ev.time, endTime: minutesToTime(rz.curMin) },
+        ]);
+        justMovedRef.current = true; // 抑制随后的 click，避免误开编辑面板
+      }
+      resizeRef.current = null;
+      setResize(null);
+      return;
+    }
     // 事件挪动提交
     const m = moveRef.current;
     if (m) {
@@ -403,6 +449,10 @@ export default function WeekTimeline({
       dragRef.current = null;
       setDrag(null);
     }
+    if (resizeRef.current) {
+      resizeRef.current = null;
+      setResize(null);
+    }
     setTip(null);
   };
 
@@ -436,6 +486,24 @@ export default function WeekTimeline({
     };
     dragRef.current = d;
     setDrag(d);
+  };
+
+  const handleResizeDown = (
+    e: React.PointerEvent,
+    ev: ScheduleEvent,
+    col: number,
+    edge: "start" | "end"
+  ) => {
+    e.stopPropagation(); // 不触发事件块整体挪动
+    e.preventDefault();
+    const rects = colRects();
+    const raw = rawMinAtY(e.clientY - rects[col].top);
+    if (raw == null) return;
+    (e.currentTarget as HTMLElement).closest("[data-date]")?.setPointerCapture(e.pointerId);
+    const snap = snapSelect(raw);
+    const r: ResizeState = { id: ev.id, edge, top: rects[col].top, downMin: snap, curMin: snap, colRects: rects };
+    resizeRef.current = r;
+    setResize(r);
   };
 
   const handleBlockDown = (e: React.PointerEvent, ev: ScheduleEvent, col: number) => {
@@ -643,6 +711,17 @@ export default function WeekTimeline({
                   const isSelected = selectedIds.includes(e.id);
                   const moving = move != null && isSelected;
                   const { track, tracks } = layout.get(e.id) ?? { track: 0, tracks: 1 };
+                  const isResizing = resize?.id === e.id;
+                  let blockTop = yOf(start);
+                  let blockH = (duration * HOUR_PX) / 60;
+                  if (isResizing && resize) {
+                    const sMin = resize.edge === "start" ? resize.curMin : start;
+                    const eMin = resize.edge === "end" ? resize.curMin : end;
+                    const lo = Math.min(sMin, eMin);
+                    const hi = Math.max(sMin, eMin);
+                    blockTop = yOf(lo);
+                    blockH = yOf(hi) - yOf(lo);
+                  }
                   return (
                     <div
                       key={e.id}
@@ -664,14 +743,15 @@ export default function WeekTimeline({
                       className={
                         "anim-fold " +
                         tokens.weekView.eventBlock +
+                        (moving || isResizing ? " !transition-none" : "") +
                         (isSelected ? " " + tokens.weekView.eventSelected : "")
                       }
                       style={{
-                        top: yOf(start),
+                        top: blockTop,
                         // 重叠并排：按轨道百分比定位，块间留 2px 缝隙
                         left: `${(track / tracks) * 100}%`,
                         width: `calc(${100 / tracks}% - 2px)`,
-                        height: (duration * HOUR_PX) / 60,
+                        height: blockH,
                         transform:
                           moving && move
                             ? `translate(${move.dx * move.colW}px, ${move.dy * (HOUR_PX / 60)}px)`
@@ -691,6 +771,20 @@ export default function WeekTimeline({
                       <span className="block truncate text-[10px] opacity-80">
                         {formatEventTime(e.time)}–{formatEventTime(e.endTime ?? "")}
                       </span>
+                      {isSelected && e.time && !isHidden(e) && (
+                        <>
+                          <div
+                            data-testid="resize-handle-start"
+                            className="absolute inset-x-0 top-0 h-1.5 cursor-ns-resize"
+                            onPointerDown={(ev) => handleResizeDown(ev, e, i, "start")}
+                          />
+                          <div
+                            data-testid="resize-handle-end"
+                            className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize"
+                            onPointerDown={(ev) => handleResizeDown(ev, e, i, "end")}
+                          />
+                        </>
+                      )}
                     </div>
                   );
                 })}
