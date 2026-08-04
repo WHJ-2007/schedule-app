@@ -77,6 +77,7 @@ function GhostLayer({
     tx: number;
     ty: number;
     s: number;
+    fast: boolean;
   };
   onDone: () => void;
 }) {
@@ -89,7 +90,10 @@ function GhostLayer({
       ref={ref}
       data-testid="view-ghost"
       aria-hidden
-      className="pointer-events-none absolute z-40 overflow-hidden anim-ghost-morph"
+      className={
+        "pointer-events-none absolute z-40 overflow-hidden " +
+        (ghost.fast ? "anim-ghost-morph-fast" : "anim-ghost-morph")
+      }
       style={
         {
           left: ghost.x,
@@ -158,6 +162,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     tx: number;
     ty: number;
     s: number;
+    fast: boolean; // 月→周/周→月使用更快的淡出变体，突出飞行的 7 个数字
     src: { ax: number; ay: number; aw: number; ah: number } | null;
   } | null;
   const [ghost, setGhost] = useState<Ghost>(null);
@@ -182,7 +187,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     items: WeekNumFlyItem[];
   } | null>(null);
   const weekNumFlyPendingRef = useRef(false);
-  const weekNumSrcRef = useRef<
+  const dayNumSrcRef = useRef<
     { key: string; x: number; y: number; w: number; h: number; node: HTMLElement }[]
   >([]);
 
@@ -241,6 +246,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
       tx: 0,
       ty: 0,
       s: 0.4,
+      fast: weekNumFlyPendingRef.current,
       src,
     });
   };
@@ -338,16 +344,18 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     return from === "year" ? "in" : "out";
   };
 
-  // 月→周：记录目标周 7 个日期数字在月历格里的位置与克隆（相对 wrap 的布局坐标）。
-  // days 缺省为本周；双击跳周时传目标周（跨月边界缺失的格子自动跳过）
-  const captureWeekNumbers = (days: Date[] = weekDates) => {
+  // 视图切换时记录 7 个日期数字的位置与克隆（月→周：月历格；周→月：周列头）。
+  // 月视图与周视图都以 [data-testid="view-anim"] 圈定自己的日期数字区域，
+  // 避免月视图当日面板列头（同 key）干扰。days 缺省为本周；跨月边界缺失的格子自动跳过
+  const captureDayNumbers = (days: Date[] = weekDates) => {
     const wrap = viewWrapRef.current;
-    const grid = gridRef.current;
-    if (!wrap || !grid) return;
+    if (!wrap) return;
     const out: { key: string; x: number; y: number; w: number; h: number; node: HTMLElement }[] = [];
     for (const d of days) {
       const key = toDateKey(d);
-      const el = grid.querySelector<HTMLElement>(`[data-day-num="${key}"]`);
+      const el = wrap.querySelector<HTMLElement>(
+        `[data-testid="view-anim"] [data-day-num="${key}"]`
+      );
       if (!el) continue;
       const p = layoutPos(el, wrap);
       out.push({
@@ -359,7 +367,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
         node: el.cloneNode(true) as HTMLElement,
       });
     }
-    weekNumSrcRef.current = out;
+    dayNumSrcRef.current = out;
   };
 
   const pickView = (v: ViewMode) => {
@@ -369,12 +377,14 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     if (from === "month" && v === "week") {
       anchor = { kind: "week" };
       weekNumFlyPendingRef.current = true;
-      captureWeekNumbers();
+      captureDayNumbers();
     } else if (from === "year" && v === "month") {
       anchor = { kind: "month", key: `${viewYear}-${viewMonth}` };
     } else if (from === "week" && v === "month") {
-      // 周视图残影缩向本周 7 列区域，与月→周对称
+      // 周→月镜像：7 个数字从周列头飞回月历对应日期格，残影同样缩向本周 7 列区域
       anchor = { kind: "week" };
+      weekNumFlyPendingRef.current = true;
+      captureDayNumbers();
     }
     captureGhost(anchor);
     saveView(v);
@@ -396,9 +406,10 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const openWeekFromDay = (d: Date) => {
     const targetKey = toDateKey(d);
     const targetWeek = getWeekDates(d);
-    captureGhost({ kind: "week" }, targetWeek);
+    // pending 先于 captureGhost：残影才能用快速淡出变体（与 tab 切换的月→周一致）
     weekNumFlyPendingRef.current = true;
-    captureWeekNumbers(targetWeek);
+    captureDayNumbers(targetWeek);
+    captureGhost({ kind: "week" }, targetWeek);
     saveView("week");
     setSelectedDateKey(targetKey);
     setViewYear(d.getFullYear());
@@ -485,8 +496,10 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     if (weekNumFlyPendingRef.current) {
       weekNumFlyPendingRef.current = false;
       const items: WeekNumFlyItem[] = [];
-      for (const s of weekNumSrcRef.current) {
-        const el = wrap.querySelector<HTMLElement>(`[data-day-num="${s.key}"]`);
+      for (const s of dayNumSrcRef.current) {
+        const el = wrap.querySelector<HTMLElement>(
+          `[data-testid="view-anim"] [data-day-num="${s.key}"]`
+        );
         if (!el) continue;
         const t = layoutPos(el, wrap);
         items.push({

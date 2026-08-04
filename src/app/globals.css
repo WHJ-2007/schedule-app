@@ -55,12 +55,19 @@ body {
 }
 .anim-ghost-morph { animation: ghost-morph 420ms cubic-bezier(0.4, 0, 0.2, 1) both; }
 
-/* 月→周切换：月历里的 7 个日期数字先飞到周视图对应列头，周视图随后从锚点展开 */
+/* 月→周 / 周→月：其余数字快速淡出（更快，突出飞行的 7 个数字） */
+@keyframes ghost-morph-fast {
+  from { transform: translate(0, 0) scale(1); opacity: 1; }
+  to { transform: translate(var(--g-tx), var(--g-ty)) scale(var(--g-s)); opacity: 0; }
+}
+.anim-ghost-morph-fast { animation: ghost-morph-fast 250ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+
+/* 月→周 / 周→月：7 个日期数字从源视图（月历格/周列头）飞到目标视图对应位置 */
 @keyframes num-fly {
   from { transform: translate(0, 0) scale(1); opacity: 1; }
   to { transform: translate(var(--f-tx), var(--f-ty)) scale(var(--f-s)); opacity: 0.15; }
 }
-.anim-num-fly { animation: num-fly 320ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+.anim-num-fly { animation: num-fly 450ms cubic-bezier(0.4, 0, 0.2, 1) both; }
 
 /* 全局按钮反馈动画：悬停轻微放大、按下收缩 */
 button {

@@ -610,7 +610,8 @@ describe("ScheduleApp (view zoom transition)", () => {
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const ghost = screen.getByTestId("view-ghost");
     // 残影中心 (400,300) → 锚点中心 (314,214)：平移 -86/-86，缩放 28/800
-    expect(ghost.className).toContain("anim-ghost-morph");
+    // 月→周/周→月均使用快速淡出变体（突出飞行的 7 个数字）
+    expect(ghost.className).toContain("anim-ghost-morph-fast");
     expect(ghost.style.getPropertyValue("--g-tx")).toBe("-86px");
     expect(ghost.style.getPropertyValue("--g-ty")).toBe("-86px");
     expect(ghost.style.getPropertyValue("--g-s")).toBe("0.035");
@@ -678,7 +679,8 @@ describe("ScheduleApp (view zoom transition)", () => {
     fireEvent.animationEnd(wrap());
     fireEvent.click(screen.getByRole("button", { name: "月" }));
     const ghost = screen.getByTestId("view-ghost");
-    expect(ghost.className).toContain("anim-ghost-morph");
+    // 月→周/周→月均使用快速淡出变体（突出飞行的 7 个数字）
+    expect(ghost.className).toContain("anim-ghost-morph-fast");
     // 残影中心 (400,300) → 本周 7 列合并区域中心 (314,214)：平移 -86/-86，缩放 28/800
     expect(ghost.style.getPropertyValue("--g-tx")).toBe("-86px");
     expect(ghost.style.getPropertyValue("--g-ty")).toBe("-86px");
@@ -707,12 +709,34 @@ describe("ScheduleApp (view zoom transition)", () => {
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const fly = screen.getByTestId("week-num-fly");
+    // 月→周使用快速淡出残影变体（与周→月镜像）
+    expect(screen.getByTestId("view-ghost").className).toContain("anim-ghost-morph-fast");
     const week = getWeekDates(new Date());
     expect(fly.querySelectorAll('[data-testid="week-num-fly-item"]')).toHaveLength(7);
     for (const d of week) {
       expect(fly.querySelector(`[data-day-num="${toDateKey(d)}"]`)).not.toBeNull();
     }
     // 动画结束后移除
+    for (const el of Array.from(fly.querySelectorAll('[data-testid="week-num-fly-item"]'))) {
+      fireEvent.animationEnd(el);
+    }
+    expect(screen.queryByTestId("week-num-fly")).toBeNull();
+  });
+
+  it("周→月切换数字飞行镜像：周列头 7 个数字飞回月历对应日期格", () => {
+    localStorage.setItem("schedule-view", "week");
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    const week = getWeekDates(new Date());
+    fireEvent.click(screen.getByRole("button", { name: "月" }));
+    const fly = screen.getByTestId("week-num-fly");
+    // 源 = 周列头 7 个数字；目标 = 月历对应日期格（42 格网格必含本周全部日期）
+    expect(fly.querySelectorAll('[data-testid="week-num-fly-item"]')).toHaveLength(7);
+    for (const d of week) {
+      const item = fly.querySelector(`[data-day-num="${toDateKey(d)}"]`);
+      if (item) expect(item.className).toContain("anim-num-fly");
+    }
+    // 周→月同样走快速淡出残影
+    expect(screen.getByTestId("view-ghost").className).toContain("anim-ghost-morph-fast");
     for (const el of Array.from(fly.querySelectorAll('[data-testid="week-num-fly-item"]'))) {
       fireEvent.animationEnd(el);
     }
