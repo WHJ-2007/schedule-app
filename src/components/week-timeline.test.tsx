@@ -572,15 +572,121 @@ describe("WeekTimeline (光标横线与时刻标签)", () => {
     const block = screen.getByRole("button", { name: /日程 晨会/ });
     expect(block.style.transitionProperty).toBe("");
     fireEvent.pointerDown(block, { pointerId: 1, clientX: 50, clientY: 100 }); // 9:00
-    expect(block.style.transitionProperty).toBe("");
+    // 拖动中只过渡轨道（left/width），transform 由指针驱动不参与过渡
+    expect(block.style.transitionProperty).toBe("left,width");
     fireEvent.pointerMove(block, { pointerId: 1, clientX: 150, clientY: 140 }); // +80 分钟、+1 天
     fireEvent.pointerUp(block, { pointerId: 1 });
     // 提交渲染：transform 与 top 一起过渡，视觉上直接落到吸附落点而非跳回起点
     expect(block.style.transitionProperty).toBe("top,left,width,height,transform");
-    // 新一次拖拽按下：落位过渡结束，恢复正常过渡列表
+    // 新一次拖拽按下：落位过渡结束，恢复拖动中的轨道过渡
     fireEvent.pointerDown(block, { pointerId: 1, clientX: 150, clientY: 140 });
-    expect(block.style.transitionProperty).toBe("");
+    expect(block.style.transitionProperty).toBe("left,width");
     fireEvent.pointerUp(block, { pointerId: 1 });
+  });
+
+  it("拖动中出现重叠立即重排：其他块实时让位（不松手也播放收缩动画）", () => {
+    const onMoveAll = vi.fn();
+    const a = ev("a", "晨会", "09:00", "10:00");
+    const b = ev("b", "评审", "09:30", "10:30");
+    const c = ev("c", "健身", "11:00", "12:00");
+    renderTimeline([[a, b, c], ...emptyWeek.slice(1)], { onMoveAll });
+    const blockA = screen.getByRole("button", { name: /日程 晨会/ });
+    const blockB = screen.getByRole("button", { name: /日程 评审/ });
+    const blockC = screen.getByRole("button", { name: /日程 健身/ });
+    // 初始：a 与 b 重叠并排（各 50%），c 独占整行
+    expect(blockB.style.width).toBe("calc(50% - 2px)");
+    expect(blockC.style.width).toBe("calc(100% - 2px)");
+    fireEvent.pointerDown(blockA, { pointerId: 1, clientX: 50, clientY: 100 }); // 9:00
+    fireEvent.pointerMove(blockA, { pointerId: 1, clientX: 50, clientY: 160 }); // 11:00，+120 分钟
+    // 不松手：a 挪到 11:00 与 c 重叠 → b 立即补满整行、c 让出半边、a 预览目标轨道（右轨）
+    expect(blockB.style.width).toBe("calc(100% - 2px)");
+    expect(blockC.style.width).toBe("calc(50% - 2px)");
+    expect(blockC.style.left).toBe("0%");
+    expect(blockA.style.left).toBe("50%");
+    expect(blockA.style.width).toBe("calc(50% - 2px)");
+    expect(blockA.style.transform).toBe("translate(0px, 60px)");
+    fireEvent.pointerUp(blockA, { pointerId: 1 });
+    // 松手提交后恢复真实排布（mock 未真的移动日程）
+    expect(onMoveAll).toHaveBeenCalledWith([
+      { id: "a", date: "2026-08-03", time: "11:00", endTime: "12:00" },
+    ]);
+    expect(blockB.style.width).toBe("calc(50% - 2px)");
+    expect(blockC.style.width).toBe("calc(100% - 2px)");
+  });
+
+  it("拖动跨天时目标列的日程实时收缩让位", () => {
+    const onMoveAll = vi.fn();
+    const a = ev("a", "晨会", "09:00", "10:00");
+    const c = ev("c", "健身", "11:00", "12:00", 1); // 第 2 天
+    renderTimeline([[a], [c], ...emptyWeek.slice(2)], { onMoveAll });
+    const blockA = screen.getByRole("button", { name: /日程 晨会/ });
+    const blockC = screen.getByRole("button", { name: /日程 健身/ });
+    fireEvent.pointerDown(blockA, { pointerId: 1, clientX: 50, clientY: 100 }); // 9:00
+    fireEvent.pointerMove(blockA, { pointerId: 1, clientX: 150, clientY: 160 }); // 第 2 天 11:00
+    // 不松手：c 让出半边，a 预览占右轨
+    expect(blockC.style.width).toBe("calc(50% - 2px)");
+    expect(blockA.style.left).toBe("50%");
+    expect(blockA.style.transform).toBe("translate(100px, 60px)");
+    fireEvent.pointerUp(blockA, { pointerId: 1 });
+    expect(onMoveAll).toHaveBeenCalledWith([
+      { id: "a", date: "2026-08-04", time: "11:00", endTime: "12:00" },
+    ]);
+  });
+
+  it("现在线高亮当前时刻，进行中日程蓝色描边", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 3, 10, 30)); // 周一 10:30
+    renderTimeline([
+      [
+        ev("a", "晨会", "10:00", "11:00"), // 进行中
+        ev("b", "评审", "09:00", "10:00"), // 已结束
+        ev("c", "健身", "09:00", "11:30"), // 进行中
+      ],
+      ...emptyWeek.slice(1),
+    ]);
+    const line = screen.getByTestId("now-line");
+    // 折叠凌晨后 10:30 = 40 + (630-420)*0.5 = 145px
+    expect(line.style.top).toBe("145px");
+    const blockA = screen.getByRole("button", { name: /日程 晨会/ });
+    const blockB = screen.getByRole("button", { name: /日程 评审/ });
+    const blockC = screen.getByRole("button", { name: /日程 健身/ });
+    expect(blockA.style.boxShadow).toContain("rgb(59 130 246");
+    expect(blockC.style.boxShadow).toContain("rgb(59 130 246");
+    expect(blockB.style.boxShadow).toBe("");
+    vi.useRealTimers();
+  });
+
+  it("现在线在凌晨折叠区内（此刻早于 7:00）不显示", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 3, 3, 0));
+    renderTimeline(emptyWeek);
+    expect(screen.queryByTestId("now-line")).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("可视范围不含今天（其他周）时不显示现在线、不高亮日程", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 3, 10, 30));
+    const otherWeek = getWeekDates(new Date(2026, 6, 27)); // 上一周
+    const a = ev("a", "晨会", "10:00", "11:00");
+    render(
+      <WeekTimeline
+        tokens={THEME_TOKENS}
+        dates={otherWeek}
+        eventsByDay={[[{ ...a, date: toDateKey(otherWeek[0]) }], ...Array.from({ length: 6 }, () => [])]}
+        anchorKey="2026-07-27"
+        today={new Date(2026, 7, 3)}
+        onJumpToMonth={vi.fn()}
+        onAddDay={vi.fn()}
+        onEdit={vi.fn()}
+        onToggleDone={vi.fn()}
+        onDelete={vi.fn()}
+        onMoveAll={vi.fn()}
+      />
+    );
+    expect(screen.queryByTestId("now-line")).toBeNull();
+    expect(screen.getByRole("button", { name: /日程 晨会/ }).style.boxShadow).toBe("");
+    vi.useRealTimers();
   });
 
   it("拖边缘调整时块内时间标签实时跟随、气泡显示调整后区间，松手提交", () => {

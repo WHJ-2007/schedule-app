@@ -168,7 +168,13 @@ export default function WeekTimeline({
   const [folded, setFolded] = useState(true); // 默认折叠凌晨 0:00–6:00
   const [hover, setHover] = useState<{ col: number; min: number | null } | null>(null); // 悬停高亮：列 + 分钟
   const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null); // 拖拽时间气泡
+  const [now, setNow] = useState(() => new Date()); // 当前时间：驱动现在线与进行中日程高亮
   const timelineRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   // 拖拽/选中状态同步进 ref：window 监听只挂载一次，闭包只捕获首次渲染值，
   // 快速单击时 mouseup 也能被捕获（useEffect 被动绑定在真实浏览器是异步的）
@@ -197,6 +203,7 @@ export default function WeekTimeline({
   const eventsRef = useRef(eventsByDay);
   eventsRef.current = eventsByDay;
   const weekKeys = dates.map(toDateKey);
+  const todayKey = toDateKey(today);
   const weekKeysRef = useRef(weekKeys);
   weekKeysRef.current = weekKeys;
 
@@ -279,6 +286,45 @@ export default function WeekTimeline({
     if (!e.time || !foldedRef.current) return false;
     return parseTimeToMinutes(e.time) < FOLD_END;
   };
+
+  // 现在线与进行中高亮：仅当当前日期在可视范围内显示；折叠时此刻若在凌晨区内则隐藏
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const showNowLine = !(folded && nowMin < FOLD_END) && dates.some((d) => isSameDay(d, today));
+
+  // 拖动中实时重排预览：把选中组从各列移除、按目标日期/时间放回后重算轨道，
+  // 未松手就开始播放让位/收缩动画——表现「松手后就这么排」
+  const allEvents = eventsByDay.flat();
+  const activeMove = move && selectedIds.length > 0 ? move : null;
+  const previewLayouts = activeMove
+    ? new Map<number, Map<string, { track: number; tracks: number }>>(
+        weekKeys.map((_, dayIdx) => {
+          const others = (eventsByDay[dayIdx] ?? []).filter(
+            (e) => e.time && !selectedIds.includes(e.id)
+          );
+          const incoming = allEvents
+            .filter((e) => e.time && selectedIds.includes(e.id) && !isHidden(e))
+            .map((e) => {
+              const s = parseTimeToMinutes(e.time);
+              const en = e.endTime ? parseTimeToMinutes(e.endTime) : s + 60;
+              const day = parseDateKey(e.date);
+              return {
+                ...e,
+                date: toDateKey(
+                  addDays(day.getFullYear(), day.getMonth(), day.getDate(), activeMove.dx)
+                ),
+                time: minutesToTime(s + activeMove.dy),
+                endTime: minutesToTime(en + activeMove.dy),
+              };
+            })
+            .filter(
+              (e) =>
+                e.date === weekKeys[dayIdx] &&
+                !(folded && parseTimeToMinutes(e.time) < FOLD_END)
+            );
+          return [dayIdx, layoutColumns([...others, ...incoming])];
+        })
+      )
+    : null;
 
   // 指针捕获：按下即捕获，指针移出窗口/在窗外松手也持续收到事件，释放可靠
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -739,7 +785,9 @@ export default function WeekTimeline({
           {dates.map((d, i) => {
             const key = toDateKey(d);
             const timed = (eventsByDay[i] ?? []).filter((e) => e.time);
-            const layout = layoutColumns(timed);
+            const baseLayout = layoutColumns(timed);
+            // 拖动中：本列用预览排布（选中组已挪走/加入后重算的轨道）
+            const layout = previewLayouts?.get(i) ?? baseLayout;
             const isAnchor = key === anchorKey;
             return (
               <div
@@ -783,8 +831,20 @@ export default function WeekTimeline({
                   if (folded && start < FOLD_END && end > FOLD_START) return null;
                   const isSelected = selectedIds.includes(e.id);
                   const moving = move != null && isSelected;
-                  const { track, tracks } = layout.get(e.id) ?? { track: 0, tracks: 1 };
                   const isResizing = resize?.id === e.id;
+                  // 正在进行的日程（今天此刻起止区间覆盖当前时间）：描蓝边高亮
+                  const ongoing =
+                    !isHidden(e) &&
+                    e.date === todayKey &&
+                    start <= nowMin &&
+                    nowMin < end;
+                  // 拖动块看目标列的预览轨道（显示松手后将占的轨位）；其余块看本列预览
+                  const basePos = baseLayout.get(e.id) ?? { track: 0, tracks: 1 };
+                  const { track, tracks } = moving
+                    ? (previewLayouts?.get(
+                        Math.min(Math.max(i + move!.dx, 0), cols - 1)
+                      )?.get(e.id) ?? basePos)
+                    : (layout.get(e.id) ?? basePos);
                   let blockTop = yOf(start);
                   let blockH = (duration * HOUR_PX) / 60;
                   if (isResizing && resize) {
@@ -815,7 +875,7 @@ export default function WeekTimeline({
                       onPointerDown={(ev) => handleBlockDown(ev, e, i)}
                       className={
                         tokens.weekView.eventBlock +
-                        (moving || isResizing ? " !transition-none" : "") +
+                        (isResizing ? " !transition-none" : "") +
                         (isSelected ? " " + tokens.weekView.eventSelected : "")
                       }
                       style={{
@@ -827,13 +887,17 @@ export default function WeekTimeline({
                         // 毛玻璃日程：彩色事件半透明底 + 左侧色条
                         backgroundColor: e.color ? e.color + "59" : undefined,
                         borderLeft: e.color ? `3px solid ${e.color}` : undefined,
+                        // 进行中日程：蓝色描边高亮
+                        boxShadow: ongoing ? "0 0 0 1.5px rgb(59 130 246 / 0.9)" : undefined,
                         transform:
                           moving && move
                             ? `translate(${move.dx * move.colW}px, ${move.dy * (HOUR_PX / 60)}px)`
                             : undefined,
+                        // 拖动中只过渡轨道（left/width 跟随重叠实时让位）；transform 由指针驱动不能过渡
                         // 提交渲染：transform 参与过渡，块从松手位置平滑落到吸附落点
-                        transitionProperty:
-                          settleRef.current && !moving
+                        transitionProperty: moving
+                          ? "left,width"
+                          : settleRef.current && !isResizing
                             ? "top,left,width,height,transform"
                             : undefined,
                         zIndex: moving ? 30 : isSelected ? 10 : undefined,
@@ -877,6 +941,16 @@ export default function WeekTimeline({
             );
           })}
         </div>
+        {/* 现在线：高亮当前时刻（仅当当前日期在可视范围且此刻不在折叠区内） */}
+        {showNowLine && (
+          <div
+            data-testid="now-line"
+            className="pointer-events-none absolute inset-x-0 z-10"
+            style={{ top: yOf(nowMin) }}
+          >
+            <div className="h-0.5 rounded-full bg-blue-500/90" />
+          </div>
+        )}
         {/* 光标横线与时刻标签：悬停时横向高亮当前时刻，左侧显示精确分钟 */}
         {hover?.min != null && (
           <>
