@@ -8,7 +8,7 @@ afterEach(() => cleanup());
 function renderPanel(form = emptyForm(["2026-08-05"]), overrides: Partial<Parameters<typeof EventPanel>[0]> = {}) {
   const props = {
     form,
-    tokens: THEME_TOKENS[1],
+    tokens: THEME_TOKENS,
     onChange: vi.fn(),
     onSave: vi.fn(),
     onClose: vi.fn(),

@@ -1,35 +1,12 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, cleanup, waitFor } from "@testing-library/react";
+import { describe, it, expect, afterEach } from "vitest";
+import { render, cleanup, screen } from "@testing-library/react";
 import Home from "./page";
-import { THEME_STORAGE_KEY, DEFAULT_THEME_PATH } from "@/lib/themes";
 
-const replaceMock = vi.fn();
-
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: replaceMock }),
-}));
-
-afterEach(() => {
-  cleanup();
-  localStorage.clear();
-  replaceMock.mockClear();
-});
+afterEach(() => cleanup());
 
 describe("home page", () => {
-  it("未保存时重定向默认主题", async () => {
+  it("直接渲染极简主题日程应用", () => {
     render(<Home />);
-    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith(DEFAULT_THEME_PATH));
-  });
-
-  it("保存过时重定向到保存的主题", async () => {
-    localStorage.setItem(THEME_STORAGE_KEY, "/style-6");
-    render(<Home />);
-    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/style-6"));
-  });
-
-  it("已删除主题回退默认", async () => {
-    localStorage.setItem(THEME_STORAGE_KEY, "/style-2");
-    render(<Home />);
-    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith(DEFAULT_THEME_PATH));
+    expect(screen.getByText("极简日程")).toBeInTheDocument();
   });
 });

@@ -1,15 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { getSavedThemePath } from "@/lib/themes";
+import ScheduleApp from "@/components/schedule-app";
+import { THEME_TOKENS } from "@/components/theme-tokens";
 
 export default function Home() {
-  const router = useRouter();
-
-  useEffect(() => {
-    router.replace(getSavedThemePath());
-  }, [router]);
-
-  return <main className="min-h-screen bg-neutral-50" />;
+  return <ScheduleApp tokens={THEME_TOKENS} />;
 }

@@ -27,7 +27,7 @@ afterEach(() => {
 
 describe("ScheduleApp (month view)", () => {
   it("渲染月视图与标题", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     expect(screen.getByRole("heading", { name: /极简日程/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /今天/ })).toBeInTheDocument();
     // 月视图大按钮已删除，改用当日时间轴列头的 ＋
@@ -50,7 +50,7 @@ describe("ScheduleApp (month view)", () => {
         return { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 } as DOMRect;
       }
     );
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: /展开凌晨时段/ }));
     const col = document.querySelector("div[data-date]")!; // 时间轴列是 DIV，月历格是 BUTTON
     fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 60 }); // 2:00
@@ -63,7 +63,7 @@ describe("ScheduleApp (month view)", () => {
   });
 
   it("点日期格显示当日标题", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     const grid = getMonthGrid(now.getFullYear(), now.getMonth());
     const counts = new Map<number, number>();
@@ -78,7 +78,7 @@ describe("ScheduleApp (month view)", () => {
   });
 
   it("添加日程到选中日（当日时间轴列头 ＋）", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     fireEvent.click(
       screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
@@ -89,7 +89,7 @@ describe("ScheduleApp (month view)", () => {
   });
 
   it("撤销/重做按钮：添加后撤销消失、重做恢复", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     fireEvent.click(
       screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
@@ -104,7 +104,7 @@ describe("ScheduleApp (month view)", () => {
   });
 
   it("版本播放条：拖动时间轴实时回看任意历史版本", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     const addBtn = `在${now.getMonth() + 1}月${now.getDate()}日添加日程`;
     for (const title of ["事件A", "事件B"]) {
@@ -130,7 +130,7 @@ describe("ScheduleApp (month view)", () => {
   });
 
   it("无操作时打开版本播放显示暂无历史操作", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "版本播放" }));
     expect(screen.getByText("暂无历史操作")).toBeInTheDocument();
     expect(screen.queryByLabelText("版本时间轴")).toBeNull();
@@ -165,14 +165,14 @@ describe("ScheduleApp (switcher & week view)", () => {
   });
 
   it("渲染 周/月/年 切换器", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     expect(screen.getByRole("button", { name: "周" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "月" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "年" })).toBeInTheDocument();
   });
 
   it("点周页签显示 7 天列并持久化", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const now = new Date();
     const week = getWeekDates(now);
@@ -185,7 +185,7 @@ describe("ScheduleApp (switcher & week view)", () => {
   });
 
   it("周视图翻周：上一周/下一周日期变化", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const now = new Date();
     fireEvent.click(screen.getByRole("button", { name: /上一周/ }));
@@ -201,7 +201,7 @@ describe("ScheduleApp (switcher & week view)", () => {
   });
 
   it("点周视图列头日期切到月视图并选中那天", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const now = new Date();
     const week = getWeekDates(now);
@@ -214,7 +214,7 @@ describe("ScheduleApp (switcher & week view)", () => {
   });
 
   it("周视图点事件直接打开编辑弹窗", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     fireEvent.click(
       screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
@@ -228,7 +228,7 @@ describe("ScheduleApp (switcher & week view)", () => {
   });
 
   it("周视图全天条目编辑按钮直接打开编辑面板", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     fireEvent.click(
       screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
@@ -242,7 +242,7 @@ describe("ScheduleApp (switcher & week view)", () => {
   });
 
   it("周视图列头＋按钮添加到该日", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const now = new Date();
     const week = getWeekDates(now);
@@ -259,7 +259,7 @@ describe("ScheduleApp (switcher & week view)", () => {
   });
 
   it("周视图连续翻周跨月后切回月视图显示对应月份", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     for (let i = 0; i < 6; i++) {
       fireEvent.click(screen.getByRole("button", { name: /上一周/ }));
@@ -273,7 +273,7 @@ describe("ScheduleApp (switcher & week view)", () => {
   });
 
   it("周视图拖选时间段：弹窗预填起止时间，保存后时间轴出现事件块", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     fireEvent.click(screen.getByRole("button", { name: /展开凌晨时段/ }));
     const col = document.querySelector(`[data-date="${toDateKey(getWeekDates(new Date())[0])}"]`)!;
@@ -290,7 +290,7 @@ describe("ScheduleApp (switcher & week view)", () => {
   });
 
   it("横向拖拽跨多天批量创建日程", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     fireEvent.click(screen.getByRole("button", { name: /展开凌晨时段/ }));
     const week = getWeekDates(new Date());
@@ -306,7 +306,7 @@ describe("ScheduleApp (switcher & week view)", () => {
   });
 
   it("周视图时间轴事件块点击直接打开编辑面板并回填结束时间", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     fireEvent.click(
       screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
@@ -323,7 +323,7 @@ describe("ScheduleApp (switcher & week view)", () => {
   });
 
   it("选中事件块按 Delete 删除并弹出撤销条，点撤销恢复", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     fireEvent.click(
       screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
@@ -349,7 +349,7 @@ describe("ScheduleApp (switcher & week view)", () => {
   });
 
   it("输入框聚焦时按 Delete 不删除日程", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     fireEvent.click(
       screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
@@ -369,7 +369,7 @@ describe("ScheduleApp (switcher & week view)", () => {
 
 describe("ScheduleApp (year view)", () => {
   it("点年页签显示 12 个月卡片", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "年" }));
     const year = new Date().getFullYear();
     for (let m = 1; m <= 12; m++) {
@@ -378,7 +378,7 @@ describe("ScheduleApp (year view)", () => {
   });
 
   it("年视图上一年/下一年切换", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "年" }));
     const year = new Date().getFullYear();
     fireEvent.click(screen.getByRole("button", { name: /上一年/ }));
@@ -388,7 +388,7 @@ describe("ScheduleApp (year view)", () => {
   });
 
   it("点月名切到月视图并定位该月", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "年" }));
     const year = new Date().getFullYear();
     fireEvent.click(screen.getByRole("button", { name: "上一年" }));
@@ -398,7 +398,7 @@ describe("ScheduleApp (year view)", () => {
   });
 
   it("点迷你网格日期切到月视图并选中那天", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "年" }));
     const year = new Date().getFullYear();
     // 当前月迷你网格里的 15 日
@@ -429,7 +429,7 @@ describe("ScheduleApp (selection bubble)", () => {
   });
 
   it("切换日期时选中泡泡滑到新位置", async () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const bubble = screen.getByTestId("selection-bubble");
     const now = new Date();
     await waitFor(() =>
@@ -453,7 +453,7 @@ describe("ScheduleApp (selection bubble)", () => {
   });
 
   it("选中日期不在当月网格时泡泡隐藏，回当月后恢复", async () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     await waitFor(() =>
       expect(screen.getByTestId("selection-bubble").style.visibility).toBe("visible")
@@ -478,7 +478,7 @@ describe("ScheduleApp (view zoom transition)", () => {
   const wrap = () => screen.getByTestId("view-zoom-wrap");
 
   it("月→年缩小进入、年→月放大进入、月→周放大进入、周→月缩小进入", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "年" }));
     expect(wrap().className).toContain("view-zoom-out");
     fireEvent.animationEnd(wrap());
@@ -494,7 +494,7 @@ describe("ScheduleApp (view zoom transition)", () => {
   });
 
   it("jsdom 下锚点测不到时回退中心（transform-origin 0px 0px）", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     fireEvent.animationEnd(wrap());
     fireEvent.click(screen.getByRole("button", { name: "月" }));
@@ -502,7 +502,7 @@ describe("ScheduleApp (view zoom transition)", () => {
   });
 
   it("月视图日期格带 data-date，年视图卡片带 data-ym", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     const todayBtn = screen.getByRole("button", { name: `${now.getMonth() + 1}月${now.getDate()}日` });
     expect(todayBtn).toHaveAttribute("data-date", toDateKey(now));
@@ -511,7 +511,7 @@ describe("ScheduleApp (view zoom transition)", () => {
   });
 
   it("月→周切换出现旧视图残影，内容为旧月视图，动画结束后移除", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const ghost = screen.getByTestId("view-ghost");
@@ -525,7 +525,7 @@ describe("ScheduleApp (view zoom transition)", () => {
   });
 
   it("周→月切换残影为旧周视图（7 列时间轴）", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const week = getWeekDates(new Date());
     fireEvent.click(
@@ -535,7 +535,7 @@ describe("ScheduleApp (view zoom transition)", () => {
   });
 
   it("仅视图切换产生残影：翻月/翻周等导航不产生", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: /下月/ }));
     expect(screen.queryByTestId("view-ghost")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "周" }));
@@ -554,7 +554,7 @@ describe("ScheduleApp (view zoom transition)", () => {
         return { left: 0, top: 0, width: 800, height: 600 } as DOMRect;
       }
     );
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const ghost = screen.getByTestId("view-ghost");
     // 残影中心 (400,300) → 锚点中心 (314,214)：平移 -86/-86，缩放 28/800
@@ -577,7 +577,7 @@ describe("ScheduleApp (view zoom transition)", () => {
         return { ...r, right: r.left + r.width, bottom: r.top + r.height } as DOMRect;
       }
     );
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "年" }));
     fireEvent.animationEnd(wrap());
     fireEvent.click(screen.getByRole("button", { name: "月" }));
@@ -601,7 +601,7 @@ describe("ScheduleApp (view zoom transition)", () => {
         return { left: 0, top: 0, width: 800, height: 600 } as DOMRect;
       }
     );
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const ghost = screen.getByTestId("view-ghost");
     // 合并区域 (300,200,28,28) → 中心 (314,214)：与单日锚点结果一致（mock 下 7 格同点）
@@ -621,7 +621,7 @@ describe("ScheduleApp (view zoom transition)", () => {
         return { left: 0, top: 0, width: 800, height: 600 } as DOMRect;
       }
     );
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     fireEvent.animationEnd(wrap());
     fireEvent.click(screen.getByRole("button", { name: "月" }));
@@ -640,7 +640,7 @@ describe("ScheduleApp (view zoom transition)", () => {
   });
 
   it("视图切换动画期间选中高亮泡泡隐藏，动画结束后恢复", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     expect(screen.getByTestId("selection-bubble")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     expect(screen.queryByTestId("selection-bubble")).toBeNull(); // 动画期间不渲染
@@ -652,7 +652,7 @@ describe("ScheduleApp (view zoom transition)", () => {
   });
 
   it("月→周切换：7 个日期数字飞行轨道覆盖本周全部日期，动画结束移除", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const fly = screen.getByTestId("week-num-fly");
     const week = getWeekDates(new Date());
@@ -673,7 +673,7 @@ describe("ScheduleApp (page-turn animation)", () => {
   const animArea = () => screen.getByTestId("view-anim");
 
   it("月视图：下月从右滑入、上月从左滑入（仅日期区域）", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     fireEvent.click(screen.getByRole("button", { name: /下月/ }));
     const next = addMonths(now.getFullYear(), now.getMonth(), 1);
@@ -685,7 +685,7 @@ describe("ScheduleApp (page-turn animation)", () => {
   });
 
   it("年视图：下一年从右滑入、上一年从左滑入（与月视图一致）", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "年" }));
     const year = new Date().getFullYear();
     fireEvent.click(screen.getByRole("button", { name: /下一年/ }));
@@ -697,7 +697,7 @@ describe("ScheduleApp (page-turn animation)", () => {
   });
 
   it("周视图：下一周从右滑入、上一周从左滑入", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const now = new Date();
     fireEvent.click(screen.getByRole("button", { name: /下一周/ }));
@@ -711,8 +711,8 @@ describe("ScheduleApp (page-turn animation)", () => {
     expect(animArea().className).toContain("anim-slide-in-left");
   });
 
-  it.each([1, 6])("主题 %i 翻月动画与功能一致", (n) => {
-    render(<ScheduleApp tokens={THEME_TOKENS[n]} />);
+  it("翻月动画与功能一致", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     fireEvent.click(screen.getByRole("button", { name: /下月/ }));
     const next = addMonths(now.getFullYear(), now.getMonth(), 1);
@@ -734,7 +734,7 @@ describe("ScheduleApp (page-turn animation)", () => {
 
 describe("ScheduleApp (recurring & day timeline)", () => {
   it("创建每天重复日程：周视图多天出现，编辑弹窗回填重复字段", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     fireEvent.click(
       screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
@@ -755,7 +755,7 @@ describe("ScheduleApp (recurring & day timeline)", () => {
   });
 
   it("编辑弹窗删除按钮删除整组重复日程", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     fireEvent.click(
       screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
@@ -780,14 +780,14 @@ describe("ScheduleApp (recurring & day timeline)", () => {
       { id: "c", title: "健身", date: toDateKey(new Date()), time: "19:00", description: "", done: false },
       { id: "d", title: "读书", date: toDateKey(new Date()), time: "21:00", description: "", done: false },
     ]));
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const chips = screen.getAllByText("晨会");
     expect(chips.length).toBeGreaterThan(0); // 月历格子小卡片
     expect(screen.getByText("+1")).toBeInTheDocument(); // 超出 3 条上限
   });
 
   it("年视图翻年后点月标签：月视图定位到正在查看的月", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "年" }));
     fireEvent.click(screen.getByRole("button", { name: /上一年/ }));
     fireEvent.click(screen.getByRole("button", { name: "月" }));
@@ -799,7 +799,7 @@ describe("ScheduleApp (recurring & day timeline)", () => {
   });
 
   it("无限重复（重复至留空）在周视图每天显示、月视图有小卡片", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     fireEvent.click(
       screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
@@ -829,7 +829,7 @@ describe("ScheduleApp (recurring & day timeline)", () => {
         { id: "we", title: "周末事件", date: saturday, time: "09:00", description: "", done: false, repeat: { freq: "weekend" } },
       ])
     );
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     expect(screen.getAllByRole("button", { name: /日程 工作日事件/ })).toHaveLength(5);
     expect(screen.getAllByRole("button", { name: /日程 周末事件/ })).toHaveLength(2);
@@ -844,7 +844,7 @@ describe("ScheduleApp (设置导出/导入)", () => {
     urlAny.createObjectURL = vi.fn(() => "blob:mock");
     urlAny.revokeObjectURL = vi.fn();
     try {
-      render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+      render(<ScheduleApp tokens={THEME_TOKENS} />);
       fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
       fireEvent.click(screen.getByRole("button", { name: "数据" }));
       expect(screen.getByRole("button", { name: /导出全部日程/ }).textContent).toContain("条日程");
@@ -857,7 +857,7 @@ describe("ScheduleApp (设置导出/导入)", () => {
   });
 
   it("设置中一键导入：JSON 文件恢复日程并覆盖当前", async () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
     fireEvent.click(screen.getByRole("button", { name: "数据" }));
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -877,7 +877,7 @@ describe("ScheduleApp (设置导出/导入)", () => {
   });
 
   it("导入非法 JSON 提示失败", async () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
     fireEvent.click(screen.getByRole("button", { name: "数据" }));
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -898,7 +898,7 @@ describe("ScheduleApp (月视图双击跳周)", () => {
   };
 
   it("双击日期跳到该日所在周：周视图列头为目标周的 7 天", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const target = pickOutsideWeekDay();
     fireEvent.doubleClick(
       screen.getByRole("button", { name: `${target.getMonth() + 1}月${target.getDate()}日` })
@@ -920,7 +920,7 @@ describe("ScheduleApp (月视图双击跳周)", () => {
   });
 
   it("双击跳周播放月→周动画：数字飞行轨道出现并包含目标日期", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const target = pickOutsideWeekDay();
     fireEvent.doubleClick(
       screen.getByRole("button", { name: `${target.getMonth() + 1}月${target.getDate()}日` })
@@ -932,7 +932,7 @@ describe("ScheduleApp (月视图双击跳周)", () => {
   });
 
   it("双击后从周视图切回月视图显示目标日期所在月", () => {
-    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
     const target = pickOutsideWeekDay();
     fireEvent.doubleClick(
       screen.getByRole("button", { name: `${target.getMonth() + 1}月${target.getDate()}日` })

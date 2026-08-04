@@ -1,13 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { THEMES, saveThemePath, getSavedThemePath } from "@/lib/themes";
 import { getChangelogPage, getChangelogPageCount } from "@/lib/changelog";
 import { sanitizeImportedEvents } from "@/lib/events";
 import type { ScheduleEvent } from "@/lib/events";
 
-type Tab = "theme" | "log" | "data";
+type Tab = "log" | "data";
 
 export default function Settings({
   events,
@@ -16,9 +14,8 @@ export default function Settings({
   events: ScheduleEvent[];
   onImport: (list: ScheduleEvent[]) => void;
 }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<Tab>("theme");
+  const [tab, setTab] = useState<Tab>("log");
   const [page, setPage] = useState(1);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -70,14 +67,8 @@ export default function Settings({
     reader.readAsText(file);
   };
 
-  const current = getSavedThemePath();
   const pageCount = getChangelogPageCount();
   const entries = getChangelogPage(page);
-
-  const pickTheme = (path: string) => {
-    saveThemePath(path);
-    router.push(path);
-  };
 
   return (
     <>
@@ -126,17 +117,6 @@ export default function Settings({
               />
               <button
                 type="button"
-                data-tab="theme"
-                onClick={() => setTab("theme")}
-                className={
-                  "relative z-10 rounded-full px-4 py-1.5 text-sm transition " +
-                  (tab === "theme" ? "text-white" : "text-neutral-500 hover:bg-neutral-100")
-                }
-              >
-                主题
-              </button>
-              <button
-                type="button"
                 data-tab="log"
                 onClick={() => setTab("log")}
                 className={
@@ -160,44 +140,7 @@ export default function Settings({
             </div>
 
             <div key={tab} className="anim-scale-in">
-            {tab === "theme" ? (
-              <ul className="mt-4 space-y-2">
-                {THEMES.map((t) => {
-                  const active = t.path === current;
-                  return (
-                    <li key={t.n}>
-                      <button
-                        type="button"
-                        onClick={() => pickTheme(t.path)}
-                        className={
-                          "w-full rounded-xl border p-3 text-left transition " +
-                          (active
-                            ? "border-neutral-900 bg-neutral-50"
-                            : "border-neutral-200 hover:border-neutral-400")
-                        }
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className={"text-sm font-medium " + (active ? "text-neutral-900" : "text-neutral-700")}>
-                            {t.name}
-                          </span>
-                          {active && <span className="text-xs text-neutral-500">当前</span>}
-                        </div>
-                        <p className="mt-0.5 text-xs text-neutral-500">{t.desc}</p>
-                        <div className="mt-2 flex gap-1.5">
-                          {t.colors.map((c) => (
-                            <span
-                              key={c}
-                              className="h-3.5 w-3.5 rounded-full border border-black/10"
-                              style={{ backgroundColor: c }}
-                            />
-                          ))}
-                        </div>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : tab === "log" ? (
+            {tab === "log" ? (
               <div className="mt-4">
                 {entries.length === 0 ? (
                   <p className="py-8 text-center text-sm text-neutral-400">暂无日志</p>

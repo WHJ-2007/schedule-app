@@ -7,17 +7,6 @@ body {
   color: #171717;
 }
 
-/* style-6 手账风 */
-.font-kai { font-family: "KaiTi", "STKaiti", "楷体", "Microsoft YaHei", serif; }
-.font-hand { font-family: "Segoe Script", "Comic Sans MS", "KaiTi", cursive; }
-.paper-lines {
-  background-image: repeating-linear-gradient(
-    transparent,
-    transparent 31px,
-    rgba(74, 63, 53, 0.14) 32px
-  );
-}
-
 /* 全局适度动画 */
 @keyframes fade-in {
   from { opacity: 0; }

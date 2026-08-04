@@ -52,9 +52,7 @@ export type ThemeTokens = {
   itemDecor?: ReactNode;   // 日程条目内装饰 JSX（style-6 的纸胶带 span）
 };
 
-export const THEME_TOKENS: Record<number, ThemeTokens> = {
-  // 主题 1：极简留白
-  1: {
+export const THEME_TOKENS: ThemeTokens = {
     main: "min-h-screen bg-[#fafafa]",
     header: {
       eyebrow: "MINIMAL SCHEDULE",
@@ -132,117 +130,4 @@ export const THEME_TOKENS: Record<number, ThemeTokens> = {
       miniCell: "relative flex aspect-square items-center justify-center rounded text-[10px] text-neutral-500 transition hover:bg-neutral-100",
       miniDot: "absolute bottom-0.5 h-1 w-1 rounded-full bg-blue-600",
     },
-  },
-
-  // 主题 6：手账笔记本
-  6: {
-    main: "paper-lines font-kai relative min-h-screen overflow-hidden bg-[#fbf6e9] text-[#4a3f35]",
-    viewPanel: "-rotate-[0.5deg] rounded-lg border border-[#e5dcc8] bg-[#fffdf5] p-5 shadow-sm transition",
-    dayListSpacing: "mt-5 space-y-4",
-    dotColors: ["#e05a5a", "#4a7bb5", "#e8c96a"],
-    itemColors: ["#e05a5a", "#4a7bb5", "#e8c96a"],
-    itemDecor: (
-      <span aria-hidden className="absolute -top-1.5 left-2 h-3 w-10 rotate-2 rounded-sm bg-[#e8c96a]/70" />
-    ),
-    decorations: (
-      <>
-        <div
-          aria-hidden
-          className="pointer-events-none absolute left-8 top-6 h-8 w-40 -rotate-3 rounded-sm bg-[#e8c96a]/70 shadow-sm"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute right-10 top-10 h-8 w-32 rotate-3 rounded-sm bg-[#ffb3b3]/60 shadow-sm"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute left-1/2 top-14 h-8 w-28 -rotate-2 rounded-sm bg-[#a8d8ea]/60 shadow-sm"
-        />
-      </>
-    ),
-    header: {
-      eyebrow: "My Daily Journal",
-      eyebrowClass: "font-hand text-sm text-[#b3947c]",
-      title: "手账日程",
-      titleClass: "font-hand -rotate-2 text-4xl text-[#4a3f35]",
-      tagline: <span className="font-hand rotate-3 text-lg text-[#e05a5a]">今天也要加油呀 ✎</span>,
-    },
-    sectionTitle: "font-hand text-lg text-[#4a3f35]",
-    weekdayHeader: "font-kai py-1 text-center text-xs text-neutral-500",
-    navButton: "rounded-lg border border-[#d8cba8] px-3 py-1.5 font-kai text-[#4a3f35] transition hover:bg-[#f5edda]",
-    card: "rotate-[0.5deg] rounded-lg border border-[#e5dcc8] bg-[#fffdf5] p-5 shadow-sm transition",
-    button: { primary: "font-hand -rotate-1 rounded-lg bg-[#e05a5a] px-5 py-2 text-white shadow-md transition hover:rotate-0" },
-    cell: {
-      base: "flex h-28 flex-col items-center rounded-md border border-dashed border-[#dfd3b8] pt-2 transition",
-      hover: "hover:bg-[#f5edda]",
-      num: "font-kai inline-flex h-7 w-7 items-center justify-center rounded-full",
-      plain: "text-[#4a3f35]",
-      outside: "text-neutral-500",
-      today: "ring-2 ring-[#e05a5a] text-[#4a3f35]",
-      selected: "bg-[#dbe9f5] text-[#4a3f35]",
-      eventChipArea: "mt-1 w-full space-y-0.5 px-0.5",
-      eventChip: "font-kai truncate rounded-sm bg-[#f5edda] px-1 text-left text-[10px] leading-4 text-[#4a3f35]",
-    },
-    dot: "h-1.5 w-1.5 rounded-full bg-[#e05a5a]",
-    dotMore: "text-[10px] text-[#4a7bb5]",
-    todayMark: "text-[#e05a5a]",
-    dayList: {
-      dateLabel: "font-kai text-sm text-[#4a3f35]",
-      itemRow: "flex items-center gap-3 relative rounded-lg border-l-4 bg-[#fffdf5] p-3 shadow-sm",
-      checkbox: "accent-[#e05a5a]",
-      editButton: "min-w-0 flex-1 text-left transition",
-      time: "font-kai text-xs text-[#4a7bb5] tabular-nums",
-      title: "font-kai truncate text-sm text-[#4a3f35]",
-      doneTitle: "font-kai line-through decoration-[#e05a5a] decoration-2 truncate text-sm text-[#4a3f35]",
-      desc: "font-kai truncate text-xs text-neutral-500",
-      delete: "shrink-0 text-neutral-500 transition hover:text-red-500",
-      empty: "font-kai mt-6 text-sm text-neutral-500",
-    },
-    dialog: {
-      overlay: "fixed inset-0 z-50 flex items-center justify-center bg-[#4a3f35]/30",
-      panel: "relative -rotate-[0.5deg] w-full max-w-sm rounded-lg border border-[#e5dcc8] bg-[#fffdf5] shadow-xl",
-      bodyClass: "p-6",
-      decor: (
-        <span
-          aria-hidden
-          className="absolute -top-2 left-1/2 h-4 w-24 -translate-x-1/2 rotate-1 rounded-sm bg-[#e8c96a]/70"
-        />
-      ),
-      title: "font-hand text-lg text-[#4a3f35]",
-      inputLabel: "font-kai text-sm text-[#8a7a66]",
-      input: "font-kai mt-1 w-full rounded-lg border-2 border-dashed border-[#d8cba8] bg-white/60 px-3 py-2 text-[#4a3f35] focus:border-[#4a7bb5] focus:outline-none",
-      cancel: "font-kai text-sm text-[#8a7a66] transition hover:text-[#4a3f35]",
-      save: "font-hand rounded-lg bg-[#4a7bb5] px-4 py-2 text-white transition",
-    },
-    viewTab: {
-      active: "rounded-full bg-[#4a3f35] px-4 py-1.5 font-kai text-sm text-white transition",
-      inactive: "rounded-full px-4 py-1.5 font-kai text-sm text-[#8a7a66] transition hover:bg-[#f5edda]",
-    },
-    weekView: {
-      columnHighlight: "border-[#4a7bb5] bg-[#dbe9f5]",
-      columnHover: "bg-[#f5edda]/70",
-      hourLabelActive: "font-bold text-[#4a7bb5]",
-      columnHeader: "font-kai text-xs font-medium text-[#4a3f35] transition hover:text-[#4a7bb5]",
-      addDay: "text-xs text-neutral-500 transition hover:text-[#4a7bb5]",
-      timeline: "rounded-lg border border-[#e5dcc8] bg-[#fffdf5]",
-      hourLabel: "font-kai absolute right-2 -translate-y-1/2 text-[10px] text-neutral-500",
-      gridLine: "absolute inset-x-0 border-t border-dashed border-[#e5dcc8]",
-      eventBlock: "absolute inset-x-0.5 overflow-hidden rounded-md bg-[#e05a5a] px-1.5 py-0.5 text-left text-white shadow-sm transition hover:brightness-105",
-      dragSelect: "pointer-events-none absolute inset-x-0.5 rounded-md bg-[#4a7bb5]/30",
-      allDayItem: "font-kai block w-full truncate rounded bg-[#f5edda] px-1.5 py-0.5 text-left text-[10px] text-[#4a3f35] transition hover:bg-[#e9dcc0]",
-      foldBand: "font-kai flex items-center justify-center gap-2 border-y border-dashed border-[#e5dcc8]/70 bg-[#fffdf5]/50 text-[10px] text-[#b3947c] transition hover:bg-[#fffdf5]/90 hover:text-[#4a3f35]",
-      eventSelected: "ring-2 ring-[#4a7bb5] bg-[#f5edda] text-[#4a3f35]!",
-      eventEdit: "font-kai absolute z-30 -translate-x-1/2 -translate-y-[calc(100%+8px)] whitespace-nowrap rounded-md bg-[#4a3f35] px-2 py-1 text-[11px] text-[#fffdf5] shadow-md transition hover:bg-[#5a4f42]",
-      dragTip: "font-kai pointer-events-none absolute z-40 -translate-x-1/2 -translate-y-[calc(100%+10px)] whitespace-nowrap rounded-full bg-[#4a3f35]/90 px-3 py-1 text-[11px] text-[#fffdf5] shadow-lg ring-1 ring-[#e5dcc8]",
-      cursorLine: "pointer-events-none absolute inset-x-0 border-t border-[#4a7bb5]/60",
-      cursorLabel: "font-kai pointer-events-none absolute left-1 -translate-y-1/2 whitespace-nowrap rounded-full bg-[#fffdf5] px-1.5 py-0.5 text-[10px] text-[#4a3f35] shadow-sm ring-1 ring-[#e5dcc8]",
-    },
-    yearView: {
-      monthCard: "rounded-lg border border-[#e5dcc8] bg-[#fffdf5] p-3 shadow-sm",
-      monthTitle: "mb-1.5 font-hand text-sm text-[#4a3f35] transition hover:text-[#4a7bb5]",
-      miniCell: "relative flex aspect-square items-center justify-center rounded font-kai text-[10px] text-neutral-500 transition hover:bg-[#f5edda]",
-      miniDot: "absolute bottom-0.5 h-1 w-1 rounded-full bg-[#e05a5a]",
-    },
-  },
-
 };

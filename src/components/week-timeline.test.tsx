@@ -40,7 +40,7 @@ function ev(id: string, title: string, time: string, endTime?: string, col = 0):
 
 function renderTimeline(eventsByDay: ScheduleEvent[][], overrides: Partial<Parameters<typeof WeekTimeline>[0]> = {}) {
   const props = {
-    tokens: THEME_TOKENS[1],
+    tokens: THEME_TOKENS,
     dates,
     eventsByDay,
     anchorKey: "2026-08-03",
