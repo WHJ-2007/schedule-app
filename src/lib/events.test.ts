@@ -156,6 +156,30 @@ describe("sanitizeImportedEvents", () => {
     expect(sanitizeImportedEvents({ id: "a" })).toEqual([]);
   });
 
+  it("接受导出 JSON 的 {version, exportedAt, events} 包装格式", () => {
+    expect(
+      sanitizeImportedEvents({
+        version: 1,
+        exportedAt: "2026-08-04T12:00:00.000Z",
+        events: [
+          { id: "a", title: "晨会", date: "2026-08-03", time: "09:00" },
+          { id: 123, title: "坏数据", date: "2026-08-03" },
+        ],
+      })
+    ).toEqual([
+      {
+        id: "a",
+        title: "晨会",
+        date: "2026-08-03",
+        time: "09:00",
+        endTime: undefined,
+        description: "",
+        done: false,
+        repeat: undefined,
+      },
+    ]);
+  });
+
   it("清洗为干净结构：丢弃缺字段与非法重复频率", () => {
     expect(
       sanitizeImportedEvents([

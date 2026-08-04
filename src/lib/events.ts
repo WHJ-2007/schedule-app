@@ -139,11 +139,18 @@ export function isValidEvent(e: unknown): e is ScheduleEvent {
   return typeof o.id === "string" && typeof o.title === "string" && typeof o.date === "string";
 }
 
-// 导入校验：逐条清洗为结构合法的干净日程（未知字段丢弃，重复频率只认合法值）
+// 导入校验：逐条清洗为结构合法的干净日程（未知字段丢弃，重复频率只认合法值）。
+// 兼容两种格式：裸数组，或导出 JSON 的 { version, exportedAt, events } 包装对象
 export function sanitizeImportedEvents(raw: unknown): ScheduleEvent[] {
-  if (!Array.isArray(raw)) return [];
+  const payload: unknown = Array.isArray(raw)
+    ? raw
+    : typeof raw === "object" &&
+        raw !== null &&
+        Array.isArray((raw as { events?: unknown }).events)
+      ? (raw as { events: unknown[] }).events
+      : [];
   const out: ScheduleEvent[] = [];
-  for (const item of raw) {
+  for (const item of payload) {
     if (!isValidEvent(item)) continue;
     const o = item as Record<string, unknown>;
     const r = o.repeat as Record<string, unknown> | undefined;

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import Settings from "./settings";
 import { THEME_STORAGE_KEY } from "@/lib/themes";
 
@@ -79,6 +79,37 @@ describe("settings", () => {
     expect(pill.style.width).toBe("56px");
     // 内容区切换带缩放动画
     expect(screen.getByRole("button", { name: /导出全部日程/ }).closest(".anim-scale-in")).toBeTruthy();
+  });
+
+  it("导入导出 JSON 包装格式：解包 events 并整体替换", async () => {
+    const onImport = vi.fn();
+    const { container } = render(<Settings events={[]} onImport={onImport} />);
+    fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
+    fireEvent.click(screen.getByRole("button", { name: "数据" }));
+    const file = new File(
+      [
+        JSON.stringify({
+          version: 1,
+          exportedAt: "2026-08-04T12:00:00.000Z",
+          events: [
+            { id: "a", title: "导入日程", date: "2026-08-05", time: "09:00", description: "", done: false },
+            { id: 123, title: "坏数据", date: "2026-08-05" },
+          ],
+        }),
+      ],
+      "导出.json",
+      { type: "application/json" }
+    );
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [file] },
+    });
+    await waitFor(() => {
+      expect(onImport).toHaveBeenCalledTimes(1);
+    });
+    const list = onImport.mock.calls[0][0] as { title: string }[];
+    expect(list).toHaveLength(1);
+    expect(list[0].title).toBe("导入日程");
+    expect(screen.getByText("已导入 1 条日程")).toBeInTheDocument();
   });
 
   it("更新日志分页：翻页显示不同条目", () => {
