@@ -29,6 +29,7 @@ import Settings from "./settings";
 import SelectionBubble from "./selection-bubble";
 import WeekTimeline from "./week-timeline";
 import EventPanel, { emptyForm, type FormState } from "./event-panel";
+import UndoToast from "./undo-toast";
 
 function sortByTime(list: ScheduleEvent[]): ScheduleEvent[] {
   return [...list].sort((a, b) => {
@@ -111,6 +112,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     addEvent,
     updateEvent,
     deleteEvent,
+    deleteEvents,
     toggleDone,
     replaceEvents,
     applyMoveAll,
@@ -128,6 +130,9 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const [form, setForm] = useState<FormState | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]); // 周视图选中组（Delete 键删除用）
   const [playerOpen, setPlayerOpen] = useState(false); // 版本播放条开关
+  const [toast, setToast] = useState<{ text: string; undoIndex: number } | null>(null);
+  const selectedIdsRef = useRef(selectedIds);
+  selectedIdsRef.current = selectedIds;
   // 初始恒为 month：SSR 无 localStorage，直接读保存视图会导致服务端 HTML 与客户端首帧不一致而水合失败
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [navDir, setNavDir] = useState<"left" | "right" | null>(null);
@@ -246,6 +251,34 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   useEffect(() => {
     if (selectedIds.length === 0) setForm(null);
   }, [selectedIds]);
+
+  // 撤销 toast 5 秒自动消失
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // Delete 键删除选中日程（输入框/文本编辑中不触发）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Delete") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      const ids = selectedIdsRef.current;
+      if (ids.length === 0) return;
+      deleteEvents(ids);
+      setSelectedIds([]);
+      // undoIndex = 删除前快照的索引（deleteEvents 的 pushSnapshot 已把索引指向删除前）
+      setToast({ text: `已删除 ${ids.length} 条日程`, undoIndex: indexRef.current });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [deleteEvents]);
+
+  // jumpToIndex 需要引用当前索引（toast 撤销）
+  const indexRef = useRef(index);
+  indexRef.current = index;
 
   const grid = useMemo(() => getMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
   const today = new Date();
@@ -942,6 +975,15 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
         />
       )}
       <Settings events={events} onImport={replaceEvents} />
+      {toast && (
+        <UndoToast
+          text={toast.text}
+          onUndo={() => {
+            jumpToIndex(toast.undoIndex);
+            setToast(null);
+          }}
+        />
+      )}
     </main>
   );
 }

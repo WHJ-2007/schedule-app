@@ -288,6 +288,50 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(screen.getByLabelText(/开始时间/)).toHaveValue("10:00");
     expect(screen.getByLabelText(/结束时间/)).toHaveValue("11:30");
   });
+
+  it("选中事件块按 Delete 删除并弹出撤销条，点撤销恢复", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    const now = new Date();
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
+    );
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "待删除事件" } });
+    fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "10:00" } });
+    fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const block = screen.getByRole("button", { name: /日程 待删除事件/ });
+    fireEvent.click(block);
+    // 面板打开，此时按 Delete
+    expect(screen.getByRole("dialog", { name: "编辑日程" })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Delete" });
+    expect(screen.queryByRole("button", { name: /日程 待删除事件/ })).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("已删除 1 条日程");
+    // 删除后面板自动关闭
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // 点撤销恢复
+    fireEvent.click(screen.getByRole("button", { name: "撤销删除" }));
+    expect(screen.getByRole("button", { name: /日程 待删除事件/ })).toBeInTheDocument();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("输入框聚焦时按 Delete 不删除日程", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS[1]} />);
+    const now = new Date();
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
+    );
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "不可删事件" } });
+    fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "10:00" } });
+    fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.click(screen.getByRole("button", { name: /日程 不可删事件/ }));
+    const title = screen.getByLabelText(/标题/);
+    fireEvent.keyDown(title, { key: "Delete" });
+    expect(screen.getByRole("button", { name: /日程 不可删事件/ })).toBeInTheDocument();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
 });
 
 describe("ScheduleApp (year view)", () => {

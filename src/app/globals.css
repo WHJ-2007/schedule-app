@@ -90,6 +90,20 @@ button:active:not(:disabled) { transform: scale(0.96); }
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* 右侧滑入编辑面板 */
+@keyframes panel-in {
+  from { transform: translateX(100%); opacity: 0.5; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.anim-panel-in { animation: panel-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* 撤销条底部读条：5 秒内从满到空 */
+@keyframes toast-progress {
+  from { width: 100%; }
+  to { width: 0; }
+}
+.anim-toast-progress { animation: toast-progress 5s linear both; }
+
 /* 系统减弱动态效果：全部动画/过渡压到不可感知 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
