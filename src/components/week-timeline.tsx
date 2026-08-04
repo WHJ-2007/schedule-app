@@ -1222,13 +1222,14 @@ export default function WeekTimeline({
           </>
         )}
         {/* 凌晨折叠条：点击展开/收起 */}
+        {/* 条带从刻度列右缘到内容右缘（right: sbWidth 不覆盖滚动条），否则居中文字比列中心偏右 */}
         <button
           type="button"
           onMouseDown={(e) => e.stopPropagation()}
           onClick={() => setFolded((f) => !f)}
           aria-label={folded ? "展开凌晨时段 0:00–6:00" : "收起凌晨时段 0:00–6:00"}
-          className={"anim-fold absolute inset-x-0 z-10 " + tokens.weekView.foldBand}
-          style={{ top: bandTop, height: bandH }}
+          className={"anim-fold absolute z-10 " + tokens.weekView.foldBand}
+          style={{ left: GUTTER, right: sbWidth, top: bandTop, height: bandH }}
         >
           {folded
             ? `凌晨时段 0:00–6:00 已折叠${foldCount > 0 ? `（${foldCount} 项日程）` : ""} · 点击展开`

@@ -814,7 +814,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
             style={viewZoom ? { transformOrigin: `${viewZoom.ox}px ${viewZoom.oy}px` } : undefined}
           >
             {viewMode === "month" && (
-            <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+            <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
               {/* 月历 */}
               <section className={tokens.viewPanel}>
                 <div className="mb-4 flex items-center justify-between">
