@@ -7,6 +7,8 @@ import {
   toDateKey,
   parseDateKey,
   todayKey,
+  parseTimeToMinutes,
+  minutesToTime,
   isSameDay,
   isSameMonth,
   addMonths,
@@ -22,7 +24,8 @@ import {
   formatYearTitle,
   addYears,
 } from "@/lib/date";
-import { expandEventDates, type RepeatFreq, type ScheduleEvent } from "@/lib/events";
+import { buildPostponedClone, expandEventDates, isInstanceExpired, type RepeatFreq, type ScheduleEvent } from "@/lib/events";
+import { copyViewAsJpeg } from "@/lib/export-image";
 import type { EventMovePatch } from "@/lib/use-events";
 import { getSavedView, saveView, type ViewMode } from "@/lib/views";
 import type { ThemeTokens } from "./theme-tokens";
@@ -51,6 +54,11 @@ function DayPanel({
   onMoveAll,
   onBatchColor,
   onSelectionChange,
+  onPostpone,
+  onEndEarly,
+  onStretch,
+  onStretchRepeat,
+  onCopy,
 }: {
   tokens: ThemeTokens;
   dateKey: string;
@@ -67,10 +75,27 @@ function DayPanel({
   onMoveAll: (patches: EventMovePatch[]) => void;
   onBatchColor: (ids: string[], color: string) => void;
   onSelectionChange: (ids: string[]) => void;
+  onPostpone: (e: ScheduleEvent) => void;
+  onEndEarly: (id: string) => void;
+  onStretch: (id: string, date: string, until: string) => void;
+  onStretchRepeat: (id: string, edge: "start" | "end", date: string) => void;
+  onCopy: (e: ScheduleEvent) => void;
 }) {
   // dates 数组必须稳定引用：WeekTimeline 的「翻周清空选中」effect 依赖它，
   // 每次新建引用会导致清空选中 → 父层联动关闭编辑表单
   const dayDates = useMemo(() => [parseDateKey(dateKey)], [dateKey]);
+  // 看板时间轴缩放：默认 0.8（每小时 24px）让月视图一屏放完不滚动；Ctrl+滚轮仍可独立缩放
+  const [panelZoom, setPanelZoom] = useState(0.8);
+  // 编辑中的日程正在进行的判定：今天此刻在起止区间内且未完成，才显示「提前结束」
+  const editingEvent = form?.id ? dayEvents.find((e) => e.id === form.id) : undefined;
+  const nowMin = today.getHours() * 60 + today.getMinutes();
+  const canEndEarly =
+    !!editingEvent &&
+    !editingEvent.done &&
+    dateKey === toDateKey(today) &&
+    !!editingEvent.time &&
+    parseTimeToMinutes(editingEvent.time) <= nowMin &&
+    nowMin < parseTimeToMinutes(editingEvent.endTime ?? "");
   return (
     <section className={tokens.card + " flex flex-col"}>
       <p className={tokens.dayList.dateLabel}>{formatDayLabel(parseDateKey(dateKey))}</p>
@@ -85,6 +110,11 @@ function DayPanel({
               onSave={onSave}
               onDelete={onDelete}
               onClose={onClose}
+              canEndEarly={canEndEarly}
+              onEndEarly={() => {
+                if (form.id) onEndEarly(form.id);
+                onClose();
+              }}
             />
           </div>
         )}
@@ -103,7 +133,14 @@ function DayPanel({
             onMoveAll={onMoveAll}
             onBatchColor={onBatchColor}
             onSelectionChange={onSelectionChange}
+            onPostpone={onPostpone}
+            onEndEarly={onEndEarly}
+            onStretch={onStretch}
+            onStretchRepeat={onStretchRepeat}
+            onCopy={onCopy}
             cols={1}
+            zoom={panelZoom}
+            onZoomChange={setPanelZoom}
             rootClass="min-h-0 flex-1"
             scrollClass="min-h-0 flex-1"
             scrollMaxHeight="none"
@@ -217,8 +254,11 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const [selectedDateKey, setSelectedDateKey] = useState(() => todayKey());
   const [form, setForm] = useState<FormState | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]); // 周视图选中组（Delete 键删除用）
+  const [weekZoom, setWeekZoom] = useState(1); // 周视图时间轴缩放倍率（0.5–3，步进 0.25）
+  const zoomIn = () => setWeekZoom((z) => Math.min(3, Math.round((z + 0.25) * 100) / 100));
+  const zoomOut = () => setWeekZoom((z) => Math.max(0.5, Math.round((z - 0.25) * 100) / 100));
   const [playerOpen, setPlayerOpen] = useState(false); // 版本播放条开关
-  const [toast, setToast] = useState<{ text: string; undoIndex: number } | null>(null);
+  const [toast, setToast] = useState<{ text: string; undoIndex?: number } | null>(null);
   const selectedIdsRef = useRef(selectedIds);
   selectedIdsRef.current = selectedIds;
   // 初始恒为 month：SSR 无 localStorage，直接读保存视图会导致服务端 HTML 与客户端首帧不一致而水合失败
@@ -230,7 +270,9 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const [viewZoom, setViewZoom] = useState<ViewZoom>(null);
   const zoomAnchorRef = useRef<ZoomAnchor>(null);
   const viewWrapRef = useRef<HTMLDivElement | null>(null);
-  const gridRef = useRef<HTMLDivElement | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null); // 月视图日历格（截图目标）
+  const weekShotRef = useRef<HTMLDivElement | null>(null); // 周视图时间轴（截图目标）
+  const yearShotRef = useRef<HTMLDivElement | null>(null); // 年视图 12 月卡（截图目标）
   // 视图切换残影：旧视图 DOM 快照缩小移动到锚点元素位置并淡出，新视图从同一锚点缩放
   // src = 源视图锚点区域（相对 wrap 的像素矩形）：年→月用年历月卡、月→周用本周 7 格合并区域
   type Ghost = {
@@ -387,6 +429,13 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const indexRef = useRef(index);
   indexRef.current = index;
 
+  // 删除入口统一：右键菜单/编辑面板/胶囊与 Delete 键一致，弹出撤销条
+  const deleteWithToast = (id: string) => {
+    deleteEvent(id);
+    setSelectedIds([]);
+    setToast({ text: "已删除 1 条日程", undoIndex: indexRef.current });
+  };
+
   const grid = useMemo(() => getMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
   const today = new Date();
   // 周视图右侧：只在编辑时显示表单（多选/框选不打开侧边栏）。
@@ -418,6 +467,16 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     [weekDates, byDay]
   );
   const dayEvents = sortByTime(byDay.get(selectedDateKey) ?? []);
+  // 周视图右侧表单：编辑中的日程正在进行的时段才显示「提前结束」（只标记完成，计划不变）
+  const weekEditing = form?.id ? weekEvents.flat().find((e) => e.id === form.id) : undefined;
+  const weekNowMin = today.getHours() * 60 + today.getMinutes();
+  const weekCanEndEarly =
+    !!weekEditing &&
+    !weekEditing.done &&
+    form?.dates[0] === toDateKey(today) &&
+    !!weekEditing.time &&
+    parseTimeToMinutes(weekEditing.time) <= weekNowMin &&
+    weekNowMin < parseTimeToMinutes(weekEditing.endTime ?? "");
   const indicatorCap = tokens.cell.indicatorCap ?? 3; // 每日小卡片上限
 
   const goPrev = () => {
@@ -739,14 +798,98 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     setForm(null);
   };
 
+  // 点击菜单操作：已完成（提前结束）→ 取消完成标记；已结束未完成 → 顺延复制（从现在开始）
+  const postponeEvent = (e: ScheduleEvent) => {
+    if (e.done) {
+      updateEvent(e.id, { done: false });
+      setToast({ text: `已标记为未完成：「${e.title}」` });
+      return;
+    }
+    const clone = buildPostponedClone(e, new Date());
+    addEvent(clone);
+    setToast({ text: `已顺延：「${e.title}」从 ${clone.time} 开始（${clone.endTime} 结束）` });
+  };
+  const endEarly = (id: string) => {
+    const title = events.find((x) => x.id === id)?.title;
+    updateEvent(id, { done: true }); // 提前做完只标记完成，计划时间不变
+    setToast({ text: `已提前结束并标记完成${title ? `：「${title}」` : ""}` });
+  };
+
+  // 横向拖宽：事件自动改为每天重复（起点 date、截止 until，时间不变）
+  const stretchEvent = (id: string, date: string, until: string) => {
+    const title = events.find((x) => x.id === id)?.title;
+    updateEvent(id, { date, repeat: { freq: "daily", until } });
+    setToast({ text: `已改为每天重复${title ? `：「${title}」` : ""}（${date} 至 ${until}）` });
+  };
+
+  // 重复日程拖边界：左边界（第一个实例）改重复开始日期、右边界（最后一个实例）改截止日期，
+  // 频率保持不变；起止互钳制（起点不晚于截止、截止不早于起点）
+  const stretchRepeatEdge = (id: string, edge: "start" | "end", dateKey: string) => {
+    const ev = events.find((x) => x.id === id);
+    if (!ev?.repeat) return;
+    const title = ev.title;
+    if (edge === "start") {
+      const until = ev.repeat.until;
+      const nd = until && dateKey > until ? until : dateKey;
+      if (nd === ev.date) return;
+      updateEvent(id, { date: nd });
+      setToast({ text: `重复开始改为 ${nd}（频率不变）${title ? `：「${title}」` : ""}` });
+    } else {
+      const nd = dateKey < ev.date ? ev.date : dateKey;
+      const oldUntil = ev.repeat.until ?? ev.date;
+      if (nd === oldUntil) return;
+      updateEvent(id, { repeat: { ...ev.repeat, until: nd } });
+      setToast({ text: `重复截止改为 ${nd}（频率不变）${title ? `：「${title}」` : ""}` });
+    }
+  };
+
+  // 复制：同一天时间 +1 小时（跨天顺延到次日，时长不变），不带重复规则
+  const copyEvent = (e: ScheduleEvent) => {
+    const sMin = parseTimeToMinutes(e.time);
+    const dur = (e.endTime ? parseTimeToMinutes(e.endTime) : sMin + 60) - sMin;
+    const ns = sMin + 60;
+    const [y, m, d] = e.date.split("-").map(Number);
+    const nd = new Date(y, m - 1, d);
+    nd.setDate(nd.getDate() + Math.floor(ns / 1440)); // 跨天顺延次日
+    const nsDay = ns % 1440;
+    const neDay = nsDay + dur;
+    addEvent({
+      title: e.title,
+      date: toDateKey(nd),
+      time: minutesToTime(nsDay),
+      endTime: neDay < 1440 ? minutesToTime(neDay) : undefined,
+      description: e.description,
+      color: e.color,
+    });
+    setToast({ text: `已复制：「${e.title}」（${toDateKey(nd)} ${minutesToTime(nsDay)} 开始）` });
+  };
+
+  // 一键导出：当前视图（月/周/年）内容区渲染成 JPG 复制到剪贴板
+  const handleExport = async () => {
+    const node =
+      viewMode === "month" ? gridRef.current : viewMode === "week" ? weekShotRef.current : yearShotRef.current;
+    if (!node) return;
+    try {
+      const result = await copyViewAsJpeg(node);
+      setToast({
+        text:
+          result === "copied"
+            ? "已复制日程图片到剪贴板（JPG）"
+            : "浏览器不支持剪贴板图片，已下载为 JPG 文件",
+      });
+    } catch (err) {
+      console.error("导出失败", err);
+      setToast({ text: `导出失败：${err instanceof Error ? err.message : String(err)}` });
+    }
+  };
+
   return (
     <main className={"anim-fade-in " + tokens.main}>
       {tokens.decorations}
       {tokens.sidebar}
       <div className={tokens.contentClass}>
-        <div className="relative z-10 mx-auto max-w-5xl px-6 py-12">
+        <div className="relative z-10 mx-auto max-w-5xl px-6 py-10">
           <header className="mb-10">
-            <p className={tokens.header.eyebrowClass}>{tokens.header.eyebrow}</p>
             <h1 className={tokens.header.titleClass}>{tokens.header.title}</h1>
             {tokens.header.tagline}
           </header>
@@ -792,6 +935,14 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
               >
                 重做 ↷
               </button>
+              <button
+                type="button"
+                onClick={handleExport}
+                aria-label="导出图片"
+                className={tokens.navButton}
+              >
+                导出
+              </button>
               {playerOpen && (
                 <VersionPlayer
                   history={history}
@@ -814,10 +965,10 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
             style={viewZoom ? { transformOrigin: `${viewZoom.ox}px ${viewZoom.oy}px` } : undefined}
           >
             {viewMode === "month" && (
-            <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+            <div className="grid gap-6 lg:grid-cols-[3fr_1fr]">
               {/* 月历 */}
               <section className={tokens.viewPanel}>
-                <div className="mb-4 flex items-center justify-between">
+                <div className="mb-2 flex items-center justify-between">
                   <h2 className={tokens.sectionTitle}>{formatMonthTitle(viewYear, viewMonth)}</h2>
                   <div className="flex gap-2">
                     <button type="button" onClick={goPrev} className={tokens.navButton}>
@@ -832,7 +983,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                   </div>
                 </div>
 
-                <div className="mb-1.5 grid grid-cols-7 gap-1.5">
+                <div className="mb-0.5 grid grid-cols-7 gap-1.5">
                   {WEEKDAY_NAMES.map((w) => (
                     <div key={w} className={tokens.weekdayHeader}>
                       {w}
@@ -848,7 +999,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                     if (e.target === e.currentTarget) setNavDir(null);
                   }}
                   className={[
-                    "relative grid grid-cols-7 " + (tokens.cellGridGap ?? "gap-1.5"),
+                    "relative grid grid-cols-7 " + (tokens.cellGridGap ?? "gap-x-1.5 gap-y-0.5"),
                     navDir === "left"
                       ? "anim-slide-in-left"
                       : navDir === "right"
@@ -895,32 +1046,62 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                           <span className={tokens.cell.eventChipArea ?? "mt-1 flex w-full gap-x-0.5 px-0.5"}>
                             {/* 竖排优先，放不下才横向第二列，最多两列 */}
                             <span className="flex min-w-0 flex-1 flex-col gap-y-0.5">
-                              {dayList.slice(0, indicatorCap).map((e) => (
+                              {dayList.slice(0, indicatorCap).map((e) => {
+                                const expired = !e.done && isInstanceExpired(e, key, today);
+                                return (
                                 <span
                                   key={e.id}
-                                  className={tokens.cell.eventChip}
+                                  className={tokens.cell.eventChip + (e.done ? " line-through" : "")}
                                   style={{
-                                    backgroundColor: e.color ? e.color + "14" : undefined,
-                                    borderLeft: e.color ? `3px solid ${e.color}` : undefined,
+                                    backgroundColor: e.done
+                                      ? "rgba(124,162,140,0.5)"
+                                      : expired
+                                        ? "rgba(185,96,84,0.45)"
+                                        : e.color
+                                          ? e.color + "14"
+                                          : undefined,
+                                    borderLeft: e.done
+                                      ? "3px solid rgb(44,98,70)"
+                                      : expired
+                                        ? "3px solid rgb(150,56,48)"
+                                        : e.color
+                                          ? `3px solid ${e.color}`
+                                          : undefined,
                                   }}
                                 >
                                   {e.title}
                                 </span>
-                              ))}
+                                );
+                              })}
                             </span>
                             <span className="flex min-w-0 flex-1 flex-col gap-y-0.5">
-                              {dayList.slice(indicatorCap, indicatorCap * 2).map((e) => (
+                              {dayList.slice(indicatorCap, indicatorCap * 2).map((e) => {
+                                const expired = !e.done && isInstanceExpired(e, key, today);
+                                return (
                                 <span
                                   key={e.id}
-                                  className={tokens.cell.eventChip}
+                                  className={tokens.cell.eventChip + (e.done ? " line-through" : "")}
                                   style={{
-                                    backgroundColor: e.color ? e.color + "14" : undefined,
-                                    borderLeft: e.color ? `3px solid ${e.color}` : undefined,
+                                    backgroundColor: e.done
+                                      ? "rgba(124,162,140,0.5)"
+                                      : expired
+                                        ? "rgba(185,96,84,0.45)"
+                                        : e.color
+                                          ? e.color + "14"
+                                          : undefined,
+                                    borderLeft: e.done
+                                      ? "3px solid rgb(44,98,70)"
+                                      : expired
+                                        ? "3px solid rgb(150,56,48)"
+                                        : e.color
+                                          ? `3px solid ${e.color}`
+                                          : undefined,
                                   }}
                                 >
                                   {e.title}
                                 </span>
-                              ))}
+                                );
+                              })}
                               {dayList.length > indicatorCap * 2 && (
                                 <span className={"truncate text-left text-[10px] " + tokens.dotMore}>
                                   +{dayList.length - indicatorCap * 2}
@@ -953,7 +1134,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                 onFormChange={setForm}
                 onSave={handleSave}
                 onDelete={(id) => {
-                  deleteEvent(id);
+                  deleteWithToast(id);
                   setForm(null);
                 }}
                 onClose={() => setForm(null)}
@@ -963,6 +1144,11 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                 onMoveAll={applyMoveAll}
                 onBatchColor={setEventColors}
                 onSelectionChange={setSelectedIds}
+                onPostpone={postponeEvent}
+                onEndEarly={endEarly}
+                onStretch={stretchEvent}
+                onStretchRepeat={stretchRepeatEdge}
+                onCopy={copyEvent}
               />
             </div>
             )}
@@ -987,10 +1173,18 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                       <button type="button" onClick={goNextWeek} className={tokens.navButton}>
                         下一周
                       </button>
+                      <span className="mx-0.5 h-5 w-px bg-neutral-200" />
+                      <button type="button" onClick={zoomOut} aria-label="缩小" className={tokens.navButton}>
+                        −
+                      </button>
+                      <button type="button" onClick={zoomIn} aria-label="放大" className={tokens.navButton}>
+                        ＋
+                      </button>
                     </div>
                   </div>
 
                   <div
+                    ref={weekShotRef}
                     data-testid="view-anim"
                     onAnimationEnd={(e) => {
                       if (e.target === e.currentTarget) setNavDir(null);
@@ -1017,10 +1211,17 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                       onAddDay={openAdd}
                       onEdit={openEdit}
                       onToggleDone={toggleDone}
-                      onDelete={deleteEvent}
+                      onDelete={deleteWithToast}
                       onMoveAll={applyMoveAll}
                       onBatchColor={setEventColors}
                       onSelectionChange={setSelectedIds}
+                      onPostpone={postponeEvent}
+                      onEndEarly={endEarly}
+                      onStretch={stretchEvent}
+                      onStretchRepeat={stretchRepeatEdge}
+                      onCopy={copyEvent}
+                      zoom={weekZoom}
+                      onZoomChange={setWeekZoom}
                     />
                   </div>
                 </section>
@@ -1034,10 +1235,15 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                       onChange={setForm}
                       onSave={handleSave}
                       onDelete={(id) => {
-                        deleteEvent(id);
+                        deleteWithToast(id);
                         setForm(null);
                       }}
                       onClose={() => setForm(null)}
+                      canEndEarly={weekCanEndEarly}
+                      onEndEarly={() => {
+                        if (form.id) endEarly(form.id);
+                        setForm(null);
+                      }}
                     />
                   </div>
                 )}
@@ -1062,6 +1268,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
 
                 <div
                   key={viewYear}
+                  ref={yearShotRef}
                   data-testid="view-anim"
                   onAnimationEnd={(e) => {
                     if (e.target === e.currentTarget) setNavDir(null);
@@ -1095,22 +1302,19 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                       <div className="grid grid-cols-7 gap-0.5">
                         {yearMonthCells[mi].map((d, i) => {
                           if (!d) return <span key={`blank-${i}`} />;
-                          const key = toDateKey(d);
-                          const n = (byDay.get(key) ?? []).length;
                           const isToday = isSameDay(d, today);
                           return (
                             <button
-                              key={key}
+                              key={toDateKey(d)}
                               type="button"
                               onClick={() => jumpToMonth(d)}
                               aria-label={`${d.getMonth() + 1}月${d.getDate()}日`}
                               className={
                                 tokens.yearView.miniCell +
-                                (isToday ? " " + tokens.todayMark : "")
+                                (isToday ? " " + tokens.yearView.todayMark : "")
                               }
                             >
                               {d.getDate()}
-                              {n > 0 && <span className={tokens.yearView.miniDot} />}
                             </button>
                           );
                         })}
@@ -1161,8 +1365,9 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
       {toast && (
         <UndoToast
           text={toast.text}
+          canUndo={toast.undoIndex != null}
           onUndo={() => {
-            jumpToIndex(toast.undoIndex);
+            if (toast.undoIndex != null) jumpToIndex(toast.undoIndex);
             setToast(null);
           }}
         />

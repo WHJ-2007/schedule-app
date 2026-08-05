@@ -15,10 +15,15 @@ import {
   formatWeekTitle,
   isSameDay,
 } from "@/lib/date";
+import { copyViewAsJpeg } from "@/lib/export-image";
+
+const mockExport = vi.mocked(copyViewAsJpeg);
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
+
+vi.mock("@/lib/export-image", () => ({ copyViewAsJpeg: vi.fn() }));
 
 // jsdom 26 自带 fetch 会真实请求 dev server；stub 为 undefined 让版本历史恢复
 // 走同步 localStorage 回退（useEvents 检测 typeof fetch === "undefined"），测试无竞态
@@ -30,15 +35,36 @@ afterEach(() => {
   cleanup();
   localStorage.clear();
   vi.unstubAllGlobals();
+  mockExport.mockReset();
 });
 
 describe("ScheduleApp (month view)", () => {
   it("渲染月视图与标题", () => {
     render(<ScheduleApp tokens={THEME_TOKENS} />);
-    expect(screen.getByRole("heading", { name: /极简日程/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /日程/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /今天/ })).toBeInTheDocument();
     // 月视图大按钮已删除，改用当日时间轴列头的 ＋
     expect(screen.queryByRole("button", { name: "＋ 添加日程" })).toBeNull();
+  });
+
+  it("一键导出：月视图截图目标是日历格，成功复制后提示", async () => {
+    mockExport.mockResolvedValue("copied");
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "导出图片" }));
+    expect(await screen.findByText("已复制日程图片到剪贴板（JPG）")).toBeInTheDocument();
+    const node = mockExport.mock.calls[0][0] as HTMLElement;
+    expect(node.querySelector("[data-date]")).toBeTruthy();
+    expect(node.querySelector('[data-testid="timeline-scroll"]')).toBeNull();
+  });
+
+  it("一键导出：周视图截图目标是周时间轴，剪贴板不可用回退下载提示", async () => {
+    mockExport.mockResolvedValue("downloaded");
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.click(screen.getByRole("button", { name: "导出图片" }));
+    expect(await screen.findByText(/已下载为 JPG 文件/)).toBeInTheDocument();
+    const node = mockExport.mock.calls[0][0] as HTMLElement;
+    expect(node.querySelector('[data-testid="timeline-scroll"]')).toBeTruthy();
   });
 
   it("月视图当日时间轴拖选位置与鼠标一致（不受月历格子干扰）", () => {
@@ -60,8 +86,8 @@ describe("ScheduleApp (month view)", () => {
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: /展开凌晨时段/ }));
     const col = document.querySelector("div[data-date]")!; // 时间轴列是 DIV，月历格是 BUTTON
-    fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 60 }); // 2:00
-    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 90 }); // 3:00
+    fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 48 }); // 看板默认 zoom 0.8 = 24px/h → 2:00
+    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 72 }); // 3:00
     fireEvent.pointerUp(col, { pointerId: 1 });
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText(/开始时间/)).toHaveValue("02:00");
@@ -168,7 +194,8 @@ describe("ScheduleApp (month view)", () => {
       ])
     );
     render(<ScheduleApp tokens={THEME_TOKENS} />);
-    fireEvent.click(screen.getByRole("button", { name: "日程 内嵌测试" }));
+    fireEvent.contextMenu(screen.getByRole("button", { name: "日程 内嵌测试" }), { clientX: 100, clientY: 100 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
     const dialog = screen.getByRole("dialog", { name: "编辑日程" });
     // 看板式内嵌：淡入、无 fixed 定位、无右侧滑入动画
     expect(dialog.className).toContain("anim-fade-in");
@@ -192,7 +219,8 @@ describe("ScheduleApp (month view)", () => {
     );
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
-    fireEvent.click(screen.getAllByRole("button", { name: "日程 浮动面板" })[0]);
+    fireEvent.contextMenu(screen.getAllByRole("button", { name: "日程 浮动面板" })[0], { clientX: 100, clientY: 100 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
     const dialog = screen.getByRole("dialog", { name: "编辑日程" });
     expect(dialog.className).toContain("anim-fade-in");
     expect(dialog.className).not.toContain("anim-panel-in");
@@ -391,7 +419,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(grid.className).toContain("lg:grid-cols-[1fr_0fr]");
   });
 
-  it("周视图单击非当前日事件：看板切到该日并保持展开（不误折叠）", () => {
+  it("周视图单击非当前日事件：点菜单「编辑」后看板切到该日并保持展开（不误折叠）", () => {
     const now = new Date();
     const tomorrow = addDays(now.getFullYear(), now.getMonth(), now.getDate(), 1);
     localStorage.setItem(
@@ -404,16 +432,21 @@ describe("ScheduleApp (switcher & week view)", () => {
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const grid = screen.getByTestId("week-grid");
-    // 点今日事件 → 看板展开
-    fireEvent.click(
-      within(screen.getByTestId("view-anim")).getByRole("button", { name: "日程 今日事件" })
+    // 右键今日事件 → 弹操作菜单（不直接开面板）
+    fireEvent.contextMenu(
+      within(screen.getByTestId("view-anim")).getByRole("button", { name: "日程 今日事件" }),
+      { clientX: 100, clientY: 100 }
     );
+    expect(screen.getByRole("menu", { name: "日程操作" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
     expect(grid.className).toContain("lg:grid-cols-[2fr_1fr]");
-    // 点明日事件 → 看板切换日期，必须保持展开
+    // 右键明日事件 → 看板切换日期，必须保持展开
     // （旧 bug：单日看板切日 → 翻周清空选中 effect 误触发 → 父层误关面板 → 又折叠）
-    fireEvent.click(
-      within(screen.getByTestId("view-anim")).getByRole("button", { name: "日程 明日事件" })
+    fireEvent.contextMenu(
+      within(screen.getByTestId("view-anim")).getByRole("button", { name: "日程 明日事件" }),
+      { clientX: 100, clientY: 100 }
     );
+    fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
     expect(grid.className).toContain("lg:grid-cols-[2fr_1fr]");
     // 右侧只显示表单（无日期标签），表单已跟随到明日事件
     expect((screen.getByLabelText(/标题/) as HTMLInputElement).value).toBe("明日事件");
@@ -496,6 +529,8 @@ describe("ScheduleApp (switcher & week view)", () => {
   });
 
   it("批量设色：框选多个 → 工具条点色点 → 全部变", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 3, 9, 30)); // 周一 9:30：事件 09:00 开始进行中，避免过期标红干扰
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     const addBtn = `在${now.getMonth() + 1}月${now.getDate()}日添加日程`;
@@ -524,7 +559,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(b.style.backgroundColor).toMatch(/239, 68, 68/);
   });
 
-  it("周视图时间轴事件块点击直接打开编辑面板并回填结束时间", () => {
+  it("周视图点事件块弹出操作菜单，点「编辑」打开面板并回填结束时间", () => {
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();
     fireEvent.click(
@@ -535,10 +570,233 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:30" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
-    fireEvent.click(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 时间段事件/ }));
+    fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 时间段事件/ }), { clientX: 100, clientY: 100 });
+    // 右键后是操作菜单，不是直接弹编辑面板
+    expect(screen.queryByRole("dialog", { name: "编辑日程" })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
     expect(screen.getByRole("dialog", { name: "编辑日程" })).toBeInTheDocument();
     expect(screen.getByLabelText(/开始时间/)).toHaveValue("10:00");
     expect(screen.getByLabelText(/结束时间/)).toHaveValue("11:30");
+  });
+
+  it("周视图工具栏放大/缩小按钮：放大后事件块变高", () => {
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    const now = new Date();
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
+    );
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "缩放测试" } });
+    fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "09:00" } });
+    fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "10:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const block = within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 缩放测试/ });
+    expect(block.style.height).toBe("30px"); // zoom=1：60 分钟 = 30px
+    fireEvent.click(screen.getByRole("button", { name: "放大" }));
+    expect(block.style.height).toBe("37.5px"); // zoom=1.25：60 分钟 = 37.5px
+    fireEvent.click(screen.getByRole("button", { name: "缩小" }));
+    expect(block.style.height).toBe("30px");
+  });
+
+  it("提前结束在编辑面板里：只标记完成、结束时间不变（计划不变），点后面板关闭", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 3, 10, 0)); // 周一 10:00
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "在8月3日添加日程" }));
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "进行中事件" } });
+    fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "10:00" } });
+    fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    // 块上不显示提前结束；右键点块弹操作菜单（编辑/提前结束），面板内也才有提前结束
+    expect(screen.queryByRole("button", { name: "提前结束" })).toBeNull();
+    fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 进行中事件/ }), { clientX: 100, clientY: 100 });
+    expect(screen.getByRole("menu", { name: "日程操作" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
+    fireEvent.click(screen.getByRole("button", { name: "提前结束" }));
+    expect(screen.getByRole("status")).toHaveTextContent("已提前结束并标记完成");
+    expect(screen.queryByRole("dialog")).toBeNull(); // 点完关闭面板
+    // 再打开编辑面板：结束时间仍是 11:00（计划不变）
+    fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 进行中事件/ }), { clientX: 100, clientY: 100 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
+    expect(screen.getByLabelText(/结束时间/)).toHaveValue("11:00");
+    expect(screen.getByLabelText(/开始时间/)).toHaveValue("10:00");
+    vi.useRealTimers();
+  });
+
+  it("非进行中日程（未开始）的编辑面板不显示提前结束按钮", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 3, 10, 0)); // 周一 10:00
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "在8月3日添加日程" }));
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "未来事件" } });
+    fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "14:00" } });
+    fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "15:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 未来事件/ }), { clientX: 100, clientY: 100 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
+    expect(screen.getByRole("dialog", { name: "编辑日程" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "提前结束" })).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("菜单「提前结束」：点块 → 菜单点提前结束 → 只标记完成、不开面板、菜单关闭", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 3, 10, 0)); // 周一 10:00
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "在8月3日添加日程" }));
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "菜单进行中" } });
+    fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "10:00" } });
+    fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 菜单进行中/ }), { clientX: 100, clientY: 100 });
+    // 菜单里有提前结束，点它：不经过编辑面板
+    fireEvent.click(screen.getByRole("menuitem", { name: "提前结束" }));
+    expect(screen.getByRole("status")).toHaveTextContent("已提前结束并标记完成");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("menu", { name: "日程操作" })).toBeNull();
+    // 计划不变：重开面板看结束时间仍是 11:00
+    fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 菜单进行中/ }), { clientX: 100, clientY: 100 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
+    expect(screen.getByLabelText(/结束时间/)).toHaveValue("11:00");
+    vi.useRealTimers();
+  });
+
+  it("菜单「标记为未完成」：已结束日程顺延复制一份从现在开始", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 3, 10, 30)); // 周一 10:30
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "在8月3日添加日程" }));
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "已结束晨会" } });
+    fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "09:00" } });
+    fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "10:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    // 已结束：菜单显示 编辑/标记为未完成，无提前结束
+    fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 已结束晨会/ }), { clientX: 100, clientY: 100 });
+    const menu = screen.getByRole("menu", { name: "日程操作" });
+    expect(within(menu).getByRole("menuitem", { name: "标记为未完成" })).not.toBeNull();
+    expect(within(menu).queryByRole("menuitem", { name: "提前结束" })).toBeNull();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "标记为未完成" }));
+    // 顺延复制：同一标题现在有两块（原计划 + 从现在开始的副本）
+    expect(screen.getByRole("status")).toHaveTextContent(/已顺延：「已结束晨会」从 10:30 开始（11:30 结束）/);
+    expect(within(screen.getByTestId("view-anim")).getAllByRole("button", { name: /日程 已结束晨会/ })).toHaveLength(2);
+    vi.useRealTimers();
+  });
+
+  it("菜单「标记为未完成」：已提前结束的日程取消完成标记，不产生副本，恢复提前结束选项", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 3, 10, 0)); // 周一 10:00
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "在8月3日添加日程" }));
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "早退事件" } });
+    fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "10:00" } });
+    fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const block = within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 早退事件/ });
+    // 先提前结束（完成标记）
+    fireEvent.contextMenu(block, { clientX: 100, clientY: 100 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "提前结束" }));
+    expect(screen.getByRole("status")).toHaveTextContent("已提前结束并标记完成");
+    // 已完成：菜单只有 编辑/标记为未完成，无提前结束
+    fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 早退事件/ }), { clientX: 100, clientY: 100 });
+    const menu = screen.getByRole("menu", { name: "日程操作" });
+    expect(within(menu).getByRole("menuitem", { name: "标记为未完成" })).not.toBeNull();
+    expect(within(menu).queryByRole("menuitem", { name: "提前结束" })).toBeNull();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "标记为未完成" }));
+    // 取消完成：不产生副本，只去掉完成标记
+    expect(screen.getByRole("status")).toHaveTextContent("已标记为未完成：「早退事件」");
+    const blocks = within(screen.getByTestId("view-anim")).getAllByRole("button", { name: /日程 早退事件/ });
+    expect(blocks.length).toBeGreaterThan(0);
+    for (const b of blocks) {
+      expect(b.querySelector("span")!.className).not.toContain("line-through");
+    }
+    // 取消完成后再右键：恢复进行中 → 又有提前结束
+    fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 早退事件/ }), { clientX: 100, clientY: 100 });
+    expect(within(screen.getByRole("menu", { name: "日程操作" })).getByRole("menuitem", { name: "提前结束" })).not.toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("菜单：明天的日程即使结束时刻早于现在也显示「提前结束」（按实例日期判结束，不误判为已结束）", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 5, 15, 0)); // 周三 15:00
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    // 明天（8/6 周四）建一个 14:00–15:00 的事件：结束时刻早于现在，但日期在未来
+    fireEvent.click(screen.getByRole("button", { name: "8月6日" }));
+    fireEvent.click(screen.getByRole("button", { name: "在8月6日添加日程" }));
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "明日会议" } });
+    fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "14:00" } });
+    fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "15:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 明日会议/ }), { clientX: 100, clientY: 100 });
+    const menu = screen.getByRole("menu", { name: "日程操作" });
+    expect(within(menu).getByRole("menuitem", { name: "提前结束" })).not.toBeNull();
+    expect(within(menu).queryByRole("menuitem", { name: "标记为未完成" })).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("菜单「复制」：同一天时间 +1 小时创建副本并提示，原事件不变", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 3, 10, 0)); // 周一 10:00
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "在8月3日添加日程" }));
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "可复制事件" } });
+    fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "10:00" } });
+    fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.contextMenu(
+      within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 可复制事件/ }),
+      { clientX: 100, clientY: 100 }
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "复制" }));
+    // 副本：同一天 11:00–12:00，共 2 块（原件 + 副本）
+    expect(screen.getByRole("status")).toHaveTextContent("已复制：「可复制事件」（2026-08-03 11:00 开始）");
+    expect(screen.queryByRole("menu", { name: "日程操作" })).toBeNull();
+    const blocks = within(screen.getByTestId("view-anim")).getAllByRole("button", { name: /日程 可复制事件/ });
+    expect(blocks).toHaveLength(2);
+    vi.useRealTimers();
+  });
+
+  it("横向拖宽：拖右把手跨 2 列 → 事件自动每天重复（每天一个实例）", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 3, 10, 0)); // 周一 10:00
+    // jsdom 不计算布局：模拟 7 列（每列 100px 宽、top 0）供横向拖宽按列吸附
+    const rectSpy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const col = this.closest("[data-date]") as HTMLElement | null;
+        if (col) {
+          const idx = Array.from(document.querySelectorAll("[data-date]")).indexOf(col);
+          return { left: idx * 100, top: 0, width: 100, height: 0, right: (idx + 1) * 100, bottom: 0 } as DOMRect;
+        }
+        return { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 } as DOMRect;
+      }
+    );
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "在8月3日添加日程" }));
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "拖宽事件" } });
+    fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "10:00" } });
+    fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const block = within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 拖宽事件/ });
+    const handle = within(block).getByTestId("hstretch-handle-end");
+    const col = block.closest("[data-date]") as HTMLElement;
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100, clientY: 100 });
+    // 拖宽激活后把手隐藏（块淡化、各列显示预览副本）：后续事件派发到列（真实浏览器由指针捕获保证）
+    fireEvent.pointerMove(col, { pointerId: 1, clientX: 250, clientY: 100 }); // 拖到第 3 列（8/5）
+    fireEvent.pointerUp(col, { pointerId: 1 });
+    expect(screen.getByRole("status")).toHaveTextContent(/已改为每天重复：「拖宽事件」（2026-08-03 至 2026-08-05）/);
+    // 每天重复：周一、二、三各一个实例
+    expect(
+      within(screen.getByTestId("view-anim")).getAllByRole("button", { name: /日程 拖宽事件/ })
+    ).toHaveLength(3);
+    rectSpy.mockRestore();
+    vi.useRealTimers();
   });
 
   it("选中事件块按 Delete 删除并弹出撤销条，点撤销恢复", () => {
@@ -553,7 +811,8 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const block = within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 待删除事件/ });
-    fireEvent.click(block);
+    fireEvent.contextMenu(block, { clientX: 100, clientY: 100 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
     // 面板打开，此时按 Delete
     expect(screen.getByRole("dialog", { name: "编辑日程" })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "Delete" });
@@ -582,7 +841,8 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:00" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
-    fireEvent.click(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 不可删事件/ }));
+    fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 不可删事件/ }), { clientX: 100, clientY: 100 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
     const title = screen.getByLabelText(/标题/);
     fireEvent.keyDown(title, { key: "Delete" });
     // 7 列与看板位各有一块，限定 7 列断言
@@ -630,6 +890,23 @@ describe("ScheduleApp (year view)", () => {
     const label = `${d.getMonth() + 1}月${d.getDate()}日`;
     fireEvent.click(screen.getByRole("button", { name: label }));
     expect(screen.getByText(formatDayLabel(d))).toBeInTheDocument();
+  });
+
+  it("年视图：迷你月历不显示日程小圆点，今天日期带蓝色圆圈", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 5, 12, 0)); // 周三 8/5
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "年" }));
+    // 12 个月卡：格子按钮里只有日期文本，没有任何小圆点 span
+    expect(document.querySelectorAll('[data-ym] button span')).toHaveLength(0);
+    // 今天（8/5）的迷你格子：蓝色圆圈标记
+    const todayCell = screen.getByRole("button", { name: "8月5日" });
+    expect(todayCell.className).toContain("rounded-full");
+    expect(todayCell.className).toContain("ring-1");
+    expect(todayCell.className).toContain("ring-blue-600");
+    // 其他日期没有圆圈
+    expect(screen.getByRole("button", { name: "8月4日" }).className).not.toContain("ring-blue-600");
+    vi.useRealTimers();
   });
 });
 

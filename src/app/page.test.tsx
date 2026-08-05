@@ -7,6 +7,6 @@ afterEach(() => cleanup());
 describe("home page", () => {
   it("直接渲染极简主题日程应用", () => {
     render(<Home />);
-    expect(screen.getByText("极简日程")).toBeInTheDocument();
+    expect(screen.getByText("日程")).toBeInTheDocument();
   });
 });

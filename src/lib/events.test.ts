@@ -6,12 +6,25 @@ import {
   updateEventInList,
   deleteEventFromList,
   toggleEventDone,
+  buildPostponedClone,
   saveEvents,
   loadEvents,
   expandEventDates,
   sanitizeImportedEvents,
+  isInstanceExpired,
   STORAGE_KEY,
 } from "./events";
+
+const baseEvent = (partial: Partial<ScheduleEvent> = {}): ScheduleEvent => ({
+  id: "x",
+  title: "",
+  date: "2026-08-05",
+  time: "09:00",
+  endTime: "10:00",
+  description: "",
+  done: false,
+  ...partial,
+});
 
 beforeEach(() => {
   localStorage.clear();
@@ -81,6 +94,31 @@ describe("list operations", () => {
   it("toggles done flag", () => {
     expect(toggleEventDone([base], "a")[0].done).toBe(true);
     expect(toggleEventDone([{ ...base, done: true }], "a")[0].done).toBe(false);
+  });
+
+  it("顺延副本：内容一模一样、时长一样、从现在开始、不带重复规则", () => {
+    const clone = buildPostponedClone(
+      { ...base, endTime: "10:30", description: "重点同步", color: "#f87171", repeat: { freq: "daily" } },
+      new Date(2026, 7, 5, 14, 2)
+    );
+    expect(clone).toEqual({
+      title: "晨会",
+      date: "2026-08-05",
+      time: "14:02",
+      endTime: "15:02",
+      description: "重点同步",
+      color: "#f87171",
+    });
+  });
+
+  it("顺延副本：无结束时间按 1 小时；超午夜钳制到 23:59", () => {
+    expect(buildPostponedClone({ ...base }, new Date(2026, 7, 5, 9, 0))).toMatchObject({
+      time: "09:00",
+      endTime: "10:00",
+    });
+    expect(
+      buildPostponedClone({ ...base, endTime: "23:59" }, new Date(2026, 7, 5, 23, 30)).endTime
+    ).toBe("23:59");
   });
 });
 
@@ -299,5 +337,34 @@ describe("persistence", () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify([{ bad: true }, { id: "x", title: 42, date: "2026-08-03", time: "", description: "", done: false }]));
     const events = loadEvents();
     expect(events).toEqual([]);
+  });
+});
+
+describe("isInstanceExpired", () => {
+  const now = new Date(2026, 7, 5, 15, 0); // 周三 15:00
+
+  it("未来日期的日程即使结束时刻早于现在也不算过期（明天 14:00 结束 vs 今天 15:00）", () => {
+    expect(isInstanceExpired(baseEvent({ time: "14:00", endTime: "15:00" }), "2026-08-06", now)).toBe(false);
+  });
+
+  it("今天的日程已过结束时刻算过期", () => {
+    expect(isInstanceExpired(baseEvent({ time: "09:00", endTime: "14:00" }), "2026-08-05", now)).toBe(true);
+  });
+
+  it("今天的日程未到结束时刻不算过期", () => {
+    expect(isInstanceExpired(baseEvent({ time: "14:00", endTime: "16:00" }), "2026-08-05", now)).toBe(false);
+  });
+
+  it("过去日期的日程（含全天）算过期", () => {
+    expect(isInstanceExpired(baseEvent({ time: "09:00", endTime: "10:00" }), "2026-08-04", now)).toBe(true);
+    expect(isInstanceExpired(baseEvent({ time: "" }), "2026-08-04", now)).toBe(true);
+  });
+
+  it("今天的全天日程当天 24:00 才结束，不算过期", () => {
+    expect(isInstanceExpired(baseEvent({ time: "" }), "2026-08-05", now)).toBe(false);
+  });
+
+  it("已完成不算过期", () => {
+    expect(isInstanceExpired(baseEvent({ time: "09:00", endTime: "14:00", done: true }), "2026-08-05", now)).toBe(false);
   });
 });

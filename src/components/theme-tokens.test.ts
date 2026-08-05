@@ -10,8 +10,8 @@ describe("theme tokens", () => {
     expect(THEME_TOKENS.main).toBe("min-h-screen bg-[#fafafa]");
   });
 
-  it("头部标题为极简日程", () => {
-    expect(String(THEME_TOKENS.header.title)).toContain("极简");
+  it("头部标题为日程", () => {
+    expect(String(THEME_TOKENS.header.title)).toBe("日程");
   });
 
   it("不使用可选面板令牌（手账已删除）", () => {

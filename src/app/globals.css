@@ -117,6 +117,15 @@ button:active:not(:disabled) { transform: scale(0.96); }
 }
 .anim-toast-progress { animation: toast-progress 5s linear both; }
 
+/* 日程从未完成变完成：绿色光晕扩散 + 轻微弹跳（一次播完，块随后保持浅绿亚克力） */
+@keyframes done-pop {
+  0% { box-shadow: 0 0 0 0 rgb(74 222 128 / 0.8); transform: scale(1); }
+  25% { box-shadow: 0 0 0 10px rgb(74 222 128 / 0.45); transform: scale(1.05); }
+  50% { box-shadow: 0 0 0 20px rgb(74 222 128 / 0); transform: scale(1.03); }
+  100% { box-shadow: 0 0 0 0 rgb(74 222 128 / 0); transform: scale(1); }
+}
+.anim-done-pop { animation: done-pop 0.9s ease-out both; }
+
 /* 系统减弱动态效果：全部动画/过渡压到不可感知 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

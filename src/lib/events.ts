@@ -1,3 +1,5 @@
+import { minutesToTime, parseTimeToMinutes, toDateKey } from "./date";
+
 export type RepeatFreq = "daily" | "weekly" | "monthly" | "weekday" | "weekend";
 
 // 重复规则：until 为重复截止日期（含），缺省 = 无限重复（展开时由视图范围兜底）
@@ -149,12 +151,39 @@ export function updateEventInList(
   return list.map((e) => (e.id === id ? { ...e, ...patch } : e));
 }
 
+// 实例是否已结束：按实例所在日 + 结束时间与 now 比较（重复实例共享 e.date，必须传入实例日）
+export function isInstanceExpired(e: ScheduleEvent, dayKey: string, now: Date): boolean {
+  if (e.done || !dayKey) return false;
+  const todayKey = toDateKey(now);
+  if (dayKey < todayKey) return true; // 过去日期：已过（全天事件按当天结束同样成立）
+  if (dayKey > todayKey) return false; // 未来日期：未到，即使时刻早于现在也不结束
+  if (!e.time) return false; // 今天的全天事件：当天 24:00 才结束
+  const endMin = e.endTime ? parseTimeToMinutes(e.endTime) : parseTimeToMinutes(e.time) + 60;
+  return now.getHours() * 60 + now.getMinutes() >= endMin;
+}
+
 export function deleteEventFromList(list: ScheduleEvent[], id: string): ScheduleEvent[] {
   return list.filter((e) => e.id !== id);
 }
 
 export function toggleEventDone(list: ScheduleEvent[], id: string): ScheduleEvent[] {
   return list.map((e) => (e.id === id ? { ...e, done: !e.done } : e));
+}
+
+// 「未完成」顺延副本：内容一模一样、时长一样，但起始时间从现在开始、独立单次（不带重复规则）
+export function buildPostponedClone(e: ScheduleEvent, now: Date): EventInput {
+  const s = parseTimeToMinutes(e.time);
+  const en = e.endTime ? parseTimeToMinutes(e.endTime) : NaN;
+  const duration = isNaN(s) || isNaN(en) ? 60 : Math.max(15, en - s);
+  const start = now.getHours() * 60 + now.getMinutes();
+  return {
+    title: e.title,
+    date: toDateKey(now),
+    time: minutesToTime(start),
+    endTime: minutesToTime(Math.min(1439, start + duration)),
+    description: e.description,
+    color: e.color,
+  };
 }
 
 export function isValidEvent(e: unknown): e is ScheduleEvent {

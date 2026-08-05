@@ -12,6 +12,7 @@ import {
   parseDateKey,
 } from "@/lib/date";
 import type { ScheduleEvent } from "@/lib/events";
+import { isInstanceExpired } from "@/lib/events";
 import type { EventMovePatch } from "@/lib/use-events";
 import { EVENT_COLORS } from "@/lib/colors";
 import type { ThemeTokens } from "./theme-tokens";
@@ -62,6 +63,16 @@ type AllDayDrag = {
   end: number;
   edge: "start" | "end";
   cur: number;
+  colRects: DOMRect[];
+};
+
+// 时间块横向拖宽：非重复事件拖左右边界 → 自动设每天重复（起点=左边界列，until=右边界列）；
+// 重复事件拖第一个实例左边界 → 调重复开始日期、拖最后一个实例右边界 → 调截止日期（频率不变）
+type HStretchDrag = {
+  id: string;
+  col: number; // 按下时的列
+  cur: number; // 当前指针列（预览用）
+  edge: "start" | "end"; // 拖的是哪条边（重复事件按边提交开始/截止）
   colRects: DOMRect[];
 };
 
@@ -156,10 +167,17 @@ export default function WeekTimeline({
   onMoveAll,
   onBatchColor,
   onSelectionChange,
+  onPostpone,
+  onEndEarly,
+  onStretch,
+  onStretchRepeat,
+  onCopy,
   cols = 7,
   rootClass,
   scrollClass,
   scrollMaxHeight = "calc(100vh - 300px)",
+  zoom = 1,
+  onZoomChange,
 }: {
   tokens: ThemeTokens;
   dates: Date[];
@@ -176,8 +194,15 @@ export default function WeekTimeline({
   onMoveAll: (patches: EventMovePatch[]) => void;
   onBatchColor?: (ids: string[], color: string) => void; // 批量设色（"" = 清除为默认）
   onSelectionChange?: (ids: string[]) => void; // 选中组变化上报（父层用于 Delete 键删除与面板联动）
+  onPostpone: (e: ScheduleEvent) => void; // 菜单「标记为未完成」：已结束未完成的顺延复制一份从现在开始；已完成（提前结束）的取消完成标记
+  onEndEarly: (id: string) => void; // 菜单「提前结束」：未结束日程只标记完成，计划时间不变
+  onStretch: (id: string, date: string, until: string) => void; // 横向拖宽：事件改为每天重复，起点 date、截止 until（时间不变）
+  onStretchRepeat: (id: string, edge: "start" | "end", date: string) => void; // 重复日程拖边界：左边界改重复开始、右边界改截止日期（频率不变）
+  onCopy: (e: ScheduleEvent) => void; // 菜单「复制」：复制被右击的实例（同天时间 +1 小时）
   cols?: number; // 列数：周视图 7 列，月视图当日面板 1 列
   rootClass?: string; // 追加到根容器 className（如 flex-1 min-h-0 供父 flex 撑满）
+  zoom?: number; // 时间轴缩放倍率（1 = 每小时 30px），0.5–3
+  onZoomChange?: (z: number) => void; // 缩放请求（Ctrl+滚轮）上报父层
   scrollClass?: string; // 追加到滚动区 className（如 flex-1 min-h-0 供父 flex 撑满）
   scrollMaxHeight?: string; // 滚动区最大高度；传 "none" 由父容器决定
 }) {
@@ -185,8 +210,56 @@ export default function WeekTimeline({
   const [move, setMove] = useState<MoveState | null>(null);
   const [resize, setResize] = useState<ResizeState | null>(null);
   const [allDayDrag, setAllDayDrag] = useState<AllDayDrag | null>(null);
+  const [hStretch, setHStretch] = useState<HStretchDrag | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // 点击日程弹出的操作菜单：鼠标坐标 + 目标日程（null = 关闭）
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; e: ScheduleEvent; day: string } | null>(null);
+  const openCtxMenu = (x: number, y: number, e: ScheduleEvent, day: string) => setCtxMenu({ x, y, e, day });
+  // 菜单打开期间：点外部/右键空白处关闭、按任意键关闭（块上的右键已 stopPropagation，不会误关再弹）
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = () => setCtxMenu(null);
+    document.addEventListener("click", close);
+    document.addEventListener("contextmenu", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("contextmenu", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [ctxMenu]);
   const [folded, setFolded] = useState(true); // 默认折叠凌晨 0:00–6:00
+  // 悬停展开的短卡片：块高不足时标题被裁，hover 自动展开到完整标题高度（posKey 键，重复实例互不干扰）
+  const [expanded, setExpanded] = useState<{ id: string; h: number } | null>(null);
+  const titleRefs = useRef(new Map<string, HTMLSpanElement | null>());
+  // 完成动画：从未完成 → 完成瞬间该实例块播放绿色光晕弹跳（1 秒后清除动画位）
+  const [justDone, setJustDone] = useState<Set<string>>(new Set());
+  const doneMapRef = useRef(new Map<string, boolean>());
+  useEffect(() => {
+    const prev = doneMapRef.current;
+    const next = new Map<string, boolean>();
+    const newly: string[] = [];
+    for (const e of eventsByDay.flat()) {
+      if (!e.time) continue;
+      next.set(posKey(e), !!e.done);
+      if (prev.get(posKey(e)) === false && e.done) newly.push(posKey(e));
+    }
+    doneMapRef.current = next;
+    if (newly.length === 0) return;
+    setJustDone((s) => {
+      const n = new Set(s);
+      for (const k of newly) n.add(k);
+      return n;
+    });
+    const t = setTimeout(() => {
+      setJustDone((s) => {
+        const n = new Set(s);
+        for (const k of newly) n.delete(k);
+        return n;
+      });
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [eventsByDay]);
   const [hover, setHover] = useState<{ col: number; min: number | null } | null>(null); // 悬停高亮：列 + 分钟
   const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null); // 拖拽时间气泡
   const [now, setNow] = useState(() => new Date()); // 当前时间：驱动现在线与进行中日程高亮
@@ -212,6 +285,50 @@ export default function WeekTimeline({
     return;
   }, [dates, folded]);
 
+  const hourPx = HOUR_PX * zoom; // 当前每小时像素高度（缩放倍率作用于全部 y 坐标）
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const hourPxRef = useRef(hourPx);
+  hourPxRef.current = hourPx;
+  // Ctrl+滚轮缩放：普通滚轮仍是滚动浏览；缩放围绕鼠标下的时刻锚点（缩放后该时刻保持在鼠标位置）
+  const zoomAnchorRef = useRef<{ minute: number; mouseY: number } | null>(null);
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const base = zoomRef.current;
+      const next = Math.min(3, Math.max(0.5, base + (e.deltaY < 0 ? 0.25 : -0.25)));
+      if (next === base) return;
+      const rect = scroller.getBoundingClientRect();
+      const mouseY = e.clientY - rect.top;
+      const contentY = scroller.scrollTop + mouseY;
+      const hp = hourPxRef.current;
+      const f = foldedRef.current;
+      const bTop = f ? 0 : 7 * hp;
+      const bH = f ? FOLD_BAND_H : EXPAND_BAND_H;
+      const minute =
+        contentY < bTop
+          ? Math.round((contentY / hp) * 60)
+          : contentY >= bTop + bH
+            ? Math.round(((contentY - bTop - bH) / hp) * 60 + FOLD_END)
+            : null; // 折叠条带内：无锚点
+      zoomAnchorRef.current = minute == null ? null : { minute, mouseY };
+      onZoomChangeRef.current?.(next);
+    };
+    scroller.addEventListener("wheel", onWheel, { passive: false });
+    return () => scroller.removeEventListener("wheel", onWheel);
+  }, []);
+  // 缩放落地后把锚点时刻拉回鼠标位置（用缩放后的新 yOf）
+  useLayoutEffect(() => {
+    const a = zoomAnchorRef.current;
+    const scroller = scrollRef.current;
+    if (!a || !scroller) return;
+    zoomAnchorRef.current = null;
+    scroller.scrollTop = yOf(a.minute) - a.mouseY;
+  }, [zoom]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(t);
@@ -224,6 +341,7 @@ export default function WeekTimeline({
   const resizeRef = useRef<ResizeState | null>(null);
   const allDayDragRef = useRef<AllDayDrag | null>(null);
   const allDayLayerRef = useRef<HTMLDivElement | null>(null);
+  const hStretchRef = useRef<HStretchDrag | null>(null);
   const selectedRef = useRef(selectedIds);
   selectedRef.current = selectedIds;
   const onAddDayRef = useRef(onAddDay);
@@ -234,6 +352,20 @@ export default function WeekTimeline({
   onBatchColorRef.current = onBatchColor;
   const onSelectionChangeRef = useRef(onSelectionChange);
   onSelectionChangeRef.current = onSelectionChange;
+  const onPostponeRef = useRef(onPostpone);
+  onPostponeRef.current = onPostpone;
+  const onZoomChangeRef = useRef(onZoomChange);
+  onZoomChangeRef.current = onZoomChange;
+  const onEndEarlyRef = useRef(onEndEarly);
+  onEndEarlyRef.current = onEndEarly;
+  const onStretchRef = useRef(onStretch);
+  onStretchRef.current = onStretch;
+  const onStretchRepeatRef = useRef(onStretchRepeat);
+  onStretchRepeatRef.current = onStretchRepeat;
+  const onCopyRef = useRef(onCopy);
+  onCopyRef.current = onCopy;
+  const onDeleteRef = useRef(onDelete);
+  onDeleteRef.current = onDelete;
   const onSelectDateRef = useRef(onSelectDate);
   onSelectDateRef.current = onSelectDate;
   // 拖动提交后抑制随后的 click：避免把事件拖到新时间后意外弹出编辑面板
@@ -271,33 +403,33 @@ export default function WeekTimeline({
     applySelection([]);
   }, [weekKeyStr, cols]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const bandTop = folded ? 0 : 6 * HOUR_PX; // 条带 y：折叠时在顶部（0:00 起），展开时在 6:00 与 7:00 之间（180px）
+  const bandTop = folded ? 0 : 6 * hourPx; // 条带 y：折叠时在顶部（0:00 起），展开时在 6:00 与 7:00 之间
   const bandH = folded ? FOLD_BAND_H : EXPAND_BAND_H;
-  const dayHeight = (folded ? 18 : 24) * HOUR_PX + bandH;
+  const dayHeight = (folded ? 18 : 24) * hourPx + bandH;
 
   // 分钟 → 可见 y 坐标；折叠时 1:00–6:59 收缩进条带（事件渲染前已过滤该区段）
   const yOf = (m: number) => {
     if (folded && m >= FOLD_START && m < FOLD_END) return bandTop + bandH;
-    if (folded && m >= FOLD_END) return bandTop + bandH + ((m - FOLD_END) * HOUR_PX) / 60;
-    return (m * HOUR_PX) / 60;
+    if (folded && m >= FOLD_END) return bandTop + bandH + ((m - FOLD_END) * hourPx) / 60;
+    return (m * hourPx) / 60;
   };
 
   // 原始分钟（不吸附）：供光标横线、时刻标签、拖选新建与挪动基准使用；条带区域返回 null
   const rawMinAtY = (y: number) => {
     const f = foldedRef.current;
-    const bTop = f ? 0 : 7 * HOUR_PX;
+    const bTop = f ? 0 : 7 * hourPx;
     const bH = f ? FOLD_BAND_H : EXPAND_BAND_H;
-    if (y < bTop) return Math.round((y / HOUR_PX) * 60);
+    if (y < bTop) return Math.round((y / hourPx) * 60);
     if (y < bTop + bH) return null;
-    return Math.round(((y - bTop - bH) / HOUR_PX) * 60 + FOLD_END);
+    return Math.round(((y - bTop - bH) / hourPx) * 60 + FOLD_END);
   };
 
   // 拖选新建时间吸附到 5 分钟倍数：按下与拖动的选区起止都对齐刻度
   const snapSelect = (m: number) => Math.round(m / SELECT_SNAP_MIN) * SELECT_SNAP_MIN;
 
   const hourTop = (h: number) => {
-    if (h >= 7) return bandTop + bandH + (h - 7) * HOUR_PX;
-    return folded ? null : h * HOUR_PX; // 折叠区内刻度（0:00–6:00）
+    if (h >= 7) return bandTop + bandH + (h - 7) * hourPx;
+    return folded ? null : h * hourPx; // 折叠区内刻度（0:00–6:00）
   };
 
   const visibleHours = folded ? HOURS.slice(7) : HOURS;
@@ -353,6 +485,22 @@ export default function WeekTimeline({
     allDayBars.push({ ...bar, row });
   }
 
+  // 重复日程把手定位：同 id 实例的首列显示左把手（调重复开始日期）、末列显示右把手（调截止日期）；
+  // 与折叠区相交的实例不可见不计数。真实 byDay 多实例共享同一记录（date 全是起点日），
+  // 这里按列索引而不是事件日期定位，两种实例形态（真实/测试按日构造）都正确
+  const repFirstCol = new Map<string, number>();
+  const repLastCol = new Map<string, number>();
+  eventsByDay.forEach((list, i) => {
+    for (const e of list) {
+      if (!e.time || !e.repeat) continue;
+      const s = parseTimeToMinutes(e.time);
+      const en = e.endTime ? parseTimeToMinutes(e.endTime) : s + 60;
+      if (folded && s < FOLD_END && en > FOLD_START) continue;
+      if (!repFirstCol.has(e.id)) repFirstCol.set(e.id, i);
+      repLastCol.set(e.id, i);
+    }
+  });
+
   // 只查时间轴自身的列：document 级查询会捕获月视图的 42 个月历格子（同样带 data-date），
   // 导致 rects[col].top 取到月历格子的坐标、拖选/挪动位置与鼠标错位
   const colRects = () =>
@@ -377,7 +525,6 @@ export default function WeekTimeline({
 
   // 拖动中实时重排预览：把选中组从各列移除、按目标日期/时间放回后重算轨道，
   // 未松手就开始播放让位/收缩动画——表现「松手后就这么排」
-  const allEvents = eventsByDay.flat();
   const activeMove = move && selectedIds.length > 0 ? move : null;
   // 本次拖动的移动集：被按实例（重复事件同 id 只动它）+ 其余选中事件；
   // 未在拖动时（move 为 null）一律不移动——松手后 settle 过渡由其它条件接管
@@ -393,22 +540,28 @@ export default function WeekTimeline({
           const others = (eventsByDay[dayIdx] ?? []).filter(
             (e) => e.time && !selectedIds.includes(e.id)
           );
-          const incoming = allEvents
-            .filter((e) => e.time && !isHidden(e) && isMoved(e))
-            .map((e) => {
-              const s = parseTimeToMinutes(e.time);
-              const en = e.endTime ? parseTimeToMinutes(e.endTime) : s + 60;
-              const day = parseDateKey(e.date);
-              return {
-                ...e,
-                _src: e.date, // 身份键用原日期：同 id 重复实例拖入同列时互不覆盖
-                date: toDateKey(
-                  addDays(day.getFullYear(), day.getMonth(), day.getDate(), activeMove.dx)
-                ),
-                time: minutesToTime(s + activeMove.dy),
-                endTime: minutesToTime(en + activeMove.dy),
-              };
-            })
+          const incoming = eventsByDay
+            .flatMap((dayList, dayIdx) =>
+              dayList
+                .filter((e) => e.time && !isHidden(e) && isMoved(e))
+                .map((e) => {
+                  // 实例身份/位移基准用所在列日期：重复事件多实例共享 e.date（起点日），
+                  // 若用 e.date 会把同 id 全部实例映射到同一列 → 自我重叠 → 块缩成半宽
+                  const src = weekKeys[dayIdx];
+                  const s = parseTimeToMinutes(e.time);
+                  const en = e.endTime ? parseTimeToMinutes(e.endTime) : s + 60;
+                  const day = parseDateKey(src);
+                  return {
+                    ...e,
+                    _src: src, // 身份键用实例所在日：同 id 重复实例拖入同列时互不覆盖
+                    date: toDateKey(
+                      addDays(day.getFullYear(), day.getMonth(), day.getDate(), activeMove.dx)
+                    ),
+                    time: minutesToTime(s + activeMove.dy),
+                    endTime: minutesToTime(en + activeMove.dy),
+                  };
+                })
+            )
             .filter(
               (e) =>
                 e.date === weekKeys[dayIdx] &&
@@ -422,6 +575,12 @@ export default function WeekTimeline({
   // 指针捕获：按下即捕获，指针移出窗口/在窗外松手也持续收到事件，释放可靠
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const rect = timelineRef.current?.getBoundingClientRect();
+    // 时间块横向拖宽：按列吸附预览
+    const hs = hStretchRef.current;
+    if (hs) {
+      handleHStretchMove(e);
+      return;
+    }
     // 拖边缘调整：预览吸附分钟（钳制 0 ≤ start、end ≤ 1439、时长 ≥ 5 分钟）
     const rz = resizeRef.current;
     if (rz) {
@@ -521,6 +680,11 @@ export default function WeekTimeline({
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    // 时间块横向拖宽提交
+    if (hStretchRef.current) {
+      handleHStretchUp();
+      return;
+    }
     // 调整大小提交：一次 commit（撤销一条记录）
     const rz = resizeRef.current;
     if (rz) {
@@ -531,27 +695,21 @@ export default function WeekTimeline({
             ? { id: rz.id, date: ev.date, time: minutesToTime(rz.curMin), endTime: ev.endTime }
             : { id: rz.id, date: ev.date, time: ev.time, endTime: minutesToTime(rz.curMin) },
         ]);
-        justMovedRef.current = true; // 抑制随后的 click，避免误开编辑面板
+        justMovedRef.current = true; // 抑制随后的 click，避免误触发选中/菜单
       }
       resizeRef.current = null;
       setResize(null);
       setTip(null);
       return;
     }
-    // 事件挪动：单击（未移动）在此打开编辑面板
+    // 事件挪动：单击（未移动）只选中；操作菜单由右键 contextmenu 呼出
     const m = moveRef.current;
     if (m) {
       if (m.dx === 0 && m.dy === 0) {
         // 指针捕获后浏览器把 click 派发到捕获元素（列）而非事件块，onClick 收不到：
-        // 单击事件块 → 选中并打开编辑面板改在 pointerup 处理
-        // 重复事件同 id 多实例：按 pressKey 定位被按实例，否则 find 匹配第一个实例打开错误日期
-        const ev = eventsRef.current
-          .flat()
-          .find((x) => x.id === m.pressId && `${x.id}:${x.date}` === m.pressKey);
-        if (ev) {
-          applySelection([m.pressId]);
-          onEdit(ev);
-        }
+        // 左键单击事件块 → 只选中（左键不再弹菜单，右键才弹）
+        // 重复事件同 id 多实例：pressKey 定位被按实例，选中不误报其他实例
+        applySelection([m.pressId]);
         moveRef.current = null;
         setMove(null);
         setTip(null);
@@ -578,7 +736,7 @@ export default function WeekTimeline({
         }
         // 整组一次提交：撤销/重做按一次操作记录
         onMoveAllRef.current(patches);
-        justMovedRef.current = true; // 抑制紧随的 click，避免误开编辑面板
+        justMovedRef.current = true; // 抑制紧随的 click，避免误触发选中/菜单
         // 提交渲染时 transform 参与过渡：块从松手位置平滑落到吸附落点，不跳回起点
         settleRef.current = true;
       }
@@ -606,7 +764,8 @@ export default function WeekTimeline({
         if (!ev.time || isHidden(ev)) continue;
         const s = parseTimeToMinutes(ev.time);
         const en = ev.endTime ? parseTimeToMinutes(ev.endTime) : s + 60;
-        if (s < d.end && en > d.start) hit.push(ev.id);
+        // 选中是 id 集合：重复事件多实例同 id，命中多个实例只记一次（否则批量条计数虚高）
+        if (s < d.end && en > d.start && !hit.includes(ev.id)) hit.push(ev.id);
       }
     }
     if (hit.length > 0) {
@@ -634,6 +793,10 @@ export default function WeekTimeline({
     if (resizeRef.current) {
       resizeRef.current = null;
       setResize(null);
+    }
+    if (hStretchRef.current) {
+      hStretchRef.current = null;
+      setHStretch(null);
     }
     setTip(null);
   };
@@ -752,6 +915,88 @@ export default function WeekTimeline({
     if (!allDayDragRef.current) return;
     allDayDragRef.current = null;
     setAllDayDrag(null);
+    setTip(null);
+  };
+
+  // 时间块横向拖宽：按下左右把手，按列吸附，预览跨列范围
+  const handleHStretchDown = (
+    e: React.PointerEvent,
+    ev: ScheduleEvent,
+    col: number,
+    edge: "start" | "end"
+  ) => {
+    e.stopPropagation(); // 不触发事件块整体挪动
+    e.preventDefault();
+    const rects = colRects();
+    (e.currentTarget as HTMLElement).closest("[data-date]")?.setPointerCapture(e.pointerId);
+    const d: HStretchDrag = { id: ev.id, col, cur: col, edge, colRects: rects };
+    hStretchRef.current = d;
+    setHStretch(d);
+  };
+
+  const handleHStretchMove = (e: React.PointerEvent) => {
+    const d = hStretchRef.current;
+    if (!d) return;
+    const next = { ...d, cur: colFromX(e.clientX, d.colRects) };
+    hStretchRef.current = next;
+    setHStretch(next);
+    const rect = timelineRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const src = eventsRef.current.flat().find((x) => x.id === d.id);
+    if (src?.repeat) {
+      // 重复日程：气泡显示被调整的边（开始/截止日期），频率保持不变
+      const [y, m, day] = weekKeysRef.current[next.cur].split("-").map(Number);
+      setTip({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+        text:
+          d.edge === "start"
+            ? `重复开始：${y}年${m}月${day}日（频率不变）`
+            : `重复截止：${y}年${m}月${day}日（频率不变）`,
+      });
+      return;
+    }
+    const lo = Math.min(d.col, next.cur);
+    const hi = Math.max(d.col, next.cur);
+    const sd = parseDateKey(weekKeysRef.current[lo]);
+    const ed = parseDateKey(weekKeysRef.current[hi]);
+    setTip({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      text: `${sd.getMonth() + 1}月${sd.getDate()}日–${ed.getMonth() + 1}月${ed.getDate()}日 · 每天重复`,
+    });
+  };
+
+  const handleHStretchUp = () => {
+    const d = hStretchRef.current;
+    if (!d) return;
+    hStretchRef.current = null;
+    setHStretch(null);
+    setTip(null);
+    const src = eventsRef.current.flat().find((x) => x.id === d.id);
+    if (src?.repeat) {
+      // 重复日程：拖第一个实例左边界 → 改重复开始日期；拖最后一个实例右边界 → 改截止日期
+      const target = weekKeysRef.current[d.cur];
+      const until = src.repeat.until ?? src.date;
+      if (d.edge === "start") {
+        if (target === src.date) return; // 未变化
+        onStretchRepeatRef.current(d.id, "start", target);
+      } else {
+        if (target === until) return; // 未变化
+        onStretchRepeatRef.current(d.id, "end", target);
+      }
+      return;
+    }
+    const lo = Math.min(d.col, d.cur);
+    const hi = Math.max(d.col, d.cur);
+    if (lo === hi) return; // 未跨列：无变化
+    onStretchRef.current(d.id, weekKeysRef.current[lo], weekKeysRef.current[hi]);
+  };
+
+  const handleHStretchCancel = () => {
+    if (!hStretchRef.current) return;
+    hStretchRef.current = null;
+    setHStretch(null);
     setTip(null);
   };
 
@@ -880,6 +1125,9 @@ export default function WeekTimeline({
                     }
                   : { left: bar.start, right: bar.end };
               const isSelected = selectedIds.includes(bar.e.id);
+              // 全天事件按结束日期（重复截止/跨至/当天）判过期：整个事件在过去才标暗红
+              const barEndDate = bar.e.repeat?.until ?? bar.e.endDate ?? bar.e.date;
+              const barExpired = !bar.e.done && isInstanceExpired(bar.e, barEndDate, now);
               return (
                 <div
                   key={bar.e.repeat ? `${bar.e.id}:${bar.start}` : bar.e.id}
@@ -907,7 +1155,8 @@ export default function WeekTimeline({
                     className={
                       "flex h-full items-center gap-1 rounded-md border border-transparent px-1 transition " +
                       (isSelected ? " ring-2 ring-blue-700 " : "") +
-                      (bar.e.repeat ? "" : " cursor-grab hover:scale-[1.01] hover:bg-blue-100/70")
+                      (bar.e.repeat ? "" : " cursor-grab hover:scale-[1.01] hover:bg-blue-100/70") +
+                      (justDone.has(posKey(bar.e)) ? " anim-done-pop" : "")
                     }
                   >
                     <input
@@ -931,11 +1180,23 @@ export default function WeekTimeline({
                       className={
                         tokens.weekView.allDayItem +
                         " min-w-0 flex-1" +
-                        (bar.e.done ? " opacity-60 line-through" : "")
+                        (bar.e.done ? " line-through" : "")
                       }
                       style={{
-                        backgroundColor: bar.e.color ? bar.e.color + "59" : undefined,
-                        borderLeft: bar.e.color ? `3px solid ${bar.e.color}` : undefined,
+                        backgroundColor: bar.e.done
+                          ? "rgba(124,162,140,0.45)"
+                          : barExpired
+                            ? "rgba(185,96,84,0.4)"
+                            : bar.e.color
+                              ? bar.e.color + "59"
+                              : undefined,
+                        borderLeft: bar.e.done
+                          ? "3px solid rgb(44,98,70)"
+                          : barExpired
+                            ? "3px solid rgb(150,56,48)"
+                            : bar.e.color
+                              ? `3px solid ${bar.e.color}`
+                              : undefined,
                       }}
                     >
                       {bar.e.title}
@@ -984,7 +1245,7 @@ export default function WeekTimeline({
         onMouseLeave={() => setHover(null)}
         onDragStart={(e) => e.preventDefault()}
       >
-        {selectedIds.length > 0 && (
+        {selectedIds.length > 1 && (
           <div
             data-testid="batch-color-bar"
             className="absolute left-0 right-0 top-0 z-20 flex items-center gap-2 rounded-b-xl border border-white/40 bg-white/70 px-3 py-2 shadow-xl backdrop-blur-xl"
@@ -1015,7 +1276,7 @@ export default function WeekTimeline({
         <div className="anim-fold relative shrink-0" style={{ width: GUTTER, height: dayHeight }}>
           {visibleHours.map((h) => (
             // inset-x-0：绝对定位容器必须有宽度，否则子刻度溢出到列外不可见
-            <div key={h} className="anim-fold absolute inset-x-0" style={{ top: hourTop(h)!, height: HOUR_PX }}>
+            <div key={h} className="anim-fold absolute inset-x-0" style={{ top: hourTop(h)!, height: hourPx }}>
               <span
                 className={
                   tokens.weekView.hourLabel +
@@ -1028,6 +1289,10 @@ export default function WeekTimeline({
               </span>
             </div>
           ))}
+          {/* 一天终点 24:00：hourTop(24) 在折叠/展开下都指向最后一行底部 */}
+          <div className="anim-fold absolute inset-x-0" style={{ top: hourTop(24)!, height: 0 }}>
+            <span className={tokens.weekView.hourLabel}>24:00</span>
+          </div>
         </div>
         <div
           className="anim-fold grid flex-1"
@@ -1074,6 +1339,38 @@ export default function WeekTimeline({
                       }}
                     />
                   )}
+                {/* 横向拖宽预览：范围内每列显示半透明副本（时间与原事件相同）。
+                    重复日程预览新的重复跨度：开始边 = 新起点 → 截止（或周末）；截止边 = 起点 → 新截止 */}
+                {hStretch &&
+                  (() => {
+                    const src = eventsByDay.flat().find((x) => x.id === hStretch.id);
+                    if (!src || !src.time) return null;
+                    let lo = Math.min(hStretch.col, hStretch.cur);
+                    let hi = Math.max(hStretch.col, hStretch.cur);
+                    if (src.repeat) {
+                      const dateCol = weekIdxMap.get(src.date);
+                      const untilCol = src.repeat.until ? weekIdxMap.get(src.repeat.until) : undefined;
+                      if (hStretch.edge === "start") {
+                        const endCol = untilCol == null ? cols - 1 : Math.min(untilCol, cols - 1);
+                        lo = Math.min(hStretch.cur, endCol); // 拖过截止 → 钳到截止列
+                        hi = endCol;
+                      } else {
+                        lo = Math.max(dateCol ?? 0, 0);
+                        hi = Math.max(hStretch.cur, lo); // 拖过起点 → 钳到起点列
+                      }
+                    }
+                    if (i < lo || i > hi) return null;
+                    const s = parseTimeToMinutes(src.time);
+                    const en = src.endTime ? parseTimeToMinutes(src.endTime) : s + 60;
+                    const dur = en > s ? en - s : 60;
+                    return (
+                      <div
+                        data-testid="hstretch-preview"
+                        className="pointer-events-none absolute rounded-lg border-2 border-dashed border-blue-400/80 bg-blue-400/25"
+                        style={{ top: yOf(s), height: (dur * hourPx) / 60, left: 0, width: "100%" }}
+                      />
+                    );
+                  })()}
                 {timed.map((e) => {
                   const start = parseTimeToMinutes(e.time);
                   const end = e.endTime ? parseTimeToMinutes(e.endTime) : start + 60;
@@ -1083,23 +1380,35 @@ export default function WeekTimeline({
                   const isSelected = selectedIds.includes(e.id);
                   // 只有移动集内的块跟手位移：重复事件未被按的实例留在原列不动
                   const moving = isMoved(e);
+                  // 重复日程拖边界把手：首列实例左把手、末列实例右把手（中间实例不显示）
+                  const repFirst = e.repeat && repFirstCol.get(e.id) === i;
+                  const repLast = e.repeat && repLastCol.get(e.id) === i;
                   // 只对被拖的那一个实例做拉伸预览：重复日程多实例同 id，全匹配会一起拉伸
                   const isResizing = resize?.id === e.id && resize.date === e.date;
-                  // 正在进行的日程（今天此刻起止区间覆盖当前时间）：描蓝边高亮
+                  // 横向拖宽中：原块淡化，把手隐藏（预览副本在列层渲染）
+                  const hst = hStretch && hStretch.id === e.id ? hStretch : null;
+                  // 正在进行的日程（今天此刻起止区间覆盖当前时间）：蓝环＋柔光高亮
+                  // 按实例所在列判今天：重复事件多实例共享 e.date（起点日），用 e.date 会让重复日实例漏判
                   const ongoing =
                     !isHidden(e) &&
-                    e.date === todayKey &&
+                    !e.done &&
+                    weekKeys[i] === todayKey &&
                     start <= nowMin &&
                     nowMin < end;
-                  // 拖动块看目标列的预览轨道（显示松手后将占的轨位）；其余块看本列预览
+                  // 已过期未完成（实例日 + 结束时间 < 现在）：暗红亚克力（与进行中互斥）
+                  const expired = !e.done && isInstanceExpired(e, weekKeys[i], now);
+                  // 拖动块看目标列的预览轨道（显示松手后将占的轨位）；其余块看本列预览。
+                  // 移动块身份键用所在列日期（与 previewLayouts 的 _src 一致）：重复事件
+                  // 多实例共享 e.date，用 posKey 会让同 id 全部实例查到同一轨位
                   const basePos = baseLayout.get(posKey(e)) ?? { track: 0, tracks: 1 };
+                  const previewKey = moving ? `${e.id}:${weekKeys[i]}` : posKey(e);
                   const { track, tracks } = moving
                     ? (previewLayouts?.get(
                         Math.min(Math.max(i + move!.dx, 0), cols - 1)
-                      )?.get(posKey(e)) ?? basePos)
-                    : (layout.get(posKey(e)) ?? basePos);
+                      )?.get(previewKey) ?? basePos)
+                    : (layout.get(previewKey) ?? basePos);
                   let blockTop = yOf(start);
-                  let blockH = (duration * HOUR_PX) / 60;
+                  let blockH = (duration * hourPx) / 60;
                   if (isResizing && resize) {
                     const sMin = resize.edge === "start" ? resize.curMin : start;
                     const eMin = resize.edge === "end" ? resize.curMin : end;
@@ -1115,52 +1424,93 @@ export default function WeekTimeline({
                       tabIndex={0}
                       aria-label={`日程 ${e.title}`}
                       onClick={(ev) => {
-                        // 拖动刚提交时跳过：松手瞬间的 click 不该开面板
+                        // 拖动刚提交时跳过：松手瞬间的 click 不该触发选中/菜单
                         if (justMovedRef.current) {
                           justMovedRef.current = false;
                           return;
                         }
                         ev.stopPropagation();
                         applySelection([e.id]);
-                        onEdit(e);
+                        // 鼠标左键只选中；键盘激活（Enter）时 detail=0，等同右键呼出菜单（居中显示在块上）
+                        if (ev.detail !== 0) return;
+                        const r = ev.currentTarget.getBoundingClientRect();
+                        openCtxMenu(r.left + r.width / 2, r.top + r.height / 2, e, weekKeys[i]);
+                      }}
+                      onContextMenu={(ev) => {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        applySelection([e.id]);
+                        openCtxMenu(ev.clientX, ev.clientY, e, weekKeys[i]);
                       }}
                       draggable={false}
                       onPointerDown={(ev) => handleBlockDown(ev, e, i)}
+                      // 悬停展开短卡片：块高不足时标题被裁，hover 撑到完整标题高度（scrollHeight 不受 max-h 裁切影响）
+                      onPointerEnter={() => {
+                        const s = titleRefs.current.get(posKey(e));
+                        setExpanded({ id: posKey(e), h: Math.min(s?.scrollHeight ?? 16, 96) });
+                      }}
+                      onPointerLeave={() => setExpanded((cur) => (cur?.id === posKey(e) ? null : cur))}
                       className={
                         tokens.weekView.eventBlock +
                         (isResizing ? " !transition-none" : "") +
-                        (isSelected ? " " + tokens.weekView.eventSelected : "")
+                        (isSelected ? " " + tokens.weekView.eventSelected : "") +
+                        (hst ? " opacity-50" : "") +
+                        (justDone.has(posKey(e)) ? " anim-done-pop" : "")
                       }
                       style={{
                         top: blockTop,
                         // 重叠并排：按轨道百分比定位，块间留 2px 缝隙
                         left: `${(track / tracks) * 100}%`,
                         width: `calc(${100 / tracks}% - 2px)`,
-                        height: blockH,
-                        // 毛玻璃日程：彩色事件半透明底 + 左侧色条
-                        backgroundColor: e.color ? e.color + "59" : undefined,
-                        borderLeft: e.color ? `3px solid ${e.color}` : undefined,
-                        // 进行中日程：蓝色描边高亮
-                        boxShadow: ongoing ? "0 0 0 1.5px rgb(59 130 246 / 0.9)" : undefined,
+                        // 展开时撑到标题 + 时间行 + 上下留白；块本身够高时不变
+                        height: expanded?.id === posKey(e) ? Math.max(blockH, expanded.h + 19) : blockH,
+                        // 毛玻璃日程：彩色事件半透明底 + 左侧色条；已完成→低饱和深绿亚克力；已过期未完成→暗红亚克力（文字保持深色清晰）
+                        backgroundColor: e.done
+                          ? "rgba(124,162,140,0.45)"
+                          : expired
+                            ? "rgba(185,96,84,0.4)"
+                            : e.color
+                              ? e.color + "59"
+                              : undefined,
+                        borderLeft: e.done
+                          ? "3px solid rgb(44,98,70)"
+                          : expired
+                            ? "3px solid rgb(150,56,48)"
+                            : e.color
+                              ? `3px solid ${e.color}`
+                              : undefined,
+                        // 进行中日程：2px 蓝环＋柔光，浅蓝玻璃块上也清晰可见
+                        boxShadow: ongoing
+                          ? "0 0 0 2px rgb(59 130 246 / 0.95), 0 0 12px 1px rgb(59 130 246 / 0.35)"
+                          : undefined,
                         transform:
                           moving && move
-                            ? `translate(${move.dx * move.colW}px, ${move.dy * (HOUR_PX / 60)}px)`
+                            ? `translate(${move.dx * move.colW}px, ${move.dy * (hourPx / 60)}px)`
                             : undefined,
                         // 拖动中只过渡轨道（left/width 跟随重叠实时让位）；transform 由指针驱动不能过渡
                         // 提交渲染：transform 参与过渡，块从松手位置平滑落到吸附落点
                         transitionProperty: moving
                           ? "left,width"
-                          : settleRef.current && !isResizing
+                          : expanded?.id === posKey(e) || (settleRef.current && !isResizing)
                             ? "top,left,width,height,transform"
                             : undefined,
-                        zIndex: moving ? 30 : isSelected ? 10 : undefined,
+                        // 悬停展开的块最上层（不被相邻事件/进行中高亮挡住）；拖拽中的块更高
+                        zIndex: moving ? 50 : expanded?.id === posKey(e) ? 40 : isSelected ? 10 : undefined,
                       }}
                     >
                       <span
+                        ref={(el) => {
+                          if (el) titleRefs.current.set(posKey(e), el);
+                          else titleRefs.current.delete(posKey(e));
+                        }}
                         className={
-                          "block overflow-hidden text-xs transition-all duration-200 " +
-                          (isSelected ? "max-h-16 whitespace-normal" : "max-h-4 truncate") +
-                          (e.done ? " opacity-60 line-through" : "")
+                          "block overflow-hidden whitespace-normal text-xs transition-all duration-200 " +
+                          (expanded?.id === posKey(e)
+                            ? "max-h-none"
+                            : isSelected
+                              ? "max-h-16"
+                              : "max-h-4") +
+                          (e.done ? " line-through" : "")
                         }
                       >
                         {e.title}
@@ -1185,6 +1535,26 @@ export default function WeekTimeline({
                             className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize"
                             onPointerDown={(ev) => handleResizeDown(ev, e, i, "end")}
                           />
+                        </>
+                      )}
+                      {/* 横向拖宽把手：非重复事件左右边缘；重复事件只在首实例左缘（调开始日期）
+                          与末实例右缘（调截止日期）显示；悬停显示 ew-resize 光标与蓝条 */}
+                      {!hst && (
+                        <>
+                          {(!e.repeat || repFirst) && (
+                            <div
+                              data-testid="hstretch-handle-start"
+                              className="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize opacity-0 transition-opacity hover:opacity-100 hover:bg-blue-400/50"
+                              onPointerDown={(ev) => handleHStretchDown(ev, e, i, "start")}
+                            />
+                          )}
+                          {(!e.repeat || repLast) && (
+                            <div
+                              data-testid="hstretch-handle-end"
+                              className="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize opacity-0 transition-opacity hover:opacity-100 hover:bg-blue-400/50"
+                              onPointerDown={(ev) => handleHStretchDown(ev, e, i, "end")}
+                            />
+                          )}
                         </>
                       )}
                     </div>
@@ -1242,6 +1612,70 @@ export default function WeekTimeline({
           {tip.text}
         </div>
       )}
+      {/* 点击日程弹出的操作菜单：鼠标旁边显示，点外部/任意键关闭 */}
+      {ctxMenu &&
+        (() => {
+          const { x, y, e, day } = ctxMenu;
+          // 结束判断按实例所在日（右键的列）：明天下午的日程即使时刻早于现在也没结束，
+          // 只有「实例日 < 今天」或「今天且已过结束时刻」才算已结束
+          const ended = isInstanceExpired(e, day, now);
+          const notEnded = !e.done && !!e.time && !ended; // 未结束：可提前结束
+          const unmarkable = !!e.time && (e.done || ended); // 已完成（含提前结束）或已过结束时间：可标记为未完成
+          const items: { label: string; onClick: () => void }[] = [
+            { label: "编辑", onClick: () => { setCtxMenu(null); onEdit(e); } },
+            { label: "复制", onClick: () => { setCtxMenu(null); onCopyRef.current(e); } },
+          ];
+          if (notEnded) {
+            items.push({
+              label: "提前结束",
+              onClick: () => {
+                setCtxMenu(null);
+                onEndEarlyRef.current(e.id);
+              },
+            });
+          }
+          if (unmarkable) {
+            items.push({
+              label: "标记为未完成",
+              onClick: () => {
+                setCtxMenu(null);
+                onPostponeRef.current(e);
+              },
+            });
+          }
+          items.push({
+            label: "删除",
+            onClick: () => {
+              setCtxMenu(null);
+              onDeleteRef.current(e.id);
+            },
+          });
+          // 菜单在鼠标右/下边缘时向内翻转，避免超出屏幕
+          const menuW = 132;
+          const menuH = items.length * 34 + 10;
+          const left = Math.max(4, Math.min(x, window.innerWidth - menuW - 4));
+          const top = Math.max(4, Math.min(y, window.innerHeight - menuH - 4));
+          return (
+            <div
+              role="menu"
+              aria-label="日程操作"
+              className="fixed z-50 min-w-[132px] rounded-xl border border-white/40 bg-white/85 p-1 shadow-xl backdrop-blur-xl"
+              style={{ left, top }}
+            >
+              {items.map((it) => (
+                <button
+                  key={it.label}
+                  type="button"
+                  role="menuitem"
+                  onClick={it.onClick}
+                  className="block w-full rounded-lg px-3 py-1.5 text-left text-sm text-neutral-700 transition hover:bg-blue-50 hover:text-blue-700"
+                >
+                  {it.label}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
     </div>
   );
 }

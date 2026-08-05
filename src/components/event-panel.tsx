@@ -48,6 +48,8 @@ export default function EventPanel({
   onDelete,
   onClose,
   inline = false,
+  canEndEarly = false,
+  onEndEarly,
 }: {
   form: FormState;
   tokens: ThemeTokens;
@@ -56,6 +58,8 @@ export default function EventPanel({
   onDelete?: (id: string) => void;
   onClose: () => void;
   inline?: boolean;
+  canEndEarly?: boolean; // 日程正在进行的时段：才显示「提前结束」（只标记完成，计划不变）
+  onEndEarly?: () => void;
 }) {
   const { dialog } = tokens;
   const minutesOf = (t: string) => (t ? parseTimeToMinutes(t) : NaN);
@@ -304,17 +308,28 @@ export default function EventPanel({
         </div>
 
         <div className="mt-5 flex items-center justify-between gap-3 border-t border-neutral-100 pt-4">
-          {form.id && onDelete ? (
-            <button
-              type="button"
-              onClick={() => onDelete(form.id!)}
-              className="text-sm text-red-500 transition hover:scale-[1.03] hover:text-red-700"
-            >
-              删除
-            </button>
-          ) : (
-            <span />
-          )}
+          <div className="flex items-center gap-3">
+            {canEndEarly && onEndEarly && (
+              <button
+                type="button"
+                onClick={onEndEarly}
+                className="text-sm text-blue-600 transition hover:scale-[1.03] hover:text-blue-800"
+              >
+                提前结束
+              </button>
+            )}
+            {form.id && onDelete ? (
+              <button
+                type="button"
+                onClick={() => onDelete(form.id!)}
+                className="text-sm text-red-500 transition hover:scale-[1.03] hover:text-red-700"
+              >
+                删除
+              </button>
+            ) : (
+              <span />
+            )}
+          </div>
           <div className="flex gap-3">
             <button type="button" onClick={onClose} className={dialog.cancel}>
               取消

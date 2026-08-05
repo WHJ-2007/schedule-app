@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export type ThemeTokens = {
   main: string;                          // 主体（背景/字体），如 style-6 含 paper-lines font-kai
   decorations?: ReactNode;               // 主题装饰 JSX（绝对定位，无交互）
-  header: { eyebrow: ReactNode; eyebrowClass: string; title: ReactNode; titleClass: string; tagline?: ReactNode };
+  header: { title: ReactNode; titleClass: string; tagline?: ReactNode };
   sectionTitle: string;                  // 月历/周视图标题 h2
   weekdayHeader: string;                 // 周一~周日表头
   navButton: string;                     // 上月/今天/下月 等导航按钮
@@ -40,8 +40,9 @@ export type ThemeTokens = {
     dragTip: string;         // 拖选/挪动时的时间气泡（配合 left/top 内联样式）
     cursorLine: string;      // 悬停光标横线（absolute inset-x-0，top 内联）
     cursorLabel: string;     // 悬停时刻标签（absolute，top 内联）
+    eventAction: string;     // 块内快捷操作按钮（完成/未完成/提前结束）
   };
-  yearView: { monthCard: string; monthTitle: string; miniCell: string; miniDot: string };
+  yearView: { monthCard: string; monthTitle: string; miniCell: string; miniDot: string; todayMark: string };
   viewPanel?: string;      // 月历/周视图/年视图 section 的面板容器类（style-1 无 → 不填）
   contentClass?: string;   // 内容容器额外类（当前无主题使用）
   cellGridGap?: string;    // 月历网格间距类（默认 "gap-1.5"）
@@ -55,10 +56,9 @@ export type ThemeTokens = {
 export const THEME_TOKENS: ThemeTokens = {
     main: "min-h-screen bg-[#fafafa]",
     header: {
-      eyebrow: "MINIMAL SCHEDULE",
-      eyebrowClass: "text-xs tracking-widest text-neutral-400",
-      title: "极简日程",
-      titleClass: "mt-2 text-2xl font-light tracking-wide text-neutral-900",
+      title: "日程",
+      // 标题只有两个字：加大字号并加粗一档，去掉宽字距与副标题留下的偏移，两个字才立得住
+      titleClass: "text-3xl font-normal tracking-normal text-neutral-900",
     },
     sectionTitle: "text-base text-neutral-900",
     weekdayHeader: "py-1 text-center text-xs text-neutral-400",
@@ -66,7 +66,7 @@ export const THEME_TOKENS: ThemeTokens = {
     card: "rounded-lg border border-neutral-200 bg-white p-5",
     button: { primary: "rounded-md bg-blue-600 px-4 py-2 text-sm text-white transition hover:scale-[1.03] hover:bg-blue-700" },
     cell: {
-      base: "flex h-28 flex-col items-center rounded-lg pt-2 transition",
+      base: "flex h-[104px] flex-col items-center rounded-lg pt-2 transition",
       hover: "hover:scale-[1.02] hover:bg-neutral-100 hover:shadow-sm",
       num: "inline-flex h-7 w-7 items-center justify-center rounded-full text-sm",
       plain: "text-neutral-900",
@@ -123,11 +123,13 @@ export const THEME_TOKENS: ThemeTokens = {
       dragTip: "pointer-events-none absolute z-40 -translate-x-1/2 -translate-y-[calc(100%+10px)] whitespace-nowrap rounded-full bg-white px-3 py-1 text-[11px] font-medium text-neutral-900 shadow-lg ring-1 ring-neutral-200",
       cursorLine: "pointer-events-none absolute inset-x-0 border-t border-blue-600/50",
       cursorLabel: "pointer-events-none absolute left-1 -translate-y-1/2 whitespace-nowrap rounded-full bg-white px-1.5 py-0.5 text-[10px] font-medium text-neutral-900 shadow-sm ring-1 ring-neutral-200",
+      eventAction: "rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-medium leading-none text-neutral-700 shadow-sm ring-1 ring-neutral-200 transition hover:scale-[1.05] hover:bg-white hover:text-blue-600",
     },
     yearView: {
       monthCard: "rounded-lg border border-neutral-100 p-3",
       monthTitle: "mb-1.5 text-sm font-medium text-neutral-700 transition hover:scale-[1.03] hover:text-blue-600",
-      miniCell: "relative flex aspect-square items-center justify-center rounded text-[10px] text-neutral-500 transition hover:scale-[1.06] hover:bg-neutral-100",
+      miniCell: "relative flex h-4 items-center justify-center rounded text-[10px] text-neutral-500 transition hover:scale-[1.06] hover:bg-neutral-100",
       miniDot: "absolute bottom-0.5 h-1 w-1 rounded-full bg-blue-600",
+      todayMark: "rounded-full ring-1 ring-blue-600 text-blue-600", // 年视图：今天日期圈出
     },
 };

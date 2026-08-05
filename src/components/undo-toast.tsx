@@ -1,9 +1,11 @@
 export default function UndoToast({
   text,
   onUndo,
+  canUndo = false,
 }: {
   text: string;
   onUndo: () => void;
+  canUndo?: boolean; // 无撤销语义的提示（如顺延/提前结束）不显示撤销按钮
 }) {
   return (
     <div
@@ -12,14 +14,16 @@ export default function UndoToast({
     >
       <div className="flex items-center gap-3">
         <span>{text}</span>
-        <button
-          type="button"
-          aria-label="撤销删除"
-          onClick={onUndo}
-          className="font-medium text-neutral-900 underline underline-offset-2"
-        >
-          撤销
-        </button>
+        {canUndo && (
+          <button
+            type="button"
+            aria-label="撤销删除"
+            onClick={onUndo}
+            className="font-medium text-neutral-900 underline underline-offset-2"
+          >
+            撤销
+          </button>
+        )}
       </div>
       <div className="absolute inset-x-0 bottom-0 h-0.5 bg-neutral-200">
         <div className="h-full bg-neutral-400 anim-toast-progress" />
