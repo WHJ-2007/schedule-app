@@ -693,7 +693,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/已标记为已完成：「已结束晨会」/);
     const blocks = within(screen.getByTestId("view-anim")).getAllByRole("button", { name: /日程 已结束晨会/ });
     expect(blocks).toHaveLength(1);
-    expect(blocks[0].querySelector("span")!.className).toContain("line-through");
+    expect(blocks[0].querySelector("span:not(.anim-done-badge)")!.className).toContain("line-through");
     // 已完成后菜单变回「标记为未完成」
     fireEvent.contextMenu(blocks[0], { clientX: 100, clientY: 100 });
     expect(within(screen.getByRole("menu", { name: "日程操作" })).getByRole("menuitem", { name: "标记为未完成" })).not.toBeNull();
@@ -785,9 +785,9 @@ describe("ScheduleApp (switcher & week view)", () => {
     // 只有右键的实例划线，其余 6 个实例不受影响
     const after = within(screen.getByTestId("view-anim")).getAllByRole("button", { name: /日程 每日打卡/ });
     expect(after.length).toBe(7);
-    expect(after[0].querySelector("span")!.className).toContain("line-through");
+    expect(after[0].querySelector("span:not(.anim-done-badge)")!.className).toContain("line-through");
     for (let i = 1; i < 7; i++) {
-      expect(after[i].querySelector("span")!.className).not.toContain("line-through");
+      expect(after[i].querySelector("span:not(.anim-done-badge)")!.className).not.toContain("line-through");
     }
     spy.mockRestore();
     vi.useRealTimers();
@@ -838,7 +838,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     const marked = within(screen.getByTestId("view-anim")).getAllByRole("button", { name: /日程 批量/ });
     expect(marked.length).toBe(2);
     for (const b of marked) {
-      expect(b.querySelector("span")!.className).toContain("line-through");
+      expect(b.querySelector("span:not(.anim-done-badge)")!.className).toContain("line-through");
     }
     // 再右键 → 批量标记为未完成 → 划线全部去掉
     fireEvent.contextMenu(
@@ -950,8 +950,8 @@ describe("ScheduleApp (switcher & week view)", () => {
     const blocks = within(screen.getByTestId("view-anim")).getAllByRole("button", { name: /日程 已办拖宽/ });
     expect(blocks.length).toBe(2);
     // 原日期（8/3）仍划线完成；新实例（8/4）未完成、不划线
-    expect(blocks[0].querySelector("span")!.className).toContain("line-through");
-    expect(blocks[1].querySelector("span")!.className).not.toContain("line-through");
+    expect(blocks[0].querySelector("span:not(.anim-done-badge)")!.className).toContain("line-through");
+    expect(blocks[1].querySelector("span:not(.anim-done-badge)")!.className).not.toContain("line-through");
     rectSpy.mockRestore();
     vi.useRealTimers();
   });

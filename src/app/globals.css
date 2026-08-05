@@ -117,14 +117,24 @@ button:active:not(:disabled) { transform: scale(0.96); }
 }
 .anim-toast-progress { animation: toast-progress 5s linear both; }
 
-/* 日程从未完成变完成：绿色光晕扩散 + 轻微弹跳（一次播完，块随后保持浅绿亚克力） */
+/* 标记为完成的成就动画：绿色光晕双层扩散 + 弹跳（一次播完，块随后保持浅绿亚克力） */
 @keyframes done-pop {
-  0% { box-shadow: 0 0 0 0 rgb(74 222 128 / 0.8); transform: scale(1); }
-  25% { box-shadow: 0 0 0 10px rgb(74 222 128 / 0.45); transform: scale(1.05); }
-  50% { box-shadow: 0 0 0 20px rgb(74 222 128 / 0); transform: scale(1.03); }
+  0% { box-shadow: 0 0 0 0 rgb(74 222 128 / 0.9); transform: scale(1); }
+  28% { box-shadow: 0 0 0 12px rgb(74 222 128 / 0.55), 0 0 0 24px rgb(74 222 128 / 0.22); transform: scale(1.08); }
+  55% { box-shadow: 0 0 0 26px rgb(74 222 128 / 0), 0 0 0 40px rgb(74 222 128 / 0); transform: scale(1.05); }
+  72% { transform: scale(1.02); }
   100% { box-shadow: 0 0 0 0 rgb(74 222 128 / 0); transform: scale(1); }
 }
 .anim-done-pop { animation: done-pop 0.9s ease-out both; }
+
+/* 完成徽章：随光晕弹出的绿色对勾（带弹性回弹），1 秒后随动画位一起消失 */
+@keyframes done-badge {
+  0% { transform: scale(0) rotate(-45deg); opacity: 0; }
+  45% { transform: scale(1.3) rotate(12deg); opacity: 1; }
+  65% { transform: scale(0.9) rotate(0deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+.anim-done-badge { animation: done-badge 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.12s both; }
 
 /* 系统减弱动态效果：全部动画/过渡压到不可感知 */
 @media (prefers-reduced-motion: reduce) {

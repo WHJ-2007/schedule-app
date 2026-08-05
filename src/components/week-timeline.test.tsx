@@ -714,6 +714,74 @@ describe("WeekTimeline (选择与框选)", () => {
     vi.useRealTimers();
   });
 
+  it("实例级完成（重复日程单实例标记完成）只对该实例播放成就动画", () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.setSystemTime(new Date(2026, 7, 3, 10, 30));
+    const r = { ...ev("r", "重复晨会", "09:00", "10:00"), repeat: { freq: "daily" as const, until: "2026-08-04" } };
+    const base = {
+      tokens: THEME_TOKENS,
+      dates,
+      anchorKey: "2026-08-03",
+      today: new Date(2026, 7, 3),
+      onJumpToMonth: vi.fn(),
+      onAddDay: vi.fn(),
+      onEdit: vi.fn(),
+      onToggleDone: vi.fn(),
+      onDelete: vi.fn(),
+      onMoveAll: vi.fn(),
+      onPostpone: vi.fn(),
+      onMarkDone: vi.fn(),
+      onEndEarly: vi.fn(),
+      onStretch: vi.fn(),
+      onCopy: vi.fn(),
+    };
+    const days = (dd?: string[]) => [
+      [r],                                   // 8/3 实例（未完成）
+      dd ? [{ ...r, doneDates: dd }] : [r],  // 8/4 实例
+      ...emptyWeek.slice(2),
+    ];
+    const { rerender } = render(<WeekTimeline {...base} eventsByDay={days(undefined)} />);
+    const blocks = () => screen.getAllByRole("button", { name: /日程 重复晨会/ });
+    expect(blocks()[0].className).not.toContain("anim-done-pop");
+    expect(blocks()[1].className).not.toContain("anim-done-pop");
+    rerender(<WeekTimeline {...base} eventsByDay={days(["2026-08-04"])} />);
+    expect(blocks()[0].className).not.toContain("anim-done-pop"); // 未完成的实例不动
+    expect(blocks()[1].className).toContain("anim-done-pop");
+    vi.useRealTimers();
+  });
+
+  it("全天事件完成同样播放成就动画（胶囊带上对勾徽章）", () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.setSystemTime(new Date(2026, 7, 3, 10, 30));
+    const a = { ...ev("a", "全天事项", "", ""), endDate: "2026-08-03" };
+    const base = {
+      tokens: THEME_TOKENS,
+      dates,
+      anchorKey: "2026-08-03",
+      today: new Date(2026, 7, 3),
+      onJumpToMonth: vi.fn(),
+      onAddDay: vi.fn(),
+      onEdit: vi.fn(),
+      onToggleDone: vi.fn(),
+      onDelete: vi.fn(),
+      onMoveAll: vi.fn(),
+      onPostpone: vi.fn(),
+      onMarkDone: vi.fn(),
+      onEndEarly: vi.fn(),
+      onStretch: vi.fn(),
+      onCopy: vi.fn(),
+    };
+    const days = (done: boolean) => [[{ ...a, done }], ...emptyWeek.slice(1)];
+    const { rerender } = render(<WeekTimeline {...base} eventsByDay={days(false)} />);
+    // 全天胶囊：外层 bar（role=button）里第一个 div 是胶囊本体
+    const cap = () => screen.getByRole("button", { name: /日程 全天事项/ }).firstElementChild!;
+    expect(cap().className).not.toContain("anim-done-pop");
+    rerender(<WeekTimeline {...base} eventsByDay={days(true)} />);
+    expect(cap().className).toContain("anim-done-pop");
+    expect(cap().querySelector(".anim-done-badge")).not.toBeNull(); // 对勾徽章同时出现
+    vi.useRealTimers();
+  });
+
   it("拖动事件松手后不触发编辑/菜单（抑制随后的 click）", () => {
     const onEdit = vi.fn();
     const onMoveAll = vi.fn();

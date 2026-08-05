@@ -233,18 +233,23 @@ export default function WeekTimeline({
   // 悬停展开的短卡片：块高不足时标题被裁，hover 自动展开到完整标题高度（posKey 键，重复实例互不干扰）
   const [expanded, setExpanded] = useState<{ id: string; h: number } | null>(null);
   const titleRefs = useRef(new Map<string, HTMLSpanElement | null>());
-  // 完成动画：从未完成 → 完成瞬间该实例块播放绿色光晕弹跳（1 秒后清除动画位）
+  // 完成动画：按实例日（id:日期）检测从未完成 → 完成（全局 done、实例级 doneDates 都算，
+  // 全天胶囊同样触发），瞬间播放绿色光晕弹跳＋对勾徽章（1 秒后清除动画位）
   const [justDone, setJustDone] = useState<Set<string>>(new Set());
   const doneMapRef = useRef(new Map<string, boolean>());
   useEffect(() => {
     const prev = doneMapRef.current;
     const next = new Map<string, boolean>();
     const newly: string[] = [];
-    for (const e of eventsByDay.flat()) {
-      if (!e.time) continue;
-      next.set(posKey(e), !!e.done);
-      if (prev.get(posKey(e)) === false && e.done) newly.push(posKey(e));
-    }
+    eventsByDay.forEach((list, i) => {
+      const day = weekKeys[i];
+      for (const e of list) {
+        const k = `${e.id}:${day}`;
+        const done = isInstanceDone(e, day);
+        next.set(k, done);
+        if (prev.get(k) === false && done) newly.push(k);
+      }
+    });
     doneMapRef.current = next;
     if (newly.length === 0) return;
     setJustDone((s) => {
@@ -1161,9 +1166,14 @@ export default function WeekTimeline({
                       "flex h-full items-center gap-1 rounded-md border border-transparent px-1 transition " +
                       (isSelected ? " ring-2 ring-blue-700 " : "") +
                       (bar.e.repeat ? "" : " cursor-grab hover:scale-[1.01] hover:bg-blue-100/70") +
-                      (justDone.has(posKey(bar.e)) ? " anim-done-pop" : "")
+                      (justDone.has(`${bar.e.id}:${weekKeys[bar.start]}`) ? " anim-done-pop" : "")
                     }
                   >
+                    {justDone.has(`${bar.e.id}:${weekKeys[bar.start]}`) && (
+                      <span className="anim-done-badge pointer-events-none absolute -right-1.5 -top-1.5 z-30 flex h-4 w-4 items-center justify-center rounded-full bg-green-500 text-[10px] font-bold leading-none text-white shadow-md ring-2 ring-white/70">
+                        ✓
+                      </span>
+                    )}
                     <input
                       type="checkbox"
                       checked={bar.e.done}
@@ -1426,7 +1436,7 @@ export default function WeekTimeline({
                         (isResizing ? " !transition-none" : "") +
                         (isSelected ? " " + tokens.weekView.eventSelected : "") +
                         (hst ? " opacity-50" : "") +
-                        (justDone.has(posKey(e)) ? " anim-done-pop" : "")
+                        (justDone.has(`${e.id}:${weekKeys[i]}`) ? " anim-done-pop" : "")
                       }
                       style={{
                         top: blockTop,
@@ -1470,6 +1480,11 @@ export default function WeekTimeline({
                         zIndex: moving ? 50 : expanded?.id === posKey(e) ? 40 : ongoing ? 11 : isSelected ? 10 : undefined,
                       }}
                     >
+                      {justDone.has(`${e.id}:${weekKeys[i]}`) && (
+                        <span className="anim-done-badge pointer-events-none absolute right-0.5 top-0.5 z-30 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-green-500 text-[9px] font-bold leading-none text-white shadow-md">
+                          ✓
+                        </span>
+                      )}
                       <span
                         ref={(el) => {
                           if (el) titleRefs.current.set(posKey(e), el);
