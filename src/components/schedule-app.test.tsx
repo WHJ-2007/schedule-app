@@ -956,6 +956,45 @@ describe("ScheduleApp (switcher & week view)", () => {
     vi.useRealTimers();
   });
 
+  it("每周重复拖右把手：整组自动改为每天重复（起点不变、截止=新位置），实例数按天重排", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 3, 10, 0)); // 周一 10:00
+    const rectSpy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const col = this.closest("[data-date]") as HTMLElement | null;
+        if (col) {
+          const idx = Array.from(document.querySelectorAll("[data-date]")).indexOf(col);
+          return { left: idx * 100, top: 0, width: 100, height: 0, right: (idx + 1) * 100, bottom: 0 } as DOMRect;
+        }
+        return { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 } as DOMRect;
+      }
+    );
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "在8月3日添加日程" }));
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "周重复拖宽" } });
+    fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "10:00" } });
+    fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:00" } });
+    fireEvent.click(screen.getByLabelText("重复"));
+    fireEvent.change(screen.getByLabelText("频率"), { target: { value: "weekly" } });
+    fireEvent.change(screen.getByLabelText(/重复至/), { target: { value: "2026-08-09" } }); // 每周：本周内仅 8/3 一个实例
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const block = within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 周重复拖宽/ });
+    // 每周重复：仅起点实例，首末把手都在它身上
+    const handle = within(block).getByTestId("hstretch-handle-end");
+    const col = block.closest("[data-date]") as HTMLElement;
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(col, { pointerId: 1, clientX: 250, clientY: 100 }); // 拖到列 2（8/5）
+    fireEvent.pointerUp(col, { pointerId: 1 });
+    expect(screen.getByRole("status")).toHaveTextContent(/已改为每天重复：「周重复拖宽」（2026-08-03 至 2026-08-05）/);
+    // 每天重复：8/3、8/4、8/5 各一个实例（每周时只有 1 个）
+    expect(
+      within(screen.getByTestId("view-anim")).getAllByRole("button", { name: /日程 周重复拖宽/ })
+    ).toHaveLength(3);
+    rectSpy.mockRestore();
+    vi.useRealTimers();
+  });
+
   it("选中事件块按 Delete 删除并弹出撤销条，点撤销恢复", () => {
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     const now = new Date();

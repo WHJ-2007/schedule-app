@@ -6,7 +6,7 @@ export type ExportResult = "copied" | "downloaded";
 export async function copyViewAsJpeg(node: HTMLElement): Promise<ExportResult> {
   const blob = await toBlob(node, {
     quality: 0.95,
-    pixelRatio: 2,
+    pixelRatio: 3,
     backgroundColor: "#fafafa",
     // 截图时排除瞬态交互元素：光标线/光标标签/拖选高亮/编辑手柄
     filter: (n) =>

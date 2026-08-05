@@ -55,7 +55,6 @@ function renderTimeline(eventsByDay: ScheduleEvent[][], overrides: Partial<Param
     onMarkDone: vi.fn(),
     onEndEarly: vi.fn(),
     onStretch: vi.fn(),
-    onStretchRepeat: vi.fn(),
     onCopy: vi.fn(),
     ...overrides,
   };
@@ -677,7 +676,6 @@ describe("WeekTimeline (选择与框选)", () => {
       onMarkDone: vi.fn(),
       onEndEarly: vi.fn(),
       onStretch: vi.fn(),
-      onStretchRepeat: vi.fn(),
       onCopy: vi.fn(),
     };
     const days = (done: boolean) => [[{ ...a, done }], ...emptyWeek.slice(1)];
@@ -1060,7 +1058,6 @@ describe("WeekTimeline (光标横线与时刻标签)", () => {
         onMarkDone={vi.fn()}
         onEndEarly={vi.fn()}
         onStretch={vi.fn()}
-        onStretchRepeat={vi.fn()}
         onCopy={vi.fn()}
       />
     );
@@ -1309,13 +1306,13 @@ describe("WeekTimeline (光标横线与时刻标签)", () => {
     expect(blocks[6].querySelectorAll('[data-testid="hstretch-handle-end"]').length).toBe(1);
   });
 
-  it("重复日程拖末实例右把手：上报截止日期（频率不变），预览覆盖新跨度", () => {
-    const onStretchRepeat = vi.fn();
+  it("重复日程拖末实例右把手：整段改为每天重复（起点不变、截止=新位置），预览覆盖新跨度", () => {
+    const onStretch = vi.fn();
     const r = {
       ...ev("r", "重复日程", "09:00", "10:00"),
       repeat: { freq: "daily" as const, until: "2026-08-06" },
     };
-    renderTimeline([[r], [r], [r], [r], ...emptyWeek.slice(4)], { onStretchRepeat });
+    renderTimeline([[r], [r], [r], [r], ...emptyWeek.slice(4)], { onStretch });
     const blocks = screen.getAllByRole("button", { name: /日程 重复日程/ });
     const handle = blocks[3].querySelector('[data-testid="hstretch-handle-end"]')!; // 末实例（until=8/6）
     const col = document.querySelector('[data-date="2026-08-03"]')!; // 把手激活后 unmount，move/up 派发到列
@@ -1324,16 +1321,32 @@ describe("WeekTimeline (光标横线与时刻标签)", () => {
     // 预览：起点（8/3 列 0）到新截止（列 5）每列一个副本
     expect(screen.getAllByTestId("hstretch-preview").length).toBe(6);
     fireEvent.pointerUp(col, { pointerId: 1 });
-    expect(onStretchRepeat).toHaveBeenCalledWith("r", "end", "2026-08-08");
+    expect(onStretch).toHaveBeenCalledWith("r", "2026-08-03", "2026-08-08");
   });
 
-  it("重复日程拖首实例左把手：上报重复开始日期（频率不变），未跨列不上报", () => {
-    const onStretchRepeat = vi.fn();
+  it("重复日程拖末实例右把手越过起点：钳制到起点列（跨度缩为单日）", () => {
+    const onStretch = vi.fn();
+    const r = {
+      ...ev("r", "重复日程", "09:00", "10:00"),
+      repeat: { freq: "daily" as const, until: "2026-08-06" },
+    };
+    renderTimeline([[r], [r], [r], [r], ...emptyWeek.slice(4)], { onStretch });
+    const blocks = screen.getAllByRole("button", { name: /日程 重复日程/ });
+    const handle = blocks[3].querySelector('[data-testid="hstretch-handle-end"]')!;
+    const col = document.querySelector('[data-date="2026-08-03"]')!;
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100, clientY: 60 });
+    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 60 }); // 拖到列 0（起点前）
+    fireEvent.pointerUp(col, { pointerId: 1 });
+    expect(onStretch).toHaveBeenCalledWith("r", "2026-08-03", "2026-08-03");
+  });
+
+  it("重复日程拖首实例左把手：整段改为每天重复（起点=新位置、截止不变），未跨列不上报", () => {
+    const onStretch = vi.fn();
     const r = {
       ...ev("r", "重复日程", "09:00", "10:00"),
       repeat: { freq: "daily" as const, until: "2026-08-09" },
     };
-    renderTimeline([[r], [r], [r], [r], ...emptyWeek.slice(4)], { onStretchRepeat });
+    renderTimeline([[r], [r], [r], [r], ...emptyWeek.slice(4)], { onStretch });
     const col = document.querySelector('[data-date="2026-08-03"]')!;
     let blocks = screen.getAllByRole("button", { name: /日程 重复日程/ });
     let handle = blocks[0].querySelector('[data-testid="hstretch-handle-start"]')!;
@@ -1341,14 +1354,14 @@ describe("WeekTimeline (光标横线与时刻标签)", () => {
     fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100, clientY: 60 });
     fireEvent.pointerMove(col, { pointerId: 1, clientX: 90, clientY: 60 });
     fireEvent.pointerUp(col, { pointerId: 1 });
-    expect(onStretchRepeat).not.toHaveBeenCalled();
-    // 拖左到列 1（8/4）：重复开始改为 8/4（把手元素随状态重新挂载，需重新查询）
+    expect(onStretch).not.toHaveBeenCalled();
+    // 拖左到列 1（8/4）：起点改为 8/4、截止 8/9 不变（把手元素随状态重新挂载，需重新查询）
     blocks = screen.getAllByRole("button", { name: /日程 重复日程/ });
     handle = blocks[0].querySelector('[data-testid="hstretch-handle-start"]')!;
     fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100, clientY: 60 });
     fireEvent.pointerMove(col, { pointerId: 1, clientX: 190, clientY: 60 });
     fireEvent.pointerUp(col, { pointerId: 1 });
-    expect(onStretchRepeat).toHaveBeenCalledWith("r", "start", "2026-08-04");
+    expect(onStretch).toHaveBeenCalledWith("r", "2026-08-04", "2026-08-09");
   });
 
   it("未来日程与非今天列的日程右键同样弹菜单；点外部空白处关闭菜单", () => {

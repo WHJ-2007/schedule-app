@@ -67,7 +67,6 @@ function DayPanel({
   onBatchMarkDone,
   onBatchUnmark,
   onStretch,
-  onStretchRepeat,
   onCopy,
 }: {
   tokens: ThemeTokens;
@@ -90,7 +89,6 @@ function DayPanel({
   onBatchMarkDone?: (ids: string[]) => void;
   onBatchUnmark?: (ids: string[]) => void;
   onStretch: (id: string, date: string, until: string) => void;
-  onStretchRepeat: (id: string, edge: "start" | "end", date: string) => void;
   onCopy: (e: ScheduleEvent) => void;
 }) {
   // dates 数组必须稳定引用：WeekTimeline 的「翻周清空选中」effect 依赖它，
@@ -150,7 +148,6 @@ function DayPanel({
             onBatchMarkDone={onBatchMarkDone}
             onBatchUnmark={onBatchUnmark}
             onStretch={onStretch}
-            onStretchRepeat={onStretchRepeat}
             onCopy={onCopy}
             cols={1}
             zoom={panelZoom}
@@ -866,27 +863,6 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     setToast({ text: `已改为每天重复：「${ev.title}」（${date} 至 ${until}）` });
   };
 
-  // 重复日程拖边界：左边界（第一个实例）改重复开始日期、右边界（最后一个实例）改截止日期，
-  // 频率保持不变；起止互钳制（起点不晚于截止、截止不早于起点）
-  const stretchRepeatEdge = (id: string, edge: "start" | "end", dateKey: string) => {
-    const ev = events.find((x) => x.id === id);
-    if (!ev?.repeat) return;
-    const title = ev.title;
-    if (edge === "start") {
-      const until = ev.repeat.until;
-      const nd = until && dateKey > until ? until : dateKey;
-      if (nd === ev.date) return;
-      updateEvent(id, { date: nd });
-      setToast({ text: `重复开始改为 ${nd}（频率不变）${title ? `：「${title}」` : ""}` });
-    } else {
-      const nd = dateKey < ev.date ? ev.date : dateKey;
-      const oldUntil = ev.repeat.until ?? ev.date;
-      if (nd === oldUntil) return;
-      updateEvent(id, { repeat: { ...ev.repeat, until: nd } });
-      setToast({ text: `重复截止改为 ${nd}（频率不变）${title ? `：「${title}」` : ""}` });
-    }
-  };
-
   // 复制：同一天时间 +1 小时（跨天顺延到次日，时长不变），不带重复规则
   const copyEvent = (e: ScheduleEvent) => {
     const sMin = parseTimeToMinutes(e.time);
@@ -1195,7 +1171,6 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                 onBatchMarkDone={batchMarkDone}
                 onBatchUnmark={batchUnmark}
                 onStretch={stretchEvent}
-                onStretchRepeat={stretchRepeatEdge}
                 onCopy={copyEvent}
               />
             </div>
@@ -1268,7 +1243,6 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                       onBatchMarkDone={batchMarkDone}
                       onBatchUnmark={batchUnmark}
                       onStretch={stretchEvent}
-                      onStretchRepeat={stretchRepeatEdge}
                       onCopy={copyEvent}
                       zoom={weekZoom}
                       onZoomChange={setWeekZoom}

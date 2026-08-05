@@ -171,7 +171,6 @@ export default function WeekTimeline({
   onBatchUnmark,
   onEndEarly,
   onStretch,
-  onStretchRepeat,
   onCopy,
   cols = 7,
   rootClass,
@@ -199,8 +198,7 @@ export default function WeekTimeline({
   onBatchMarkDone?: (ids: string[]) => void; // 多选右键「批量标记为已完成」：作用于全部选中日程（含重复日程全部实例）
   onBatchUnmark?: (ids: string[]) => void; // 多选右键「批量标记为未完成」
   onEndEarly: (id: string, dayKey: string) => void; // 菜单「提前结束」：未结束日程只标记该实例完成，计划时间不变
-  onStretch: (id: string, date: string, until: string) => void; // 横向拖宽：事件改为每天重复，起点 date、截止 until（时间不变）
-  onStretchRepeat: (id: string, edge: "start" | "end", date: string) => void; // 重复日程拖边界：左边界改重复开始、右边界改截止日期（频率不变）
+  onStretch: (id: string, date: string, until: string) => void; // 横向拖宽（含重复日程拖边界）：事件改为每天重复，起点 date、截止 until（时间不变）
   onCopy: (e: ScheduleEvent) => void; // 菜单「复制」：复制被右击的实例（同天时间 +1 小时）
   cols?: number; // 列数：周视图 7 列，月视图当日面板 1 列
   rootClass?: string; // 追加到根容器 className（如 flex-1 min-h-0 供父 flex 撑满）
@@ -367,8 +365,6 @@ export default function WeekTimeline({
   onEndEarlyRef.current = onEndEarly;
   const onStretchRef = useRef(onStretch);
   onStretchRef.current = onStretch;
-  const onStretchRepeatRef = useRef(onStretchRepeat);
-  onStretchRepeatRef.current = onStretchRepeat;
   const onCopyRef = useRef(onCopy);
   onCopyRef.current = onCopy;
   const onDeleteRef = useRef(onDelete);
@@ -932,6 +928,21 @@ export default function WeekTimeline({
   };
 
   // 时间块横向拖宽：按下左右把手，按列吸附，预览跨列范围
+  // 横向拖宽目标范围（列号）：重复日程按边钳制——拖起点不越过截止列（无截止取可视末列）、
+  // 拖截止不越过起点列；与预览渲染共用同一算法，保证所见即所得
+  const stretchRangeCols = (d: HStretchDrag): [number, number] => {
+    const src = eventsRef.current.flat().find((x) => x.id === d.id);
+    if (!src?.repeat) return [Math.min(d.col, d.cur), Math.max(d.col, d.cur)];
+    const dateCol = weekIdxMap.get(src.date);
+    const untilCol = src.repeat.until ? weekIdxMap.get(src.repeat.until) : undefined;
+    if (d.edge === "start") {
+      const endCol = untilCol == null ? cols - 1 : Math.min(untilCol, cols - 1);
+      return [Math.min(d.cur, endCol), endCol];
+    }
+    const lo = Math.max(dateCol ?? 0, 0);
+    return [lo, Math.max(d.cur, lo)];
+  };
+
   const handleHStretchDown = (
     e: React.PointerEvent,
     ev: ScheduleEvent,
@@ -955,22 +966,7 @@ export default function WeekTimeline({
     setHStretch(next);
     const rect = timelineRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const src = eventsRef.current.flat().find((x) => x.id === d.id);
-    if (src?.repeat) {
-      // 重复日程：气泡显示被调整的边（开始/截止日期），频率保持不变
-      const [y, m, day] = weekKeysRef.current[next.cur].split("-").map(Number);
-      setTip({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-        text:
-          d.edge === "start"
-            ? `重复开始：${y}年${m}月${day}日（频率不变）`
-            : `重复截止：${y}年${m}月${day}日（频率不变）`,
-      });
-      return;
-    }
-    const lo = Math.min(d.col, next.cur);
-    const hi = Math.max(d.col, next.cur);
+    const [lo, hi] = stretchRangeCols(next);
     const sd = parseDateKey(weekKeysRef.current[lo]);
     const ed = parseDateKey(weekKeysRef.current[hi]);
     setTip({
@@ -986,23 +982,10 @@ export default function WeekTimeline({
     hStretchRef.current = null;
     setHStretch(null);
     setTip(null);
-    const src = eventsRef.current.flat().find((x) => x.id === d.id);
-    if (src?.repeat) {
-      // 重复日程：拖第一个实例左边界 → 改重复开始日期；拖最后一个实例右边界 → 改截止日期
-      const target = weekKeysRef.current[d.cur];
-      const until = src.repeat.until ?? src.date;
-      if (d.edge === "start") {
-        if (target === src.date) return; // 未变化
-        onStretchRepeatRef.current(d.id, "start", target);
-      } else {
-        if (target === until) return; // 未变化
-        onStretchRepeatRef.current(d.id, "end", target);
-      }
-      return;
-    }
-    const lo = Math.min(d.col, d.cur);
-    const hi = Math.max(d.col, d.cur);
-    if (lo === hi) return; // 未跨列：无变化
+    if (d.cur === d.col) return; // 未跨列：无变化
+    // 重复日程拖边界与普通拖宽一致：整段改为每天重复（起点=边界列、截止=对侧钳制列），
+    // 拖到被钳制的同一列也提交（跨度缩成一个实例）
+    const [lo, hi] = stretchRangeCols(d);
     onStretchRef.current(d.id, weekKeysRef.current[lo], weekKeysRef.current[hi]);
   };
 
@@ -1327,25 +1310,12 @@ export default function WeekTimeline({
                     />
                   )}
                 {/* 横向拖宽预览：范围内每列显示半透明副本（时间与原事件相同）。
-                    重复日程预览新的重复跨度：开始边 = 新起点 → 截止（或周末）；截止边 = 起点 → 新截止 */}
+                    重复日程预览新的每天重复跨度：起点边 = 新起点 → 截止（或周末）；截止边 = 起点 → 新截止 */}
                 {hStretch &&
                   (() => {
                     const src = eventsByDay.flat().find((x) => x.id === hStretch.id);
                     if (!src || !src.time) return null;
-                    let lo = Math.min(hStretch.col, hStretch.cur);
-                    let hi = Math.max(hStretch.col, hStretch.cur);
-                    if (src.repeat) {
-                      const dateCol = weekIdxMap.get(src.date);
-                      const untilCol = src.repeat.until ? weekIdxMap.get(src.repeat.until) : undefined;
-                      if (hStretch.edge === "start") {
-                        const endCol = untilCol == null ? cols - 1 : Math.min(untilCol, cols - 1);
-                        lo = Math.min(hStretch.cur, endCol); // 拖过截止 → 钳到截止列
-                        hi = endCol;
-                      } else {
-                        lo = Math.max(dateCol ?? 0, 0);
-                        hi = Math.max(hStretch.cur, lo); // 拖过起点 → 钳到起点列
-                      }
-                    }
+                    const [lo, hi] = stretchRangeCols(hStretch);
                     if (i < lo || i > hi) return null;
                     const s = parseTimeToMinutes(src.time);
                     const en = src.endTime ? parseTimeToMinutes(src.endTime) : s + 60;

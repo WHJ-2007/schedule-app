@@ -34,7 +34,7 @@ describe("copyViewAsJpeg", () => {
     expect(result).toBe("copied");
     expect(mockedToBlob).toHaveBeenCalledWith(
       el,
-      expect.objectContaining({ quality: 0.95, pixelRatio: 2, backgroundColor: "#fafafa" })
+      expect.objectContaining({ quality: 0.95, pixelRatio: 3, backgroundColor: "#fafafa" })
     );
     const items = write.mock.calls[0][0] as ClipboardItems;
     expect(items[0].types).toContain("image/jpeg");
