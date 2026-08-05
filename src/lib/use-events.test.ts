@@ -176,7 +176,7 @@ describe("useEvents", () => {
     });
   });
 
-  it("setEventColors 批量设色一次入栈，撤销恢复", async () => {
+  it("updateEvents 批量更新一次入栈，撤销恢复", async () => {
     const { result } = renderHook(() => useEvents());
     await waitFor(() => {
       expect(result.current.events.length).toBeGreaterThan(0);
@@ -185,18 +185,18 @@ describe("useEvents", () => {
     const b = result.current.events[1];
     const historyLen = result.current.history.length;
     act(() => {
-      result.current.setEventColors([a.id, b.id], "#ef4444");
+      result.current.updateEvents([a.id, b.id], { done: true });
     });
     await waitFor(() => {
-      expect(result.current.events.find((e) => e.id === a.id)?.color).toBe("#ef4444");
-      expect(result.current.events.find((e) => e.id === b.id)?.color).toBe("#ef4444");
+      expect(result.current.events.find((e) => e.id === a.id)?.done).toBe(true);
+      expect(result.current.events.find((e) => e.id === b.id)?.done).toBe(true);
       expect(result.current.history.length).toBe(historyLen + 1);
     });
     act(() => {
       result.current.undo();
     });
     await waitFor(() => {
-      expect(result.current.events.find((e) => e.id === a.id)?.color).toBeUndefined();
+      expect(result.current.events.find((e) => e.id === a.id)?.done).toBe(false);
     });
   });
 

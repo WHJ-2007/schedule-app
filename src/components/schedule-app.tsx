@@ -60,7 +60,6 @@ function DayPanel({
   onEdit,
   onToggleDone,
   onMoveAll,
-  onBatchColor,
   onSelectionChange,
   onPostpone,
   onMarkDone,
@@ -84,7 +83,6 @@ function DayPanel({
   onEdit: (e: ScheduleEvent) => void;
   onToggleDone: (id: string) => void;
   onMoveAll: (patches: EventMovePatch[]) => void;
-  onBatchColor: (ids: string[], color: string) => void;
   onSelectionChange: (ids: string[]) => void;
   onPostpone: (e: ScheduleEvent, dayKey: string) => void;
   onMarkDone: (id: string, dayKey: string) => void;
@@ -145,7 +143,6 @@ function DayPanel({
             onToggleDone={onToggleDone}
             onDelete={onDelete}
             onMoveAll={onMoveAll}
-            onBatchColor={onBatchColor}
             onSelectionChange={onSelectionChange}
             onPostpone={onPostpone}
             onMarkDone={onMarkDone}
@@ -258,7 +255,6 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     toggleDone,
     replaceEvents,
     applyMoveAll,
-    setEventColors,
     undo,
     redo,
     jumpToIndex,
@@ -846,11 +842,19 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     setToast({ text: `已标记 ${ids.length} 项日程为未完成` });
   };
 
-  // 横向拖宽：事件自动改为每天重复（起点 date、截止 until，时间不变）
+  // 横向拖宽：事件自动改为每天重复（起点 date、截止 until，时间不变）。
+  // 已完成（全局 done）的事件变重复后只有原来那天算完成（doneDates 记原日期），
+  // 新实例不继承完成——重复到明天/后天显然还没做；逾期未完成无需处理（过期按实例日现算）
   const stretchEvent = (id: string, date: string, until: string) => {
-    const title = events.find((x) => x.id === id)?.title;
-    updateEvent(id, { date, repeat: { freq: "daily", until } });
-    setToast({ text: `已改为每天重复${title ? `：「${title}」` : ""}（${date} 至 ${until}）` });
+    const ev = events.find((x) => x.id === id);
+    if (!ev) return;
+    const patch: Partial<Omit<ScheduleEvent, "id">> = { date, repeat: { freq: "daily", until } };
+    if (ev.done) {
+      patch.done = false;
+      patch.doneDates = [ev.date];
+    }
+    updateEvent(id, patch);
+    setToast({ text: `已改为每天重复：「${ev.title}」（${date} 至 ${until}）` });
   };
 
   // 重复日程拖边界：左边界（第一个实例）改重复开始日期、右边界（最后一个实例）改截止日期，
@@ -1175,7 +1179,6 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                 onEdit={openEdit}
                 onToggleDone={toggleDone}
                 onMoveAll={applyMoveAll}
-                onBatchColor={setEventColors}
                 onSelectionChange={setSelectedIds}
                 onPostpone={postponeEvent}
                 onMarkDone={markDone}
@@ -1249,7 +1252,6 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                       onToggleDone={toggleDone}
                       onDelete={deleteWithToast}
                       onMoveAll={applyMoveAll}
-                      onBatchColor={setEventColors}
                       onSelectionChange={setSelectedIds}
                       onPostpone={postponeEvent}
                       onMarkDone={markDone}

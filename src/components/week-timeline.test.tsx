@@ -183,13 +183,14 @@ describe("WeekTimeline", () => {
   it("多选拖动：重复日程共享起点日（byDay 真实形态）实例不自我重叠缩小", () => {
     // 真实 app 的 byDay 把同一事件对象推入每天数组：实例 date 字段全是起点日。
     // 旧 bug：预览把同 id 全部实例按起点日映射到同一列 → 自我重叠 → 最左实例缩成半宽
+    const onSelectionChange = vi.fn();
     const shared = ev("r", "重复日程", "09:00", "10:00", 0); // date = 2026-08-03（周一）
     const b = ev("b", "评审", "14:00", "15:00", 3);
     const days = [...emptyWeek];
     days[0] = [shared];
     days[1] = [shared];
     days[3] = [b];
-    renderTimeline(days);
+    renderTimeline(days, { onSelectionChange });
     // 框选 09:00–15:00 跨列：选中 r 与 b 两个 id
     fireEvent.pointerDown(document.querySelector('[data-date="2026-08-03"]')!, {
       pointerId: 1,
@@ -206,7 +207,7 @@ describe("WeekTimeline", () => {
       clientX: 350,
       clientY: 280,
     });
-    expect(screen.getByText("已选 2")).toBeInTheDocument(); // 多选生效
+    expect(onSelectionChange).toHaveBeenLastCalledWith(["r", "b"]); // 多选生效（批量颜色条已移除）
     let blocks = screen.getAllByRole("button", { name: /日程 重复日程/ });
     fireEvent.pointerDown(blocks[0], { pointerId: 1, clientX: 50, clientY: 100 }); // 按周一实例
     fireEvent.pointerMove(blocks[0], { pointerId: 1, clientX: 150, clientY: 100 }); // 横向 +1 天
@@ -521,6 +522,8 @@ describe("WeekTimeline (选择与框选)", () => {
     fireEvent.contextMenu(screen.getByRole("button", { name: /日程 晨会/ }), { clientX: 120, clientY: 80 });
     fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
     expect(onEdit).toHaveBeenLastCalledWith(a);
+    // 右键未选中块会累积进选中组（批量菜单无「编辑」）：先左键点另一事件替换选中组，再右键弹单事件菜单
+    fireEvent.click(screen.getByRole("button", { name: /日程 评审/ }), { detail: 1 });
     fireEvent.contextMenu(screen.getByRole("button", { name: /日程 评审/ }), { clientX: 120, clientY: 80 });
     fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
     expect(onEdit).toHaveBeenLastCalledWith(b);
@@ -1084,7 +1087,9 @@ describe("WeekTimeline (光标横线与时刻标签)", () => {
     expect(onEndEarly).toHaveBeenCalledWith("a", "2026-08-03");
     expect(onEdit).not.toHaveBeenCalled();
     expect(screen.queryByRole("menu", { name: "日程操作" })).toBeNull();
-    // 已完成（提前结束）：编辑/标记为未完成，点「标记为未完成」回调取消完成
+    // 已完成（提前结束）：编辑/标记为未完成，点「标记为未完成」回调取消完成。
+    // 右键未选中块会累积多选（批量菜单）：先左键点已完成块替换选中组，再右键弹单事件菜单
+    fireEvent.click(screen.getByRole("button", { name: /日程 已完成/ }), { detail: 1 });
     fireEvent.contextMenu(screen.getByRole("button", { name: /日程 已完成/ }), { clientX: 120, clientY: 80 });
     const doneMenu = screen.getByRole("menu", { name: "日程操作" });
     expect(within(doneMenu).getByRole("menuitem", { name: "标记为未完成" })).not.toBeNull();
@@ -1182,7 +1187,7 @@ describe("WeekTimeline (光标横线与时刻标签)", () => {
     expect(onBatchUnmark).toHaveBeenCalledWith(["a", "b"]);
   });
 
-  it("多选后右键未选中块：改为单选该块，显示单实例菜单", () => {
+  it("右键累积多选：右键未选中块加入选中组，菜单变为批量操作（含新加入的块）", () => {
     const onBatchMarkDone = vi.fn();
     const a = ev("a", "晨会", "09:00", "10:00", 0);
     const b = ev("b", "评审", "11:00", "12:00", 1);
@@ -1204,14 +1209,16 @@ describe("WeekTimeline (光标横线与时刻标签)", () => {
       clientY: 205,
     });
     fireEvent.pointerUp(document.querySelector('[data-date="2026-08-04"]')!, { pointerId: 1 });
-    // 右键第三块（不在选中组）→ 单选该块，出现单实例菜单而非批量菜单
+    // 右键第三块（不在选中组）→ 加入选中组（[a, b, c]），弹出批量菜单而非单实例菜单
     fireEvent.contextMenu(screen.getByRole("button", { name: /日程 晚餐/ }), {
       clientX: 120,
       clientY: 80,
     });
     const menu = screen.getByRole("menu", { name: "日程操作" });
-    expect(within(menu).queryByRole("menuitem", { name: "批量标记为已完成" })).toBeNull();
-    expect(within(menu).getByRole("menuitem", { name: "编辑" })).not.toBeNull();
+    expect(within(menu).getByRole("menuitem", { name: "批量标记为已完成" })).not.toBeNull();
+    expect(within(menu).queryByRole("menuitem", { name: "编辑" })).toBeNull();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "批量标记为已完成" }));
+    expect(onBatchMarkDone).toHaveBeenCalledWith(["a", "b", "c"]);
   });
 
   it("横向拖宽：拖右把手跨 3 列，松手上报每天重复（起点/截止），预览副本覆盖各列", () => {
@@ -1518,36 +1525,27 @@ describe("WeekTimeline (重叠事件并排)", () => {
     expect(onZoomChange).toHaveBeenLastCalledWith(1.75);
   });
 
-  it("单选日程不出现批量颜色工具条（只编辑面板），多选才出现", () => {
+  it("多选后不再显示批量颜色工具条（右键改为批量完成/未完成菜单）", () => {
     renderTimeline(
       [[ev("a", "晨会", "09:30", "11:00"), ev("b", "评审", "10:00", "11:00")], ...emptyWeek.slice(1)]
     );
     fireEvent.click(screen.getByRole("button", { name: /日程 晨会/ }), { detail: 1 });
     expect(screen.queryByTestId("batch-color-bar")).toBeNull();
-    // 框选覆盖两个日程 → 工具条出现
+    // 框选覆盖两个日程：仍无工具条
     expandFold();
     const col = document.querySelector('[data-date="2026-08-03"]')!;
     fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 150 });
     fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 400 });
     fireEvent.pointerUp(col, { pointerId: 1 });
-    expect(screen.getByText("已选 2")).toBeInTheDocument();
-  });
-
-  it("工具条点色点批量回调全部选中", () => {
-    const onBatchColor = vi.fn();
-    renderTimeline(
-      [[ev("a", "晨会", "09:30", "11:00"), ev("b", "评审", "10:00", "11:00")], ...emptyWeek.slice(1)],
-      { onBatchColor }
-    );
-    expandFold();
-    const col = document.querySelector('[data-date="2026-08-03"]')!;
-    // 展开态 1px = 2 分钟：150px=05:00、400px=13:20，框选覆盖两块
-    fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 150 });
-    fireEvent.pointerMove(col, { pointerId: 1, clientX: 50, clientY: 400 });
-    fireEvent.pointerUp(col, { pointerId: 1 });
-    expect(screen.getByText("已选 2")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "批量颜色 #ef4444" }));
-    expect(onBatchColor).toHaveBeenCalledWith(["a", "b"], "#ef4444");
+    expect(screen.queryByTestId("batch-color-bar")).toBeNull();
+    // 右键选中组 → 批量菜单
+    fireEvent.contextMenu(screen.getByRole("button", { name: /日程 晨会/ }), {
+      clientX: 120,
+      clientY: 80,
+    });
+    const menu = screen.getByRole("menu", { name: "日程操作" });
+    expect(within(menu).getByRole("menuitem", { name: "批量标记为已完成" })).not.toBeNull();
+    expect(within(menu).getByRole("menuitem", { name: "批量标记为未完成" })).not.toBeNull();
   });
 
   it("自定义颜色的日程块半透明底色＋左侧色条，未设色不覆盖主题色", () => {

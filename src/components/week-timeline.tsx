@@ -14,7 +14,6 @@ import {
 import type { ScheduleEvent } from "@/lib/events";
 import { isInstanceDone, isInstanceExpired } from "@/lib/events";
 import type { EventMovePatch } from "@/lib/use-events";
-import { EVENT_COLORS } from "@/lib/colors";
 import type { ThemeTokens } from "./theme-tokens";
 
 const HOUR_PX = 30; // 每小时高度（像素）：一屏能放下所有时间
@@ -165,7 +164,6 @@ export default function WeekTimeline({
   onToggleDone,
   onDelete,
   onMoveAll,
-  onBatchColor,
   onSelectionChange,
   onPostpone,
   onMarkDone,
@@ -195,7 +193,6 @@ export default function WeekTimeline({
   onToggleDone: (id: string) => void;
   onDelete: (id: string) => void;
   onMoveAll: (patches: EventMovePatch[]) => void;
-  onBatchColor?: (ids: string[], color: string) => void; // 批量设色（"" = 清除为默认）
   onSelectionChange?: (ids: string[]) => void; // 选中组变化上报（父层用于 Delete 键删除与面板联动）
   onPostpone: (e: ScheduleEvent, dayKey: string) => void; // 菜单「标记为未完成」：取消该实例完成标记（重复日程只作用于右键实例）
   onMarkDone: (id: string, dayKey: string) => void; // 菜单「标记为已完成」：已过期未完成的日程标记为已完成（重复日程只作用于右键实例），计划时间不变
@@ -354,8 +351,6 @@ export default function WeekTimeline({
   onAddDayRef.current = onAddDay;
   const onMoveAllRef = useRef(onMoveAll);
   onMoveAllRef.current = onMoveAll;
-  const onBatchColorRef = useRef(onBatchColor);
-  onBatchColorRef.current = onBatchColor;
   const onSelectionChangeRef = useRef(onSelectionChange);
   onSelectionChangeRef.current = onSelectionChange;
   const onPostponeRef = useRef(onPostpone);
@@ -1259,34 +1254,6 @@ export default function WeekTimeline({
         onMouseLeave={() => setHover(null)}
         onDragStart={(e) => e.preventDefault()}
       >
-        {selectedIds.length > 1 && (
-          <div
-            data-testid="batch-color-bar"
-            className="absolute left-0 right-0 top-0 z-20 flex items-center gap-2 rounded-b-xl border border-white/40 bg-white/70 px-3 py-2 shadow-xl backdrop-blur-xl"
-          >
-            <span className="text-xs text-neutral-600">已选 {selectedIds.length}</span>
-            <div className="flex gap-1.5">
-              {EVENT_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  aria-label={`批量颜色 ${c}`}
-                  onClick={() => onBatchColorRef.current?.(selectedIds, c)}
-                  className="h-4 w-4 rounded-full border border-black/10 transition hover:scale-110"
-                  style={{ backgroundColor: c }}
-                />
-              ))}
-              <button
-                type="button"
-                aria-label="批量颜色 默认"
-                onClick={() => onBatchColorRef.current?.(selectedIds, "")}
-                className="h-4 w-4 rounded-full border border-dashed border-neutral-400 text-[8px] leading-none text-neutral-500 transition hover:scale-110"
-              >
-                默
-              </button>
-            </div>
-          </div>
-        )}
         <div className="anim-fold relative shrink-0" style={{ width: GUTTER, height: dayHeight }}>
           {visibleHours.map((h) => (
             // inset-x-0：绝对定位容器必须有宽度，否则子刻度溢出到列外不可见
@@ -1455,8 +1422,9 @@ export default function WeekTimeline({
                       onContextMenu={(ev) => {
                         ev.preventDefault();
                         ev.stopPropagation();
-                        // 右键已选中组里的块保持多选（批量操作菜单）；否则单选该块
-                        if (!selectedIds.includes(e.id)) applySelection([e.id]);
+                        // 右键已选中组里的块保持多选（批量操作菜单）；未选中的块加入选中组
+                        // （右键逐块累积多选），选完弹出批量操作菜单
+                        if (!selectedIds.includes(e.id)) applySelection([...selectedIds, e.id]);
                         openCtxMenu(ev.clientX, ev.clientY, e, weekKeys[i]);
                       }}
                       draggable={false}
@@ -1511,8 +1479,9 @@ export default function WeekTimeline({
                           : expanded?.id === posKey(e) || (settleRef.current && !isResizing)
                             ? "top,left,width,height,transform"
                             : undefined,
-                        // 悬停展开的块最上层（不被相邻事件/进行中高亮挡住）；拖拽中的块更高
-                        zIndex: moving ? 50 : expanded?.id === posKey(e) ? 40 : isSelected ? 10 : undefined,
+                        // 悬停展开的块最上层（不被相邻事件/进行中高亮挡住）；拖拽中的块更高；
+                        // 进行中块置顶于现在线（z-10）之上，盖住经过它的当前时刻线
+                        zIndex: moving ? 50 : expanded?.id === posKey(e) ? 40 : ongoing ? 11 : isSelected ? 10 : undefined,
                       }}
                     >
                       <span

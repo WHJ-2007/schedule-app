@@ -201,16 +201,6 @@ export function useEvents() {
     [commit]
   );
 
-  // 批量设色（选中组一次变色）：一次操作一条历史记录；color 空串 = 清除为默认
-  const setEventColors = useCallback(
-    (ids: string[], color: string) => {
-      commit((prev) =>
-        prev.map((e) => (ids.includes(e.id) ? { ...e, color: color || undefined } : e))
-      );
-    },
-    [commit]
-  );
-
   // 导入：整体替换全部日程（已校验清洗）
   const replaceEvents = useCallback(
     (list: ScheduleEvent[]) => {
@@ -258,7 +248,6 @@ export function useEvents() {
     toggleDone,
     replaceEvents,
     applyMoveAll,
-    setEventColors,
     undo,
     redo,
     jumpToIndex,
