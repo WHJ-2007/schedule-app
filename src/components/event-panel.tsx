@@ -13,7 +13,7 @@ export type FormState = {
   endTime: string;
   endDate: string; // 全天事件跨至日期（含，空 = 仅当天）
   description: string;
-  repeat: { on: boolean; freq: RepeatFreq | ""; until: string }; // 开关 + 频率 + 重复至；关闭 = 不重复
+  repeat: { on: boolean; freq: RepeatFreq | ""; until: string; interval: number }; // 开关 + 频率 + 重复至 + 每 N 天；关闭 = 不重复
   color: string; // 自定义颜色（空 = 默认，跟随主题）
 };
 
@@ -26,7 +26,7 @@ export function emptyForm(dates: string[]): FormState {
     endTime: "",
     endDate: "",
     description: "",
-    repeat: { on: false, freq: "", until: "" },
+    repeat: { on: false, freq: "", until: "", interval: 1 },
     color: "",
   };
 }
@@ -275,6 +275,29 @@ export default function EventPanel({
                     ))}
                   </select>
                 </label>
+                {form.repeat.freq === "daily" && (
+                  <label htmlFor="repeatInterval" className="block">
+                    <span className={dialog.inputLabel}>间隔</span>
+                    <input
+                      id="repeatInterval"
+                      type="number"
+                      min={1}
+                      max={30}
+                      value={form.repeat.interval}
+                      onChange={(e) =>
+                        onChange({
+                          ...form,
+                          repeat: {
+                            ...form.repeat,
+                            interval: Math.max(1, Math.min(30, Math.floor(Number(e.target.value) || 1))),
+                          },
+                        })
+                      }
+                      className={dialog.input}
+                    />
+                    <span className="mt-0.5 block text-xs text-neutral-400">每 N 天重复一次（仅「每天」频率）</span>
+                  </label>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   <label htmlFor="repeatStart" className="block min-w-0">
                     <span className={dialog.inputLabel}>重复开始</span>
@@ -315,7 +338,7 @@ export default function EventPanel({
                 onClick={onEndEarly}
                 className="text-sm text-blue-600 transition hover:scale-[1.03] hover:text-blue-800"
               >
-                提前结束
+                标注为完成
               </button>
             )}
             {form.id && onDelete ? (

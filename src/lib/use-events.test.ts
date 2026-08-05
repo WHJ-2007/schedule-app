@@ -176,6 +176,43 @@ describe("useEvents", () => {
     });
   });
 
+  it("applyMoveAll 重复日程整组平移：until 同步移动、频率保留，撤销恢复", async () => {
+    const { result } = renderHook(() => useEvents());
+    await waitFor(() => {
+      expect(result.current.events.length).toBeGreaterThan(0);
+    });
+    const ev = result.current.events[0];
+    act(() => {
+      result.current.updateEvent(ev.id, {
+        repeat: { freq: "daily", until: "2026-08-09", interval: 2 },
+      });
+    });
+    await waitFor(() => {
+      expect(result.current.events.find((e) => e.id === ev.id)?.repeat).toEqual({
+        freq: "daily",
+        until: "2026-08-09",
+        interval: 2,
+      });
+    });
+    act(() => {
+      result.current.applyMoveAll([{ id: ev.id, date: "2026-08-05", until: "2026-08-11" }]);
+    });
+    await waitFor(() => {
+      const moved = result.current.events.find((e) => e.id === ev.id);
+      expect(moved?.date).toBe("2026-08-05");
+      // 截止日平移 +2 天，频率与间隔不变 → 重复跨度保持
+      expect(moved?.repeat).toEqual({ freq: "daily", until: "2026-08-11", interval: 2 });
+    });
+    act(() => {
+      result.current.undo();
+    });
+    await waitFor(() => {
+      const back = result.current.events.find((e) => e.id === ev.id);
+      expect(back?.date).toBe(ev.date);
+      expect(back?.repeat).toEqual({ freq: "daily", until: "2026-08-09", interval: 2 });
+    });
+  });
+
   it("updateEvents 批量更新一次入栈，撤销恢复", async () => {
     const { result } = renderHook(() => useEvents());
     await waitFor(() => {

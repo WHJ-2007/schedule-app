@@ -22,6 +22,7 @@ export type EventMovePatch = {
   date: string;
   time?: string;
   endTime?: string;
+  until?: string; // 重复日程整组平移：截止日随 date 同步移动（保持重复跨度不变）
   endDate?: string;
 };
 
@@ -193,6 +194,11 @@ export function useEvents() {
           const patch: Partial<Omit<ScheduleEvent, "id">> = { date: p.date };
           if (p.time !== undefined) patch.time = p.time;
           if (p.endTime !== undefined) patch.endTime = p.endTime;
+          if (p.until !== undefined) {
+            // 重复日程整组平移：只改截止日，频率等其余规则保留
+            const src = list.find((x) => x.id === p.id);
+            patch.repeat = src?.repeat ? { ...src.repeat, until: p.until } : undefined;
+          }
           if (p.endDate !== undefined) patch.endDate = p.endDate;
           return updateEventInList(list, p.id, patch);
         }, prev)

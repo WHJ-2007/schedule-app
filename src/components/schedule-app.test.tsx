@@ -607,7 +607,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     expect(block.style.height).toBe("30px");
   });
 
-  it("提前结束在编辑面板里：只标记完成、结束时间不变（计划不变），点后面板关闭", () => {
+  it("标注为完成在编辑面板里：只标记完成、结束时间不变（计划不变），点后面板关闭", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 7, 3, 10, 0)); // 周一 10:00
     render(<ScheduleApp tokens={THEME_TOKENS} />);
@@ -617,13 +617,13 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "11:00" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
-    // 块上不显示提前结束；右键点块弹操作菜单（编辑/提前结束），面板内也才有提前结束
-    expect(screen.queryByRole("button", { name: "提前结束" })).toBeNull();
+    // 块上不显示标注为完成；右键点块弹操作菜单（编辑/标注为完成），面板内也才有标注为完成
+    expect(screen.queryByRole("button", { name: "标注为完成" })).toBeNull();
     fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 进行中事件/ }), { clientX: 100, clientY: 100 });
     expect(screen.getByRole("menu", { name: "日程操作" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
-    fireEvent.click(screen.getByRole("button", { name: "提前结束" }));
-    expect(screen.getByRole("status")).toHaveTextContent("已提前结束并标记完成");
+    fireEvent.click(screen.getByRole("button", { name: "标注为完成" }));
+    expect(screen.getByRole("status")).toHaveTextContent("已标注为完成");
     expect(screen.queryByRole("dialog")).toBeNull(); // 点完关闭面板
     // 再打开编辑面板：结束时间仍是 11:00（计划不变）
     fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 进行中事件/ }), { clientX: 100, clientY: 100 });
@@ -633,7 +633,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     vi.useRealTimers();
   });
 
-  it("非进行中日程（未开始）的编辑面板不显示提前结束按钮", () => {
+  it("非进行中日程（未开始）的编辑面板不显示标注为完成按钮", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 7, 3, 10, 0)); // 周一 10:00
     render(<ScheduleApp tokens={THEME_TOKENS} />);
@@ -646,11 +646,11 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 未来事件/ }), { clientX: 100, clientY: 100 });
     fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
     expect(screen.getByRole("dialog", { name: "编辑日程" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "提前结束" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "标注为完成" })).toBeNull();
     vi.useRealTimers();
   });
 
-  it("菜单「提前结束」：点块 → 菜单点提前结束 → 只标记完成、不开面板、菜单关闭", () => {
+  it("菜单「标注为完成」：点块 → 菜单点标注为完成 → 只标记完成、不开面板、菜单关闭", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 7, 3, 10, 0)); // 周一 10:00
     render(<ScheduleApp tokens={THEME_TOKENS} />);
@@ -661,9 +661,9 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 菜单进行中/ }), { clientX: 100, clientY: 100 });
-    // 菜单里有提前结束，点它：不经过编辑面板
-    fireEvent.click(screen.getByRole("menuitem", { name: "提前结束" }));
-    expect(screen.getByRole("status")).toHaveTextContent("已提前结束并标记完成");
+    // 菜单里有标注为完成，点它：不经过编辑面板
+    fireEvent.click(screen.getByRole("menuitem", { name: "标注为完成" }));
+    expect(screen.getByRole("status")).toHaveTextContent("已标注为完成");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByRole("menu", { name: "日程操作" })).toBeNull();
     // 计划不变：重开面板看结束时间仍是 11:00
@@ -683,11 +683,11 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.change(screen.getByLabelText(/结束时间/), { target: { value: "10:00" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
-    // 已结束：菜单显示 编辑/标记为已完成，无提前结束
+    // 已结束：菜单显示 编辑/标记为已完成，无标注为完成
     fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 已结束晨会/ }), { clientX: 100, clientY: 100 });
     const menu = screen.getByRole("menu", { name: "日程操作" });
     expect(within(menu).getByRole("menuitem", { name: "标记为已完成" })).not.toBeNull();
-    expect(within(menu).queryByRole("menuitem", { name: "提前结束" })).toBeNull();
+    expect(within(menu).queryByRole("menuitem", { name: "标注为完成" })).toBeNull();
     fireEvent.click(within(menu).getByRole("menuitem", { name: "标记为已完成" }));
     // 只标记完成：toast + 不产生副本（仍只有一块），块变划线
     expect(screen.getByRole("status")).toHaveTextContent(/已标记为已完成：「已结束晨会」/);
@@ -700,7 +700,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     vi.useRealTimers();
   });
 
-  it("菜单「标记为未完成」：已提前结束的日程取消完成标记，不产生副本，恢复提前结束选项", () => {
+  it("菜单「标记为未完成」：已标注为完成的日程取消完成标记，不产生副本，恢复标注为完成选项", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 7, 3, 10, 0)); // 周一 10:00
     render(<ScheduleApp tokens={THEME_TOKENS} />);
@@ -711,15 +711,15 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const block = within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 早退事件/ });
-    // 先提前结束（完成标记）
+    // 先标注为完成（完成标记）
     fireEvent.contextMenu(block, { clientX: 100, clientY: 100 });
-    fireEvent.click(screen.getByRole("menuitem", { name: "提前结束" }));
-    expect(screen.getByRole("status")).toHaveTextContent("已提前结束并标记完成");
-    // 已完成：菜单只有 编辑/标记为未完成，无提前结束
+    fireEvent.click(screen.getByRole("menuitem", { name: "标注为完成" }));
+    expect(screen.getByRole("status")).toHaveTextContent("已标注为完成");
+    // 已完成：菜单只有 编辑/标记为未完成，无标注为完成
     fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 早退事件/ }), { clientX: 100, clientY: 100 });
     const menu = screen.getByRole("menu", { name: "日程操作" });
     expect(within(menu).getByRole("menuitem", { name: "标记为未完成" })).not.toBeNull();
-    expect(within(menu).queryByRole("menuitem", { name: "提前结束" })).toBeNull();
+    expect(within(menu).queryByRole("menuitem", { name: "标注为完成" })).toBeNull();
     fireEvent.click(within(menu).getByRole("menuitem", { name: "标记为未完成" }));
     // 取消完成：不产生副本，只去掉完成标记
     expect(screen.getByRole("status")).toHaveTextContent("已标记为未完成：「早退事件」");
@@ -728,13 +728,13 @@ describe("ScheduleApp (switcher & week view)", () => {
     for (const b of blocks) {
       expect(b.querySelector("span")!.className).not.toContain("line-through");
     }
-    // 取消完成后再右键：恢复进行中 → 又有提前结束
+    // 取消完成后再右键：恢复进行中 → 又有标注为完成
     fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 早退事件/ }), { clientX: 100, clientY: 100 });
-    expect(within(screen.getByRole("menu", { name: "日程操作" })).getByRole("menuitem", { name: "提前结束" })).not.toBeNull();
+    expect(within(screen.getByRole("menu", { name: "日程操作" })).getByRole("menuitem", { name: "标注为完成" })).not.toBeNull();
     vi.useRealTimers();
   });
 
-  it("菜单：明天的日程即使结束时刻早于现在也显示「提前结束」（按实例日期判结束，不误判为已结束）", () => {
+  it("菜单：明天的日程即使结束时刻早于现在也显示「标注为完成」（按实例日期判结束，不误判为已结束）", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 7, 5, 15, 0)); // 周三 15:00
     render(<ScheduleApp tokens={THEME_TOKENS} />);
@@ -748,7 +748,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     fireEvent.contextMenu(within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 明日会议/ }), { clientX: 100, clientY: 100 });
     const menu = screen.getByRole("menu", { name: "日程操作" });
-    expect(within(menu).getByRole("menuitem", { name: "提前结束" })).not.toBeNull();
+    expect(within(menu).getByRole("menuitem", { name: "标注为完成" })).not.toBeNull();
     expect(within(menu).queryByRole("menuitem", { name: "标记为未完成" })).toBeNull();
     vi.useRealTimers();
   });
@@ -1544,6 +1544,62 @@ describe("ScheduleApp (recurring & day timeline)", () => {
     const view = within(screen.getByTestId("view-anim"));
     expect(view.getAllByRole("button", { name: /日程 工作日事件/ })).toHaveLength(5);
     expect(view.getAllByRole("button", { name: /日程 周末事件/ })).toHaveLength(2);
+  });
+
+  it("每 N 天重复：间隔 2 天保存带 interval，编辑回显，周视图按两天一跳", () => {
+    const now = new Date();
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: `在${now.getMonth() + 1}月${now.getDate()}日添加日程` })
+    );
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "隔天跑步" } });
+    fireEvent.change(screen.getByLabelText(/开始时间/), { target: { value: "09:00" } });
+    fireEvent.click(screen.getByLabelText("重复"));
+    fireEvent.change(screen.getByLabelText(/间隔/), { target: { value: "2" } });
+    const until = toDateKey(addDays(now.getFullYear(), now.getMonth(), now.getDate(), 4));
+    fireEvent.change(screen.getByLabelText(/重复至/), { target: { value: until } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    // 保存的数据带 interval 2（默认每天 = 不带）
+    const saved = JSON.parse(localStorage.getItem("schedule-demo-events")!) as Array<Record<string, unknown>>;
+    const ev = saved.find((e) => e.title === "隔天跑步")!;
+    expect(ev.repeat).toEqual({ freq: "daily", until, interval: 2 });
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const view = within(screen.getByTestId("view-anim"));
+    const count = view.getAllByRole("button", { name: /日程 隔天跑步/ }).length;
+    expect(count).toBeGreaterThanOrEqual(1); // 本周至少含起始日实例
+    // 编辑回显间隔
+    fireEvent.contextMenu(view.getAllByRole("button", { name: /日程 隔天跑步/ })[0], { clientX: 100, clientY: 100 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
+    expect(screen.getByLabelText(/间隔/)).toHaveValue(2);
+  });
+
+  it("重复至早于重复开始：保存时钳制为开始日期，重复不塌缩", () => {
+    const now = new Date();
+    const todayKey = toDateKey(now);
+    localStorage.setItem(
+      "schedule-demo-events",
+      JSON.stringify([
+        { id: "a", title: "钳制测试", date: todayKey, time: "09:00", description: "", done: false },
+      ])
+    );
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    fireEvent.contextMenu(
+      within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 钳制测试/ }),
+      { clientX: 100, clientY: 100 }
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
+    fireEvent.click(screen.getByLabelText("重复"));
+    // 重复开始改到 5 天后，重复至只到 3 天后 → 保存时 until 被钳制到开始日
+    const start = toDateKey(addDays(now.getFullYear(), now.getMonth(), now.getDate(), 5));
+    const until = toDateKey(addDays(now.getFullYear(), now.getMonth(), now.getDate(), 3));
+    fireEvent.change(screen.getByLabelText("重复开始"), { target: { value: start } });
+    fireEvent.change(screen.getByLabelText(/重复至/), { target: { value: until } });
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+    const saved = JSON.parse(localStorage.getItem("schedule-demo-events")!) as Array<Record<string, unknown>>;
+    const ev = saved.find((e) => e.title === "钳制测试")!;
+    expect(ev.date).toBe(start);
+    expect(ev.repeat).toEqual({ freq: "daily", until: start, interval: 1 });
   });
 });
 

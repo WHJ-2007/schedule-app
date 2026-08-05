@@ -767,8 +767,8 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
       endDate: e.endDate ?? "",
       description: e.description,
       repeat: e.repeat
-        ? { on: true, freq: e.repeat.freq, until: e.repeat.until ?? "" }
-        : { on: false, freq: "", until: "" },
+        ? { on: true, freq: e.repeat.freq, until: e.repeat.until ?? "", interval: e.repeat.interval ?? 1 }
+        : { on: false, freq: "", until: "", interval: 1 },
       color: e.color ?? "",
     });
   };
@@ -778,10 +778,19 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     const title = form.title.trim();
     if (!title) return;
     // 重复规则：频率空 → 不重复；重复开始即事件日期（表单"重复开始"可改）；
-    // 重复至留空 = 无限重复（展开时由视图范围兜底）
+    // 重复至留空 = 无限重复（展开时由视图范围兜底）；
+    // 重复至早于开始日期时钳制为开始日，避免重复塌缩成单实例
     const repeat =
       form.repeat.on && form.repeat.freq
-        ? { freq: form.repeat.freq as RepeatFreq, until: form.repeat.until || undefined }
+        ? {
+            freq: form.repeat.freq as RepeatFreq,
+            until: form.repeat.until
+              ? form.repeat.until < form.dates[0]
+                ? form.dates[0]
+                : form.repeat.until
+              : undefined,
+            interval: form.repeat.freq === "daily" ? form.repeat.interval : undefined,
+          }
         : undefined;
     if (form.id) {
       updateEvent(form.id, {
@@ -829,7 +838,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     const e = events.find((x) => x.id === id);
     if (!e) return;
     updateEvent(id, markInstanceDone(e, dayKey)); // 提前做完只标记完成，计划时间不变
-    setToast({ text: `已提前结束并标记完成：「${e.title}」` });
+    setToast({ text: `已标注为完成：「${e.title}」` });
   };
   // 多选右键「批量标记为已完成」：作用于全部选中日程；重复日程 done=true = 所有实例完成
   const batchMarkDone = (ids: string[]) => {

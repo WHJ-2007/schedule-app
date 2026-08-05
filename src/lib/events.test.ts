@@ -163,6 +163,32 @@ describe("expandEventDates", () => {
   it("无 until 且无 horizon 时仅自身日期", () => {
     expect(expandEventDates(base({ freq: "weekly" }))).toEqual(["2026-08-03"]);
   });
+
+  it("daily + interval 每 N 天一次", () => {
+    expect(expandEventDates(base({ freq: "daily", until: "2026-08-11", interval: 2 }))).toEqual([
+      "2026-08-03", "2026-08-05", "2026-08-07", "2026-08-09", "2026-08-11",
+    ]);
+  });
+
+  it("daily + interval 3 跨月", () => {
+    const e = { ...base({ freq: "daily", until: "2026-09-05", interval: 3 }), date: "2026-08-30" };
+    expect(expandEventDates(e)).toEqual(["2026-08-30", "2026-09-02", "2026-09-05"]);
+  });
+
+  it("daily + interval 非法值（0/负数/小数）按 1 处理", () => {
+    expect(expandEventDates(base({ freq: "daily", until: "2026-08-05", interval: 0 }))).toEqual([
+      "2026-08-03", "2026-08-04", "2026-08-05",
+    ]);
+    expect(expandEventDates(base({ freq: "daily", until: "2026-08-06", interval: 1.9 }))).toEqual([
+      "2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06",
+    ]);
+  });
+
+  it("weekday/weekend 忽略 interval 仍逐日过滤", () => {
+    expect(expandEventDates(base({ freq: "weekday", until: "2026-08-07", interval: 2 }))).toEqual([
+      "2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07",
+    ]);
+  });
 });
 
 describe("sanitizeImportedEvents", () => {

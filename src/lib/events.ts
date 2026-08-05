@@ -2,8 +2,9 @@ import { minutesToTime, parseTimeToMinutes, toDateKey } from "./date";
 
 export type RepeatFreq = "daily" | "weekly" | "monthly" | "weekday" | "weekend";
 
-// 重复规则：until 为重复截止日期（含），缺省 = 无限重复（展开时由视图范围兜底）
-export type RepeatRule = { freq: RepeatFreq; until?: string };
+// 重复规则：until 为重复截止日期（含），缺省 = 无限重复（展开时由视图范围兜底）；
+// interval 仅对 daily 有效 = 每 N 天（缺省 1 = 每天）
+export type RepeatRule = { freq: RepeatFreq; until?: string; interval?: number };
 
 export type ScheduleEvent = {
   id: string;
@@ -113,7 +114,11 @@ export function expandEventDates(e: ScheduleEvent, horizon?: string): string[] {
   const limit = new Date(y1, m1 - 1, d1);
   let cur = new Date(y0, m0 - 1, d0);
   const step = () => {
-    if (repeat.freq === "daily" || repeat.freq === "weekday" || repeat.freq === "weekend") {
+    if (repeat.freq === "daily") {
+      const gap = Math.max(1, Math.floor(repeat.interval ?? 1)); // 每 N 天
+      return new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + gap);
+    }
+    if (repeat.freq === "weekday" || repeat.freq === "weekend") {
       return new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1);
     }
     if (repeat.freq === "weekly") return new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 7);
@@ -219,7 +224,14 @@ export function sanitizeImportedEvents(raw: unknown): ScheduleEvent[] {
     const freq = typeof r?.freq === "string" ? r.freq : "";
     const repeat: RepeatRule | undefined =
       r && (freq === "daily" || freq === "weekly" || freq === "monthly" || freq === "weekday" || freq === "weekend")
-        ? { freq, until: typeof r.until === "string" && r.until ? r.until : undefined }
+        ? {
+            freq,
+            until: typeof r.until === "string" && r.until ? r.until : undefined,
+            interval:
+              freq === "daily" && typeof r.interval === "number" && r.interval >= 1
+                ? Math.floor(r.interval)
+                : undefined,
+          }
         : undefined;
     out.push({
       id: o.id as string,

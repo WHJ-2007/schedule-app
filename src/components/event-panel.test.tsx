@@ -83,7 +83,7 @@ describe("EventPanel", () => {
   it("重复开关打开时渲染频率选项与起止日期", () => {
     const form: ReturnType<typeof emptyForm> = {
       ...emptyForm(["2026-08-05"]),
-      repeat: { on: true, freq: "weekly", until: "" },
+      repeat: { on: true, freq: "weekly", until: "", interval: 1 },
     };
     renderPanel(form);
     expect(screen.getByLabelText("频率")).toHaveValue("weekly");

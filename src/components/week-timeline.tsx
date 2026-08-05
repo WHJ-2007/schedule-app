@@ -731,14 +731,20 @@ export default function WeekTimeline({
             if (id === m.pressId && `${ev.id}:${ev.date}` !== m.pressKey) continue;
             const s = parseTimeToMinutes(ev.time);
             const day = parseDateKey(ev.date);
-            patches.push({
+            const patch: EventMovePatch = {
               id,
               date: toDateKey(addDays(day.getFullYear(), day.getMonth(), day.getDate(), m.dx)),
               time: minutesToTime(s + m.dy),
               endTime: ev.endTime
                 ? minutesToTime(parseTimeToMinutes(ev.endTime) + m.dy)
                 : undefined,
-            });
+            };
+            // 重复日程整组平移：截止日与开始日同步移动，重复跨度（天数）保持不变
+            if (ev.repeat?.until) {
+              const [uy, um, ud] = ev.repeat.until.split("-").map(Number);
+              patch.until = toDateKey(addDays(uy, um - 1, ud, m.dx));
+            }
+            patches.push(patch);
           }
         }
         // 整组一次提交：撤销/重做按一次操作记录
@@ -1638,7 +1644,7 @@ export default function WeekTimeline({
             );
             if (notEnded) {
               items.push({
-                label: "提前结束",
+                label: "标注为完成",
                 onClick: () => {
                   setCtxMenu(null);
                   onEndEarlyRef.current(e.id, day);

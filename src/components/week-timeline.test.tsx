@@ -180,6 +180,42 @@ describe("WeekTimeline", () => {
     ]);
   });
 
+  it("重复日程（带 until）整体拖动：until 与 date 同步平移，重复跨度不变", () => {
+    const onMoveAll = vi.fn();
+    const rep = (col: number): ScheduleEvent => ({
+      ...ev("r", "重复日程", "09:00", "10:00", col),
+      repeat: { freq: "daily", until: "2026-08-09" },
+    });
+    renderTimeline([[rep(0)], [rep(1)], ...emptyWeek.slice(2)], { onMoveAll });
+    let blocks = screen.getAllByRole("button", { name: /日程 重复日程/ });
+    fireEvent.pointerDown(blocks[0], { pointerId: 1, clientX: 50, clientY: 100 }); // 周一实例 9:00
+    fireEvent.pointerMove(blocks[0], { pointerId: 1, clientX: 150, clientY: 100 }); // 横向 +1 天
+    blocks = screen.getAllByRole("button", { name: /日程 重复日程/ });
+    fireEvent.pointerUp(blocks[0], { pointerId: 1 });
+    // 截止日同样 +1 天：8/3..8/9（7 天）→ 8/4..8/10（仍 7 天）
+    expect(onMoveAll).toHaveBeenCalledTimes(1);
+    expect(onMoveAll).toHaveBeenCalledWith([
+      { id: "r", date: "2026-08-04", time: "09:00", endTime: "10:00", until: "2026-08-10" },
+    ]);
+  });
+
+  it("重复日程（无 until 无限）整体拖动：patch 不带 until", () => {
+    const onMoveAll = vi.fn();
+    const rep = (col: number): ScheduleEvent => ({
+      ...ev("r", "重复日程", "09:00", "10:00", col),
+      repeat: { freq: "daily" },
+    });
+    renderTimeline([[rep(0)], [rep(1)], ...emptyWeek.slice(2)], { onMoveAll });
+    let blocks = screen.getAllByRole("button", { name: /日程 重复日程/ });
+    fireEvent.pointerDown(blocks[0], { pointerId: 1, clientX: 50, clientY: 100 });
+    fireEvent.pointerMove(blocks[0], { pointerId: 1, clientX: 150, clientY: 100 });
+    blocks = screen.getAllByRole("button", { name: /日程 重复日程/ });
+    fireEvent.pointerUp(blocks[0], { pointerId: 1 });
+    expect(onMoveAll).toHaveBeenCalledWith([
+      { id: "r", date: "2026-08-04", time: "09:00", endTime: "10:00" },
+    ]);
+  });
+
   it("多选拖动：重复日程共享起点日（byDay 真实形态）实例不自我重叠缩小", () => {
     // 真实 app 的 byDay 把同一事件对象推入每天数组：实例 date 字段全是起点日。
     // 旧 bug：预览把同 id 全部实例按起点日映射到同一列 → 自我重叠 → 最左实例缩成半宽
@@ -1045,7 +1081,7 @@ describe("WeekTimeline (光标横线与时刻标签)", () => {
     const menu = screen.getByRole("menu", { name: "日程操作" });
     expect(within(menu).getByRole("menuitem", { name: "编辑" })).not.toBeNull();
     expect(within(menu).getByRole("menuitem", { name: "标记为已完成" })).not.toBeNull();
-    expect(within(menu).queryByRole("menuitem", { name: "提前结束" })).toBeNull();
+    expect(within(menu).queryByRole("menuitem", { name: "标注为完成" })).toBeNull();
     fireEvent.click(within(menu).getByRole("menuitem", { name: "标记为已完成" }));
     expect(onMarkDone).toHaveBeenCalledWith("a", "2026-08-03");
     expect(onEdit).not.toHaveBeenCalled();
@@ -1060,7 +1096,7 @@ describe("WeekTimeline (光标横线与时刻标签)", () => {
     vi.useRealTimers();
   });
 
-  it("右键进行中日程：编辑/提前结束；已完成（提前结束）日程：编辑/标记为未完成", () => {
+  it("右键进行中日程：编辑/标注为完成；已完成（标注为完成）日程：编辑/标记为未完成", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 7, 3, 10, 30));
     const onEndEarly = vi.fn();
@@ -1078,22 +1114,22 @@ describe("WeekTimeline (光标横线与时刻标签)", () => {
     );
     // 未点击：无任何菜单
     expect(screen.queryByRole("menu", { name: "日程操作" })).toBeNull();
-    // 进行中：编辑/提前结束，无标记为未完成
+    // 进行中：编辑/标注为完成，无标记为未完成
     fireEvent.contextMenu(screen.getByRole("button", { name: /日程 进行中/ }), { clientX: 120, clientY: 80 });
     const menu = screen.getByRole("menu", { name: "日程操作" });
-    expect(within(menu).getByRole("menuitem", { name: "提前结束" })).not.toBeNull();
+    expect(within(menu).getByRole("menuitem", { name: "标注为完成" })).not.toBeNull();
     expect(within(menu).queryByRole("menuitem", { name: "标记为未完成" })).toBeNull();
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "提前结束" }));
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "标注为完成" }));
     expect(onEndEarly).toHaveBeenCalledWith("a", "2026-08-03");
     expect(onEdit).not.toHaveBeenCalled();
     expect(screen.queryByRole("menu", { name: "日程操作" })).toBeNull();
-    // 已完成（提前结束）：编辑/标记为未完成，点「标记为未完成」回调取消完成。
+    // 已完成（标注为完成）：编辑/标记为未完成，点「标记为未完成」回调取消完成。
     // 右键未选中块会累积多选（批量菜单）：先左键点已完成块替换选中组，再右键弹单事件菜单
     fireEvent.click(screen.getByRole("button", { name: /日程 已完成/ }), { detail: 1 });
     fireEvent.contextMenu(screen.getByRole("button", { name: /日程 已完成/ }), { clientX: 120, clientY: 80 });
     const doneMenu = screen.getByRole("menu", { name: "日程操作" });
     expect(within(doneMenu).getByRole("menuitem", { name: "标记为未完成" })).not.toBeNull();
-    expect(within(doneMenu).queryByRole("menuitem", { name: "提前结束" })).toBeNull();
+    expect(within(doneMenu).queryByRole("menuitem", { name: "标注为完成" })).toBeNull();
     fireEvent.click(within(doneMenu).getByRole("menuitem", { name: "标记为未完成" }));
     expect(onPostpone).toHaveBeenCalledWith({ ...ev("d", "已完成", "09:00", "10:00"), done: true }, "2026-08-03");
     expect(onEdit).not.toHaveBeenCalled();
@@ -1326,9 +1362,9 @@ describe("WeekTimeline (光标横线与时刻标签)", () => {
       [[ev("f", "未来", "14:00", "15:00")], ...otherDay.slice(1)],
       { onEdit }
     );
-    // 未来日程：未到结束时间 → 编辑/提前结束
+    // 未来日程：未到结束时间 → 编辑/标注为完成
     fireEvent.contextMenu(screen.getByRole("button", { name: /日程 未来/ }), { clientX: 120, clientY: 80 });
-    expect(within(screen.getByRole("menu", { name: "日程操作" })).getByRole("menuitem", { name: "提前结束" })).not.toBeNull();
+    expect(within(screen.getByRole("menu", { name: "日程操作" })).getByRole("menuitem", { name: "标注为完成" })).not.toBeNull();
     fireEvent.click(document.body); // 点外部空白关闭
     expect(screen.queryByRole("menu", { name: "日程操作" })).toBeNull();
     // 非今天列的日程也弹菜单
