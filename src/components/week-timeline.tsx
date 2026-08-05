@@ -12,7 +12,7 @@ import {
   parseDateKey,
 } from "@/lib/date";
 import type { ScheduleEvent } from "@/lib/events";
-import { isInstanceExpired } from "@/lib/events";
+import { isInstanceDone, isInstanceExpired } from "@/lib/events";
 import type { EventMovePatch } from "@/lib/use-events";
 import { EVENT_COLORS } from "@/lib/colors";
 import type { ThemeTokens } from "./theme-tokens";
@@ -168,6 +168,9 @@ export default function WeekTimeline({
   onBatchColor,
   onSelectionChange,
   onPostpone,
+  onMarkDone,
+  onBatchMarkDone,
+  onBatchUnmark,
   onEndEarly,
   onStretch,
   onStretchRepeat,
@@ -194,8 +197,11 @@ export default function WeekTimeline({
   onMoveAll: (patches: EventMovePatch[]) => void;
   onBatchColor?: (ids: string[], color: string) => void; // 批量设色（"" = 清除为默认）
   onSelectionChange?: (ids: string[]) => void; // 选中组变化上报（父层用于 Delete 键删除与面板联动）
-  onPostpone: (e: ScheduleEvent) => void; // 菜单「标记为未完成」：已结束未完成的顺延复制一份从现在开始；已完成（提前结束）的取消完成标记
-  onEndEarly: (id: string) => void; // 菜单「提前结束」：未结束日程只标记完成，计划时间不变
+  onPostpone: (e: ScheduleEvent, dayKey: string) => void; // 菜单「标记为未完成」：取消该实例完成标记（重复日程只作用于右键实例）
+  onMarkDone: (id: string, dayKey: string) => void; // 菜单「标记为已完成」：已过期未完成的日程标记为已完成（重复日程只作用于右键实例），计划时间不变
+  onBatchMarkDone?: (ids: string[]) => void; // 多选右键「批量标记为已完成」：作用于全部选中日程（含重复日程全部实例）
+  onBatchUnmark?: (ids: string[]) => void; // 多选右键「批量标记为未完成」
+  onEndEarly: (id: string, dayKey: string) => void; // 菜单「提前结束」：未结束日程只标记该实例完成，计划时间不变
   onStretch: (id: string, date: string, until: string) => void; // 横向拖宽：事件改为每天重复，起点 date、截止 until（时间不变）
   onStretchRepeat: (id: string, edge: "start" | "end", date: string) => void; // 重复日程拖边界：左边界改重复开始、右边界改截止日期（频率不变）
   onCopy: (e: ScheduleEvent) => void; // 菜单「复制」：复制被右击的实例（同天时间 +1 小时）
@@ -354,6 +360,12 @@ export default function WeekTimeline({
   onSelectionChangeRef.current = onSelectionChange;
   const onPostponeRef = useRef(onPostpone);
   onPostponeRef.current = onPostpone;
+  const onMarkDoneRef = useRef(onMarkDone);
+  onMarkDoneRef.current = onMarkDone;
+  const onBatchMarkDoneRef = useRef(onBatchMarkDone);
+  onBatchMarkDoneRef.current = onBatchMarkDone;
+  const onBatchUnmarkRef = useRef(onBatchUnmark);
+  onBatchUnmarkRef.current = onBatchUnmark;
   const onZoomChangeRef = useRef(onZoomChange);
   onZoomChangeRef.current = onZoomChange;
   const onEndEarlyRef = useRef(onEndEarly);
@@ -1127,7 +1139,9 @@ export default function WeekTimeline({
               const isSelected = selectedIds.includes(bar.e.id);
               // 全天事件按结束日期（重复截止/跨至/当天）判过期：整个事件在过去才标暗红
               const barEndDate = bar.e.repeat?.until ?? bar.e.endDate ?? bar.e.date;
-              const barExpired = !bar.e.done && isInstanceExpired(bar.e, barEndDate, now);
+              // 实例级完成：重复全天胶囊每实例独立（实例日 = 胶囊起始列）
+              const barInstDone = isInstanceDone(bar.e, weekKeys[bar.start]);
+              const barExpired = !barInstDone && isInstanceExpired(bar.e, barEndDate, now);
               return (
                 <div
                   key={bar.e.repeat ? `${bar.e.id}:${bar.start}` : bar.e.id}
@@ -1180,17 +1194,17 @@ export default function WeekTimeline({
                       className={
                         tokens.weekView.allDayItem +
                         " min-w-0 flex-1" +
-                        (bar.e.done ? " line-through" : "")
+                        (barInstDone ? " line-through" : "")
                       }
                       style={{
-                        backgroundColor: bar.e.done
+                        backgroundColor: barInstDone
                           ? "rgba(124,162,140,0.45)"
                           : barExpired
                             ? "rgba(185,96,84,0.4)"
                             : bar.e.color
                               ? bar.e.color + "59"
                               : undefined,
-                        borderLeft: bar.e.done
+                        borderLeft: barInstDone
                           ? "3px solid rgb(44,98,70)"
                           : barExpired
                             ? "3px solid rgb(150,56,48)"
@@ -1378,6 +1392,7 @@ export default function WeekTimeline({
                   // 折叠时与凌晨区相交的事件整体收起，仅显示在折叠条计数里
                   if (folded && start < FOLD_END && end > FOLD_START) return null;
                   const isSelected = selectedIds.includes(e.id);
+                  const instDone = isInstanceDone(e, weekKeys[i]); // 实例级完成（重复日程按实例日）
                   // 只有移动集内的块跟手位移：重复事件未被按的实例留在原列不动
                   const moving = isMoved(e);
                   // 重复日程拖边界把手：首列实例左把手、末列实例右把手（中间实例不显示）
@@ -1391,12 +1406,12 @@ export default function WeekTimeline({
                   // 按实例所在列判今天：重复事件多实例共享 e.date（起点日），用 e.date 会让重复日实例漏判
                   const ongoing =
                     !isHidden(e) &&
-                    !e.done &&
+                    !instDone &&
                     weekKeys[i] === todayKey &&
                     start <= nowMin &&
                     nowMin < end;
                   // 已过期未完成（实例日 + 结束时间 < 现在）：暗红亚克力（与进行中互斥）
-                  const expired = !e.done && isInstanceExpired(e, weekKeys[i], now);
+                  const expired = !instDone && isInstanceExpired(e, weekKeys[i], now);
                   // 拖动块看目标列的预览轨道（显示松手后将占的轨位）；其余块看本列预览。
                   // 移动块身份键用所在列日期（与 previewLayouts 的 _src 一致）：重复事件
                   // 多实例共享 e.date，用 posKey 会让同 id 全部实例查到同一轨位
@@ -1430,7 +1445,8 @@ export default function WeekTimeline({
                           return;
                         }
                         ev.stopPropagation();
-                        applySelection([e.id]);
+                        // 已选中组里的块保持多选；否则点谁选谁
+                        if (!selectedIds.includes(e.id)) applySelection([e.id]);
                         // 鼠标左键只选中；键盘激活（Enter）时 detail=0，等同右键呼出菜单（居中显示在块上）
                         if (ev.detail !== 0) return;
                         const r = ev.currentTarget.getBoundingClientRect();
@@ -1439,7 +1455,8 @@ export default function WeekTimeline({
                       onContextMenu={(ev) => {
                         ev.preventDefault();
                         ev.stopPropagation();
-                        applySelection([e.id]);
+                        // 右键已选中组里的块保持多选（批量操作菜单）；否则单选该块
+                        if (!selectedIds.includes(e.id)) applySelection([e.id]);
                         openCtxMenu(ev.clientX, ev.clientY, e, weekKeys[i]);
                       }}
                       draggable={false}
@@ -1465,14 +1482,14 @@ export default function WeekTimeline({
                         // 展开时撑到标题 + 时间行 + 上下留白；块本身够高时不变
                         height: expanded?.id === posKey(e) ? Math.max(blockH, expanded.h + 19) : blockH,
                         // 毛玻璃日程：彩色事件半透明底 + 左侧色条；已完成→低饱和深绿亚克力；已过期未完成→暗红亚克力（文字保持深色清晰）
-                        backgroundColor: e.done
+                        backgroundColor: instDone
                           ? "rgba(124,162,140,0.45)"
                           : expired
                             ? "rgba(185,96,84,0.4)"
                             : e.color
                               ? e.color + "59"
                               : undefined,
-                        borderLeft: e.done
+                        borderLeft: instDone
                           ? "3px solid rgb(44,98,70)"
                           : expired
                             ? "3px solid rgb(150,56,48)"
@@ -1510,7 +1527,7 @@ export default function WeekTimeline({
                             : isSelected
                               ? "max-h-16"
                               : "max-h-4") +
-                          (e.done ? " line-through" : "")
+                          (instDone ? " line-through" : "")
                         }
                       >
                         {e.title}
@@ -1616,40 +1633,75 @@ export default function WeekTimeline({
       {ctxMenu &&
         (() => {
           const { x, y, e, day } = ctxMenu;
-          // 结束判断按实例所在日（右键的列）：明天下午的日程即使时刻早于现在也没结束，
-          // 只有「实例日 < 今天」或「今天且已过结束时刻」才算已结束
-          const ended = isInstanceExpired(e, day, now);
-          const notEnded = !e.done && !!e.time && !ended; // 未结束：可提前结束
-          const unmarkable = !!e.time && (e.done || ended); // 已完成（含提前结束）或已过结束时间：可标记为未完成
-          const items: { label: string; onClick: () => void }[] = [
-            { label: "编辑", onClick: () => { setCtxMenu(null); onEdit(e); } },
-            { label: "复制", onClick: () => { setCtxMenu(null); onCopyRef.current(e); } },
-          ];
-          if (notEnded) {
+          // 多选（框选多个不同日程，selectedIds 按 id 去重）右键 → 批量菜单；
+          // 重复日程的多个实例只算 1 个 id，仍走单实例分支（实例级操作）
+          const multi = selectedIds.length > 1;
+          const items: { label: string; onClick: () => void }[] = [];
+          if (multi) {
+            items.push(
+              {
+                label: "批量标记为已完成",
+                onClick: () => {
+                  setCtxMenu(null);
+                  onBatchMarkDoneRef.current?.(selectedIds);
+                },
+              },
+              {
+                label: "批量标记为未完成",
+                onClick: () => {
+                  setCtxMenu(null);
+                  onBatchUnmarkRef.current?.(selectedIds);
+                },
+              }
+            );
+          } else {
+            // 单实例：完成状态按右键的实例日判断（重复日程只作用于该实例）
+            const instDone = isInstanceDone(e, day);
+            // 结束判断按实例所在日（右键的列）：明天下午的日程即使时刻早于现在也没结束，
+            // 只有「实例日 < 今天」或「今天且已过结束时刻」才算已结束
+            const ended = isInstanceExpired(e, day, now);
+            const notEnded = !instDone && !!e.time && !ended; // 未结束：可提前结束
+            const expiredPending = !instDone && !!e.time && ended; // 已过期未完成：可标记为已完成
+            const unmarkable = !!e.time && instDone; // 已完成（含提前结束）：可标记为未完成
+            items.push(
+              { label: "编辑", onClick: () => { setCtxMenu(null); onEdit(e); } },
+              { label: "复制", onClick: () => { setCtxMenu(null); onCopyRef.current(e); } }
+            );
+            if (notEnded) {
+              items.push({
+                label: "提前结束",
+                onClick: () => {
+                  setCtxMenu(null);
+                  onEndEarlyRef.current(e.id, day);
+                },
+              });
+            }
+            if (expiredPending) {
+              items.push({
+                label: "标记为已完成",
+                onClick: () => {
+                  setCtxMenu(null);
+                  onMarkDoneRef.current(e.id, day);
+                },
+              });
+            }
+            if (unmarkable) {
+              items.push({
+                label: "标记为未完成",
+                onClick: () => {
+                  setCtxMenu(null);
+                  onPostponeRef.current(e, day);
+                },
+              });
+            }
             items.push({
-              label: "提前结束",
+              label: "删除",
               onClick: () => {
                 setCtxMenu(null);
-                onEndEarlyRef.current(e.id);
+                onDeleteRef.current(e.id);
               },
             });
           }
-          if (unmarkable) {
-            items.push({
-              label: "标记为未完成",
-              onClick: () => {
-                setCtxMenu(null);
-                onPostponeRef.current(e);
-              },
-            });
-          }
-          items.push({
-            label: "删除",
-            onClick: () => {
-              setCtxMenu(null);
-              onDeleteRef.current(e.id);
-            },
-          });
           // 菜单在鼠标右/下边缘时向内翻转，避免超出屏幕
           const menuW = 132;
           const menuH = items.length * 34 + 10;

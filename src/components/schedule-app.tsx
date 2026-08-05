@@ -24,7 +24,15 @@ import {
   formatYearTitle,
   addYears,
 } from "@/lib/date";
-import { buildPostponedClone, expandEventDates, isInstanceExpired, type RepeatFreq, type ScheduleEvent } from "@/lib/events";
+import {
+  expandEventDates,
+  isInstanceDone,
+  isInstanceExpired,
+  markInstanceDone,
+  unmarkInstanceDone,
+  type RepeatFreq,
+  type ScheduleEvent,
+} from "@/lib/events";
 import { copyViewAsJpeg } from "@/lib/export-image";
 import type { EventMovePatch } from "@/lib/use-events";
 import { getSavedView, saveView, type ViewMode } from "@/lib/views";
@@ -55,7 +63,10 @@ function DayPanel({
   onBatchColor,
   onSelectionChange,
   onPostpone,
+  onMarkDone,
   onEndEarly,
+  onBatchMarkDone,
+  onBatchUnmark,
   onStretch,
   onStretchRepeat,
   onCopy,
@@ -75,8 +86,11 @@ function DayPanel({
   onMoveAll: (patches: EventMovePatch[]) => void;
   onBatchColor: (ids: string[], color: string) => void;
   onSelectionChange: (ids: string[]) => void;
-  onPostpone: (e: ScheduleEvent) => void;
-  onEndEarly: (id: string) => void;
+  onPostpone: (e: ScheduleEvent, dayKey: string) => void;
+  onMarkDone: (id: string, dayKey: string) => void;
+  onEndEarly: (id: string, dayKey: string) => void;
+  onBatchMarkDone?: (ids: string[]) => void;
+  onBatchUnmark?: (ids: string[]) => void;
   onStretch: (id: string, date: string, until: string) => void;
   onStretchRepeat: (id: string, edge: "start" | "end", date: string) => void;
   onCopy: (e: ScheduleEvent) => void;
@@ -91,7 +105,7 @@ function DayPanel({
   const nowMin = today.getHours() * 60 + today.getMinutes();
   const canEndEarly =
     !!editingEvent &&
-    !editingEvent.done &&
+    !isInstanceDone(editingEvent, dateKey) &&
     dateKey === toDateKey(today) &&
     !!editingEvent.time &&
     parseTimeToMinutes(editingEvent.time) <= nowMin &&
@@ -112,7 +126,7 @@ function DayPanel({
               onClose={onClose}
               canEndEarly={canEndEarly}
               onEndEarly={() => {
-                if (form.id) onEndEarly(form.id);
+                if (form.id) onEndEarly(form.id, dateKey);
                 onClose();
               }}
             />
@@ -134,7 +148,10 @@ function DayPanel({
             onBatchColor={onBatchColor}
             onSelectionChange={onSelectionChange}
             onPostpone={onPostpone}
+            onMarkDone={onMarkDone}
             onEndEarly={onEndEarly}
+            onBatchMarkDone={onBatchMarkDone}
+            onBatchUnmark={onBatchUnmark}
             onStretch={onStretch}
             onStretchRepeat={onStretchRepeat}
             onCopy={onCopy}
@@ -235,6 +252,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     events,
     addEvent,
     updateEvent,
+    updateEvents,
     deleteEvent,
     deleteEvents,
     toggleDone,
@@ -798,21 +816,34 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     setForm(null);
   };
 
-  // 点击菜单操作：已完成（提前结束）→ 取消完成标记；已结束未完成 → 顺延复制（从现在开始）
-  const postponeEvent = (e: ScheduleEvent) => {
-    if (e.done) {
-      updateEvent(e.id, { done: false });
-      setToast({ text: `已标记为未完成：「${e.title}」` });
-      return;
-    }
-    const clone = buildPostponedClone(e, new Date());
-    addEvent(clone);
-    setToast({ text: `已顺延：「${e.title}」从 ${clone.time} 开始（${clone.endTime} 结束）` });
+  // 菜单「标记为未完成」：取消完成标记。重复日程只取消右键实例（doneDates 移除该日）
+  const postponeEvent = (e: ScheduleEvent, dayKey: string) => {
+    updateEvent(e.id, unmarkInstanceDone(e, dayKey));
+    setToast({ text: `已标记为未完成：「${e.title}」` });
   };
-  const endEarly = (id: string) => {
-    const title = events.find((x) => x.id === id)?.title;
-    updateEvent(id, { done: true }); // 提前做完只标记完成，计划时间不变
-    setToast({ text: `已提前结束并标记完成${title ? `：「${title}」` : ""}` });
+  // 菜单「标记为已完成」：已过期未完成的日程标记为已完成，计划时间不变。
+  // 重复日程只标记右键实例（doneDates 记该日），不涉及全部重复
+  const markDone = (id: string, dayKey: string) => {
+    const e = events.find((x) => x.id === id);
+    if (!e) return;
+    updateEvent(id, markInstanceDone(e, dayKey));
+    setToast({ text: `已标记为已完成：「${e.title}」` });
+  };
+  const endEarly = (id: string, dayKey: string) => {
+    const e = events.find((x) => x.id === id);
+    if (!e) return;
+    updateEvent(id, markInstanceDone(e, dayKey)); // 提前做完只标记完成，计划时间不变
+    setToast({ text: `已提前结束并标记完成：「${e.title}」` });
+  };
+  // 多选右键「批量标记为已完成」：作用于全部选中日程；重复日程 done=true = 所有实例完成
+  const batchMarkDone = (ids: string[]) => {
+    updateEvents(ids, { done: true });
+    setToast({ text: `已标记 ${ids.length} 项日程为已完成` });
+  };
+  // 多选右键「批量标记为未完成」：全部选中日程取消完成（重复日程连同实例级记录一起清掉）
+  const batchUnmark = (ids: string[]) => {
+    updateEvents(ids, { done: false, doneDates: undefined });
+    setToast({ text: `已标记 ${ids.length} 项日程为未完成` });
   };
 
   // 横向拖宽：事件自动改为每天重复（起点 date、截止 until，时间不变）
@@ -1047,20 +1078,21 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                             {/* 竖排优先，放不下才横向第二列，最多两列 */}
                             <span className="flex min-w-0 flex-1 flex-col gap-y-0.5">
                               {dayList.slice(0, indicatorCap).map((e) => {
-                                const expired = !e.done && isInstanceExpired(e, key, today);
+                                const instDone = isInstanceDone(e, key);
+                                const expired = !instDone && isInstanceExpired(e, key, today);
                                 return (
                                 <span
                                   key={e.id}
-                                  className={tokens.cell.eventChip + (e.done ? " line-through" : "")}
+                                  className={tokens.cell.eventChip + (instDone ? " line-through" : "")}
                                   style={{
-                                    backgroundColor: e.done
+                                    backgroundColor: instDone
                                       ? "rgba(124,162,140,0.5)"
                                       : expired
                                         ? "rgba(185,96,84,0.45)"
                                         : e.color
                                           ? e.color + "14"
                                           : undefined,
-                                    borderLeft: e.done
+                                    borderLeft: instDone
                                       ? "3px solid rgb(44,98,70)"
                                       : expired
                                         ? "3px solid rgb(150,56,48)"
@@ -1076,20 +1108,21 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                             </span>
                             <span className="flex min-w-0 flex-1 flex-col gap-y-0.5">
                               {dayList.slice(indicatorCap, indicatorCap * 2).map((e) => {
-                                const expired = !e.done && isInstanceExpired(e, key, today);
+                                const instDone = isInstanceDone(e, key);
+                                const expired = !instDone && isInstanceExpired(e, key, today);
                                 return (
                                 <span
                                   key={e.id}
-                                  className={tokens.cell.eventChip + (e.done ? " line-through" : "")}
+                                  className={tokens.cell.eventChip + (instDone ? " line-through" : "")}
                                   style={{
-                                    backgroundColor: e.done
+                                    backgroundColor: instDone
                                       ? "rgba(124,162,140,0.5)"
                                       : expired
                                         ? "rgba(185,96,84,0.45)"
                                         : e.color
                                           ? e.color + "14"
                                           : undefined,
-                                    borderLeft: e.done
+                                    borderLeft: instDone
                                       ? "3px solid rgb(44,98,70)"
                                       : expired
                                         ? "3px solid rgb(150,56,48)"
@@ -1145,7 +1178,10 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                 onBatchColor={setEventColors}
                 onSelectionChange={setSelectedIds}
                 onPostpone={postponeEvent}
+                onMarkDone={markDone}
                 onEndEarly={endEarly}
+                onBatchMarkDone={batchMarkDone}
+                onBatchUnmark={batchUnmark}
                 onStretch={stretchEvent}
                 onStretchRepeat={stretchRepeatEdge}
                 onCopy={copyEvent}
@@ -1216,7 +1252,10 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                       onBatchColor={setEventColors}
                       onSelectionChange={setSelectedIds}
                       onPostpone={postponeEvent}
+                      onMarkDone={markDone}
                       onEndEarly={endEarly}
+                      onBatchMarkDone={batchMarkDone}
+                      onBatchUnmark={batchUnmark}
                       onStretch={stretchEvent}
                       onStretchRepeat={stretchRepeatEdge}
                       onCopy={copyEvent}
@@ -1241,7 +1280,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                       onClose={() => setForm(null)}
                       canEndEarly={weekCanEndEarly}
                       onEndEarly={() => {
-                        if (form.id) endEarly(form.id);
+                        if (form.id) endEarly(form.id, form.dates[0]);
                         setForm(null);
                       }}
                     />

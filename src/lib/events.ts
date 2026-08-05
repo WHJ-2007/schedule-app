@@ -14,6 +14,7 @@ export type ScheduleEvent = {
   endDate?: string; // 全天事件跨至日期（含，缺省 = 仅当天）
   description: string;
   done: boolean;
+  doneDates?: string[]; // 重复日程已完成的具体实例日期（单次日程用 done）
   repeat?: RepeatRule;
   color?: string; // 自定义颜色（十六进制），缺省跟随主题
 };
@@ -151,9 +152,33 @@ export function updateEventInList(
   return list.map((e) => (e.id === id ? { ...e, ...patch } : e));
 }
 
+// 实例是否已完成：重复日程按 doneDates 记实例日，单次日程看 done（全局完成 = 所有实例完成）
+export function isInstanceDone(e: ScheduleEvent, dayKey: string): boolean {
+  return e.done || (!!e.repeat && !!dayKey && !!e.doneDates?.includes(dayKey));
+}
+
+// 实例级标记完成：单次日程置 done；重复日程只记该实例日
+export function markInstanceDone(e: ScheduleEvent, dayKey: string): ScheduleEvent {
+  if (!e.repeat) return { ...e, done: true };
+  const dd = e.doneDates ?? [];
+  return { ...e, doneDates: dd.includes(dayKey) ? dd : [...dd, dayKey] };
+}
+
+// 实例级取消完成：重复日程从完成集移除该实例；全局完成（done）时先吸收为实例级再移除
+export function unmarkInstanceDone(e: ScheduleEvent, dayKey: string): ScheduleEvent {
+  if (!e.repeat) return { ...e, done: false };
+  const dd = e.doneDates ?? [];
+  if (!e.done) return { ...e, doneDates: dd.filter((d) => d !== dayKey) };
+  // 全局完成吸收成实例级：展开全部实例（无限重复兜底到起点 +1 年），再减去被取消的实例
+  const [y, m, d] = e.date.split("-").map(Number);
+  const horizon = e.repeat.until ?? toDateKey(new Date(y, m - 1, d + 366));
+  const all = expandEventDates(e, horizon);
+  return { ...e, done: false, doneDates: all.filter((d) => d !== dayKey) };
+}
+
 // 实例是否已结束：按实例所在日 + 结束时间与 now 比较（重复实例共享 e.date，必须传入实例日）
 export function isInstanceExpired(e: ScheduleEvent, dayKey: string, now: Date): boolean {
-  if (e.done || !dayKey) return false;
+  if (isInstanceDone(e, dayKey) || !dayKey) return false;
   const todayKey = toDateKey(now);
   if (dayKey < todayKey) return true; // 过去日期：已过（全天事件按当天结束同样成立）
   if (dayKey > todayKey) return false; // 未来日期：未到，即使时刻早于现在也不结束
@@ -168,22 +193,6 @@ export function deleteEventFromList(list: ScheduleEvent[], id: string): Schedule
 
 export function toggleEventDone(list: ScheduleEvent[], id: string): ScheduleEvent[] {
   return list.map((e) => (e.id === id ? { ...e, done: !e.done } : e));
-}
-
-// 「未完成」顺延副本：内容一模一样、时长一样，但起始时间从现在开始、独立单次（不带重复规则）
-export function buildPostponedClone(e: ScheduleEvent, now: Date): EventInput {
-  const s = parseTimeToMinutes(e.time);
-  const en = e.endTime ? parseTimeToMinutes(e.endTime) : NaN;
-  const duration = isNaN(s) || isNaN(en) ? 60 : Math.max(15, en - s);
-  const start = now.getHours() * 60 + now.getMinutes();
-  return {
-    title: e.title,
-    date: toDateKey(now),
-    time: minutesToTime(start),
-    endTime: minutesToTime(Math.min(1439, start + duration)),
-    description: e.description,
-    color: e.color,
-  };
 }
 
 export function isValidEvent(e: unknown): e is ScheduleEvent {
@@ -221,6 +230,9 @@ export function sanitizeImportedEvents(raw: unknown): ScheduleEvent[] {
       endDate: typeof o.endDate === "string" && o.endDate ? o.endDate : undefined,
       description: typeof o.description === "string" ? o.description : "",
       done: Boolean(o.done),
+      doneDates: Array.isArray(o.doneDates)
+        ? o.doneDates.filter((d): d is string => typeof d === "string" && d.length === 10)
+        : undefined,
       repeat,
       color: typeof o.color === "string" && o.color ? o.color : undefined,
     });

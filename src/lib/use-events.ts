@@ -174,6 +174,15 @@ export function useEvents() {
     [commit]
   );
 
+  // 批量更新（多选菜单批量标记完成/未完成）：按 id 一次操作一条历史记录
+  const updateEvents = useCallback(
+    (ids: string[], patch: Partial<Omit<ScheduleEvent, "id">>) => {
+      if (ids.length === 0) return;
+      commit((prev) => prev.map((e) => (ids.includes(e.id) ? { ...e, ...patch } : e)));
+    },
+    [commit]
+  );
+
   // 批量移动（周视图整体挪动选中组）/全天跨天拉伸：一次操作一条历史记录
   const applyMoveAll = useCallback(
     (patches: EventMovePatch[]) => {
@@ -243,6 +252,7 @@ export function useEvents() {
     events,
     addEvent,
     updateEvent,
+    updateEvents,
     deleteEvent,
     deleteEvents,
     toggleDone,

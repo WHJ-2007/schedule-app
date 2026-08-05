@@ -6,12 +6,14 @@ import {
   updateEventInList,
   deleteEventFromList,
   toggleEventDone,
-  buildPostponedClone,
   saveEvents,
   loadEvents,
   expandEventDates,
   sanitizeImportedEvents,
   isInstanceExpired,
+  isInstanceDone,
+  markInstanceDone,
+  unmarkInstanceDone,
   STORAGE_KEY,
 } from "./events";
 
@@ -94,31 +96,6 @@ describe("list operations", () => {
   it("toggles done flag", () => {
     expect(toggleEventDone([base], "a")[0].done).toBe(true);
     expect(toggleEventDone([{ ...base, done: true }], "a")[0].done).toBe(false);
-  });
-
-  it("顺延副本：内容一模一样、时长一样、从现在开始、不带重复规则", () => {
-    const clone = buildPostponedClone(
-      { ...base, endTime: "10:30", description: "重点同步", color: "#f87171", repeat: { freq: "daily" } },
-      new Date(2026, 7, 5, 14, 2)
-    );
-    expect(clone).toEqual({
-      title: "晨会",
-      date: "2026-08-05",
-      time: "14:02",
-      endTime: "15:02",
-      description: "重点同步",
-      color: "#f87171",
-    });
-  });
-
-  it("顺延副本：无结束时间按 1 小时；超午夜钳制到 23:59", () => {
-    expect(buildPostponedClone({ ...base }, new Date(2026, 7, 5, 9, 0))).toMatchObject({
-      time: "09:00",
-      endTime: "10:00",
-    });
-    expect(
-      buildPostponedClone({ ...base, endTime: "23:59" }, new Date(2026, 7, 5, 23, 30)).endTime
-    ).toBe("23:59");
   });
 });
 
@@ -366,5 +343,73 @@ describe("isInstanceExpired", () => {
 
   it("已完成不算过期", () => {
     expect(isInstanceExpired(baseEvent({ time: "09:00", endTime: "14:00", done: true }), "2026-08-05", now)).toBe(false);
+  });
+
+  it("重复日程实例级完成（doneDates）也不算过期", () => {
+    expect(
+      isInstanceExpired(
+        { ...baseEvent({ time: "09:00", endTime: "14:00" }), repeat: { freq: "daily" }, doneDates: ["2026-08-05"] },
+        "2026-08-05",
+        now
+      )
+    ).toBe(false);
+  });
+});
+
+describe("实例级完成（doneDates）", () => {
+  const repeat = (doneDates?: string[]): ScheduleEvent =>
+    baseEvent({ repeat: { freq: "daily" as const }, doneDates });
+
+  it("isInstanceDone：单次日程看 done，重复日程看该日是否在 doneDates，全局 done 视为全部完成", () => {
+    expect(isInstanceDone(baseEvent({ done: true }), "2026-08-05")).toBe(true);
+    expect(isInstanceDone(baseEvent(), "2026-08-05")).toBe(false);
+    expect(isInstanceDone(repeat(["2026-08-05"]), "2026-08-05")).toBe(true);
+    expect(isInstanceDone(repeat(["2026-08-04"]), "2026-08-05")).toBe(false);
+    expect(isInstanceDone({ ...repeat(), done: true }, "2026-08-06")).toBe(true);
+    // 非重复日程的 doneDates 无意义：done 优先
+    expect(isInstanceDone({ ...baseEvent(), doneDates: ["2026-08-05"] }, "2026-08-05")).toBe(false);
+  });
+
+  it("markInstanceDone：单次日程置 done；重复日程只记该实例日", () => {
+    expect(markInstanceDone(baseEvent(), "2026-08-05").done).toBe(true);
+    const e = repeat();
+    const m = markInstanceDone(e, "2026-08-05");
+    expect(m.doneDates).toEqual(["2026-08-05"]);
+    // 重复标记同日不重复记
+    expect(markInstanceDone(m, "2026-08-05").doneDates).toEqual(["2026-08-05"]);
+    // 不同实例日追加
+    expect(markInstanceDone(m, "2026-08-06").doneDates).toEqual(["2026-08-05", "2026-08-06"]);
+  });
+
+  it("unmarkInstanceDone：单次日程取消 done；重复日程只移除该实例日", () => {
+    expect(unmarkInstanceDone(baseEvent({ done: true }), "2026-08-05").done).toBe(false);
+    expect(unmarkInstanceDone(repeat(["2026-08-05", "2026-08-06"]), "2026-08-05").doneDates).toEqual(["2026-08-06"]);
+  });
+
+  it("unmarkInstanceDone：重复日程全局完成（done）时吸收为实例级再减去该实例", () => {
+    const e = repeat(["2026-08-05"]);
+    const u = unmarkInstanceDone({ ...e, done: true }, "2026-08-06");
+    expect(u.done).toBe(false);
+    expect(u.doneDates).toContain("2026-08-05");
+    expect(u.doneDates).not.toContain("2026-08-06");
+  });
+
+  it("sanitizeImportedEvents 透传合法 doneDates，丢弃非法项", () => {
+    const clean = sanitizeImportedEvents([
+      {
+        id: "r",
+        title: "重复",
+        date: "2026-08-05",
+        time: "09:00",
+        done: false,
+        repeat: { freq: "daily" },
+        doneDates: ["2026-08-05", "2026-08-06", 123, null],
+      },
+    ]);
+    expect(clean[0].doneDates).toEqual(["2026-08-05", "2026-08-06"]);
+    const none = sanitizeImportedEvents([
+      { id: "r2", title: "重复2", date: "2026-08-05", doneDates: "bad" },
+    ]);
+    expect(none[0].doneDates).toBeUndefined();
   });
 });
