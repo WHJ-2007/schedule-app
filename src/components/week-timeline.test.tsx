@@ -431,6 +431,20 @@ describe("WeekTimeline", () => {
     renderTimeline(emptyWeek, { today: new Date(2026, 7, 10) }); // 8/10 在下一周
     expect(screen.queryByText(/今/)).toBeNull();
   });
+
+  it("今天列整列浅蓝底、列头日期实心蓝胶囊；选中/锚点列优先", () => {
+    renderTimeline(emptyWeek, { anchorKey: "2026-08-05" }); // 今天 8/3 ≠ 锚点 8/5
+    const todayCol = document.querySelector('[data-date="2026-08-03"]')!;
+    expect(todayCol.className).toContain("bg-blue-50/40");
+    const anchorCol = document.querySelector('[data-date="2026-08-05"]')!;
+    expect(anchorCol.className).toContain("bg-blue-50"); // 锚点列拿 columnHighlight
+    expect(anchorCol.className).not.toContain("bg-blue-50/40");
+    // 列头：今天日期在实心蓝胶囊里，其他列没有
+    const todayHeader = screen.getByRole("button", { name: "选择8月3日" });
+    const capsule = todayHeader.querySelector("span.rounded-full");
+    expect(capsule?.textContent).toBe("3");
+    expect(screen.getByRole("button", { name: "选择8月4日" }).querySelector("span.rounded-full")).toBeNull();
+  });
 });
 
 describe("WeekTimeline (凌晨折叠)", () => {

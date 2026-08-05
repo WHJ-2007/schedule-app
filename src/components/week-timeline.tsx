@@ -1077,7 +1077,14 @@ export default function WeekTimeline({
                     aria-label={`选择${d.getMonth() + 1}月${d.getDate()}日`}
                     className={tokens.weekView.columnHeader}
                   >
-                    {WEEKDAY_NAMES[i]} {d.getDate()}
+                    {WEEKDAY_NAMES[i]}{" "}
+                    {isToday ? (
+                      <span className="rounded-full bg-blue-600 px-1.5 py-0.5 font-semibold leading-none text-white">
+                        {d.getDate()}
+                      </span>
+                    ) : (
+                      d.getDate()
+                    )}
                     {isToday && <span className={tokens.todayMark}> 今</span>}
                   </button>
                   <button
@@ -1275,6 +1282,7 @@ export default function WeekTimeline({
             // 拖动中：本列用预览排布（选中组已挪走/加入后重算的轨道）
             const layout = previewLayouts?.get(i) ?? baseLayout;
             const isAnchor = key === anchorKey;
+            const isToday = isSameDay(d, today);
             return (
               <div
                 key={key}
@@ -1287,7 +1295,9 @@ export default function WeekTimeline({
                       ? tokens.weekView.columnHighlight
                       : hover?.col === i
                         ? tokens.weekView.columnHover
-                        : "")
+                        : isToday
+                          ? tokens.weekView.columnToday
+                          : "")
                 }
                 onPointerDown={(e) => handleColumnDown(e, i)}
                 onPointerMove={handlePointerMove}

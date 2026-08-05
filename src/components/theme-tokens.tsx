@@ -26,6 +26,7 @@ export type ThemeTokens = {
   viewTab: { active: string; inactive: string };
   weekView: {
     columnHighlight: string; columnHeader: string; addDay: string;
+    columnToday: string;     // 今天列整列浅蓝底（选中/锚点列优先）
     columnHover: string;     // 悬停列背景淡色（鼠标位置对应日期）
     hourLabelActive: string; // 悬停时对应小时刻度高亮
     timeline: string;        // 时间轴整体容器（边框等）
@@ -107,6 +108,7 @@ export const THEME_TOKENS: ThemeTokens = {
     },
     weekView: {
       columnHighlight: "border-blue-200 bg-blue-50",
+      columnToday: "bg-blue-50/40", // 今天列整列浅蓝底（选中/锚点列优先）
       columnHover: "bg-neutral-100/70",
       hourLabelActive: "font-semibold text-blue-600",
       columnHeader: "glass-hover text-xs font-medium text-neutral-700 transition hover:scale-[1.03] hover:text-blue-600",
