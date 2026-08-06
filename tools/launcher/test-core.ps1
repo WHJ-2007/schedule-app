@@ -25,7 +25,7 @@ Assert-True "launcher-core.ps1 为 UTF-8 BOM" ($bytes.Length -ge 3 -and $bytes[0
 # 路径推导
 $expectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 Assert-True "项目根目录推导" ((Get-ProjectRoot) -eq $expectRoot)
-Assert-True "服务器地址" ((Get-ServerUrl) -eq "http://localhost:3000")
+Assert-True "服务器地址" ((Get-ServerUrl) -eq "http://localhost:4321")
 
 # 运行时目录
 $rt = Get-RuntimeDir
@@ -54,14 +54,14 @@ $listener.Start()
 $tempPort = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
 Assert-True "临时监听端口检测为占用" (Get-PortInUse -port $tempPort)
 $listener.Stop()
-# 用从未监听的端口做负例：在 4000-4049 中找第一个空闲端口，保证确定性
-$freePort = 4000
+# 用从未监听的端口做负例：在 5000-5049 中找第一个空闲端口，保证确定性（避开日程端口 4321）
+$freePort = 5000
 while (Get-PortInUse -port $freePort) { $freePort++ }
 Assert-False "空闲端口检测为空闲" (Get-PortInUse -port $freePort)
 
 # —— 服务启停（真实 npm run dev）——
 if (Get-PortInUse) {
-    Write-Host "FAIL  前置条件：端口 3000 已被占用，中止测试" -ForegroundColor Red
+    Write-Host "FAIL  前置条件：端口 4321 已被占用，中止测试" -ForegroundColor Red
     exit 1
 }
 
@@ -81,12 +81,14 @@ if ($started) {
         $httpOk = $false
         for ($i = 0; $i -lt 60; $i++) {
             try {
-                $code = (Invoke-WebRequest -Uri "http://localhost:3000/" -UseBasicParsing -TimeoutSec 3).StatusCode
+                $code = (Invoke-WebRequest -Uri "http://localhost:4321/" -UseBasicParsing -TimeoutSec 3).StatusCode
                 if ($code -eq 200) { $httpOk = $true; break }
             } catch { }
             Start-Sleep -Seconds 1
         }
         Assert-True "首页返回 200" $httpOk
+        Assert-True "网站可访问性检测为真" (Test-WebsiteOnline)
+        Assert-False "空闲端口可访问性检测为假" (Test-WebsiteOnline -port $freePort)
 
         # 意外退出模拟：杀进程树
         $srvPid = Load-PidFile

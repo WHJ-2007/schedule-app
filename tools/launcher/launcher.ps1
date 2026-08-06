@@ -7,6 +7,11 @@ $ErrorActionPreference = 'Continue'
 
 $script:LastStatus = $null
 $script:Exiting = $false
+$script:StopRequested = $false
+# 网站可访问性监控：LastReachable 记录上次探测结果（$null 未知/$true 可访问/$false 不可访问），
+# ProbeCountdown 节流探测频率（每次 tick 递减，归零才真正发 HTTP 请求）
+$script:LastReachable = $null
+$script:ProbeCountdown = 0
 
 function Append-Log([string]$text) {
     $line = (Get-Date -Format "[HH:mm:ss] ") + $text
@@ -34,16 +39,42 @@ function Update-Status {
             "running"  { Append-Log ("服务已就绪：" + (Get-ServerUrl)) }
             "starting" { if ($script:LastStatus) { Append-Log "服务正在启动…" } }
             "stopped"  {
-                if ($script:LastStatus -eq "starting") { Append-Log "服务启动失败或已退出" }
+                if ($script:StopRequested) { $script:StopRequested = $false }
+                elseif ($script:LastStatus -eq "starting") { Append-Log "服务启动失败或已退出" }
                 elseif ($script:LastStatus -eq "running") { Append-Log "服务已意外退出" }
             }
         }
         $script:LastStatus = $s
+        # 迁移到运行中立刻探测一次；离开运行中清空可访问性状态
+        if ($s -eq "running") { $script:ProbeCountdown = 0 }
+        else { $script:LastReachable = $null }
+    }
+    # 运行中：节流探测网站可访问性（每 5 秒一次），挂了/恢复都在日志体现，不重复刷屏
+    if ($s -eq "running" -and $script:ProbeCountdown -le 0) {
+        $script:ProbeCountdown = 5
+        try {
+            $reachable = Test-WebsiteOnline
+        } catch {
+            $reachable = $false
+        }
+        if (-not $reachable -and $script:LastReachable -ne $false) {
+            Append-Log "⚠ 网站无响应（服务可能异常或已崩溃），请查看开发日志"
+        } elseif ($reachable -and $script:LastReachable -eq $false) {
+            Append-Log "网站响应恢复，服务正常"
+        }
+        $script:LastReachable = $reachable
+    } elseif ($s -eq "running") {
+        $script:ProbeCountdown--
     }
     switch ($s) {
         "running" {
-            $script:StatusLabel.Text = "● 运行中"
-            $script:StatusLabel.ForeColor = [System.Drawing.Color]::FromArgb(22, 163, 74)
+            if ($script:LastReachable -eq $false) {
+                $script:StatusLabel.Text = "⚠ 运行中（无响应）"
+                $script:StatusLabel.ForeColor = [System.Drawing.Color]::FromArgb(220, 38, 38)
+            } else {
+                $script:StatusLabel.Text = "● 运行中"
+                $script:StatusLabel.ForeColor = [System.Drawing.Color]::FromArgb(22, 163, 74)
+            }
         }
         "starting" {
             $script:StatusLabel.Text = "◐ 启动中"
@@ -60,6 +91,7 @@ function Update-Status {
 }
 
 function Start-ServiceClick {
+    $script:StopRequested = $false
     Append-Log "正在启动服务…"
     try {
         $ok = Start-DevServer
@@ -69,8 +101,8 @@ function Start-ServiceClick {
         return
     }
     if (-not $ok) {
-        Append-Log "启动失败：端口 3000 已被占用，请检查是否有其他服务在运行"
-        [void][System.Windows.Forms.MessageBox]::Show("端口 3000 已被占用。`n可能是其他服务或残留进程，请先关闭后重试。", "启动失败", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+        Append-Log "启动失败：端口 $script:Port 已被占用，请检查是否有其他服务在运行"
+        [void][System.Windows.Forms.MessageBox]::Show("端口 $script:Port 已被占用。`n可能是其他服务或残留进程，请先关闭后重试。", "启动失败", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
         return
     }
     Append-Log "已发起启动，等待端口就绪…"
@@ -79,6 +111,7 @@ function Start-ServiceClick {
 
 function Stop-ServiceClick {
     Append-Log "正在关闭服务…"
+    $script:StopRequested = $true
     Stop-DevServer | Out-Null
     Append-Log "服务已关闭"
     Update-Status
@@ -110,6 +143,19 @@ function Copy-SessionLogClick {
         $restore.Start()
     } catch {
         Append-Log ("复制失败：" + $_.Exception.Message)
+    }
+}
+
+function Open-LogFileClick {
+    $path = $script:SessionLogPath
+    if ($path -and (Test-Path $path)) {
+        Start-Process explorer.exe -ArgumentList ('/select,"' + $path + '"')
+        Append-Log "已在资源管理器中显示日志文件"
+    } else {
+        $dir = Get-LogsDir
+        Ensure-RuntimeDir | Out-Null
+        Start-Process explorer.exe -ArgumentList ('"' + $dir + '"')
+        Append-Log "会话日志尚未生成，已打开日志目录"
     }
 }
 
@@ -157,9 +203,16 @@ function Build-LauncherForm {
     $btnStop.Add_Click({ Stop-ServiceClick })
     $script:BtnStop = $btnStop
 
+    $openLog = New-Object System.Windows.Forms.Button
+    $openLog.Text = "📂 打开日志文件"
+    $openLog.Location = New-Object System.Drawing.Point(16, 122)
+    $openLog.Size = New-Object System.Drawing.Size(140, 26)
+    $openLog.Add_Click({ Open-LogFileClick })
+    $script:BtnOpenLog = $openLog
+
     $copy = New-Object System.Windows.Forms.Button
     $copy.Text = "📋 复制日志"
-    $copy.Location = New-Object System.Drawing.Point(312, 122)
+    $copy.Location = New-Object System.Drawing.Point(164, 122)
     $copy.Size = New-Object System.Drawing.Size(96, 26)
     $copy.Add_Click({ Copy-SessionLogClick })
     $script:BtnCopy = $copy
@@ -178,6 +231,7 @@ function Build-LauncherForm {
     $form.Controls.Add($btnStart)
     $form.Controls.Add($btnOpen)
     $form.Controls.Add($btnStop)
+    $form.Controls.Add($openLog)
     $form.Controls.Add($copy)
     $form.Controls.Add($box)
 
@@ -234,6 +288,7 @@ function Exit-Launcher {
         if ($r -eq [System.Windows.Forms.DialogResult]::Cancel) { return }
         if ($r -eq [System.Windows.Forms.DialogResult]::Yes) {
             Append-Log "退出前正在关闭服务…"
+            $script:StopRequested = $true
             Stop-DevServer | Out-Null
             Append-Log "服务已关闭，启动器退出"
         }

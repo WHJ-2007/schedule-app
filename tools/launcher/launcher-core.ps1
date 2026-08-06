@@ -3,7 +3,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $script:CoreDir = $PSScriptRoot
-$script:Port = 3000
+# 日程专属端口（4321，避开常用的 3000 避免与其他测试进程冲突）
+$script:Port = 4321
 
 function Get-LauncherDir { return $script:CoreDir }
 
@@ -109,6 +110,16 @@ function Wait-PortReady([int]$timeoutSeconds = 15) {
         Start-Sleep -Seconds 1
     }
     return (Get-PortInUse)
+}
+
+function Test-WebsiteOnline([int]$port = $script:Port) {
+    # HTTP 探测网站可访问性：2xx/3xx 视为在线；连接失败/超时/服务端错误视为不可访问
+    try {
+        $resp = Invoke-WebRequest -Uri ("http://localhost:" + $port + "/") -UseBasicParsing -TimeoutSec 3
+        return ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 400)
+    } catch {
+        return $false
+    }
 }
 
 $script:SessionLogPath = $null
