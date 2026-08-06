@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, it, expect, vi } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { renderHook, act, waitFor, cleanup } from "@testing-library/react";
 import { useEvents } from "./use-events";
 import { STORAGE_KEY } from "./events";
 
@@ -13,19 +13,30 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // 卸载组件触发 effect cleanup，取消防抖 timer——否则上一测试的 timer 会在下一测试触发并污染 fetch mock
+  cleanup();
   vi.unstubAllGlobals();
 });
 
+// mount 恢复完成信号：history 从空变为初始快照（应用不再生成示例日程，初始 events 为空）
+async function waitMounted(result: { current: { history: unknown[] } }) {
+  await waitFor(() => {
+    expect(result.current.history.length).toBeGreaterThan(0);
+  });
+}
+
 describe("useEvents", () => {
-  it("seeds sample events after mount", async () => {
+  it("mount 后不生成示例日程，列表为空", async () => {
     const { result } = renderHook(() => useEvents());
-    await waitFor(() => {
-      expect(result.current.events.length).toBeGreaterThan(5);
-    });
+    await waitMounted(result);
+    expect(result.current.events).toEqual([]);
+    // 保存回 localStorage 的是空列表，而非自动生成的示例日程
+    expect(localStorage.getItem(STORAGE_KEY)).toBe("[]");
   });
 
   it("adds an event", async () => {
     const { result } = renderHook(() => useEvents());
+    await waitMounted(result);
     act(() => {
       result.current.addEvent({ title: "新日程", date: "2026-08-05", time: "10:00" });
     });
@@ -38,8 +49,12 @@ describe("useEvents", () => {
 
   it("updates and deletes an event", async () => {
     const { result } = renderHook(() => useEvents());
+    await waitMounted(result);
+    act(() => {
+      result.current.addEvent({ title: "初始", date: "2026-08-05", time: "10:00" });
+    });
     await waitFor(() => {
-      expect(result.current.events.length).toBeGreaterThan(0);
+      expect(result.current.events).toHaveLength(1);
     });
     const target = result.current.events[0];
     act(() => {
@@ -58,8 +73,12 @@ describe("useEvents", () => {
 
   it("toggles done", async () => {
     const { result } = renderHook(() => useEvents());
+    await waitMounted(result);
+    act(() => {
+      result.current.addEvent({ title: "初始", date: "2026-08-05", time: "10:00" });
+    });
     await waitFor(() => {
-      expect(result.current.events.length).toBeGreaterThan(0);
+      expect(result.current.events).toHaveLength(1);
     });
     const target = result.current.events[0];
     act(() => {
@@ -72,12 +91,16 @@ describe("useEvents", () => {
 
   it("undo/redo：添加后撤销消失、重做恢复", async () => {
     const { result } = renderHook(() => useEvents());
+    await waitMounted(result);
+    act(() => {
+      result.current.addEvent({ title: "待撤销", date: "2026-08-05", time: "10:00" });
+    });
     await waitFor(() => {
-      expect(result.current.events.length).toBeGreaterThan(0);
+      expect(result.current.events).toHaveLength(1);
     });
     const before = result.current.events.length;
     act(() => {
-      result.current.addEvent({ title: "待撤销", date: "2026-08-05", time: "10:00" });
+      result.current.addEvent({ title: "第二条", date: "2026-08-06", time: "10:00" });
     });
     await waitFor(() => {
       expect(result.current.events.length).toBe(before + 1);
@@ -86,21 +109,25 @@ describe("useEvents", () => {
       result.current.undo();
     });
     await waitFor(() => {
-      expect(result.current.events.some((e) => e.title === "待撤销")).toBe(false);
+      expect(result.current.events.some((e) => e.title === "第二条")).toBe(false);
       expect(result.current.events.length).toBe(before);
     });
     act(() => {
       result.current.redo();
     });
     await waitFor(() => {
-      expect(result.current.events.some((e) => e.title === "待撤销")).toBe(true);
+      expect(result.current.events.some((e) => e.title === "第二条")).toBe(true);
     });
   });
 
   it("删除后 undo 恢复，撤销后再编辑截断 future", async () => {
     const { result } = renderHook(() => useEvents());
+    await waitMounted(result);
+    act(() => {
+      result.current.addEvent({ title: "初始", date: "2026-08-05", time: "10:00" });
+    });
     await waitFor(() => {
-      expect(result.current.events.length).toBeGreaterThan(0);
+      expect(result.current.events).toHaveLength(1);
     });
     const target = result.current.events[0];
     act(() => {
@@ -126,20 +153,25 @@ describe("useEvents", () => {
 
   it("replaceEvents（导入）可撤销，jumpToIndex 回到初始状态", async () => {
     const { result } = renderHook(() => useEvents());
+    await waitMounted(result);
+    act(() => {
+      result.current.addEvent({ title: "初始", date: "2026-08-05", time: "10:00" });
+    });
     await waitFor(() => {
-      expect(result.current.events.length).toBeGreaterThan(0);
+      expect(result.current.events).toHaveLength(1);
     });
     act(() => {
       result.current.replaceEvents([{ id: "x", title: "导入", date: "2026-08-05", time: "", description: "", done: false }]);
     });
     await waitFor(() => {
       expect(result.current.events).toHaveLength(1);
+      expect(result.current.events[0].title).toBe("导入");
     });
     act(() => {
       result.current.undo();
     });
     await waitFor(() => {
-      expect(result.current.events.length).toBeGreaterThan(1);
+      expect(result.current.events[0]?.title).toBe("初始");
     });
     act(() => {
       result.current.jumpToIndex(0);
@@ -151,8 +183,13 @@ describe("useEvents", () => {
 
   it("applyMoveAll 批量移动一次入栈可撤销", async () => {
     const { result } = renderHook(() => useEvents());
+    await waitMounted(result);
+    act(() => {
+      result.current.addEvent({ title: "A", date: "2026-08-05", time: "10:00", endTime: "11:00" });
+      result.current.addEvent({ title: "B", date: "2026-08-05", time: "12:00", endTime: "13:00" });
+    });
     await waitFor(() => {
-      expect(result.current.events.length).toBeGreaterThan(0);
+      expect(result.current.events).toHaveLength(2);
     });
     const a = result.current.events[0];
     const b = result.current.events[1];
@@ -172,14 +209,18 @@ describe("useEvents", () => {
       result.current.undo();
     });
     await waitFor(() => {
-      expect(result.current.events.find((e) => e.id === a.id)?.time).toBe(a.time);
+      expect(result.current.events.find((e) => e.id === a.id)?.time).toBe("10:00");
     });
   });
 
   it("applyMoveAll 重复日程整组平移：until 同步移动、频率保留，撤销恢复", async () => {
     const { result } = renderHook(() => useEvents());
+    await waitMounted(result);
+    act(() => {
+      result.current.addEvent({ title: "重复", date: "2026-08-05", time: "10:00" });
+    });
     await waitFor(() => {
-      expect(result.current.events.length).toBeGreaterThan(0);
+      expect(result.current.events).toHaveLength(1);
     });
     const ev = result.current.events[0];
     act(() => {
@@ -215,8 +256,13 @@ describe("useEvents", () => {
 
   it("updateEvents 批量更新一次入栈，撤销恢复", async () => {
     const { result } = renderHook(() => useEvents());
+    await waitMounted(result);
+    act(() => {
+      result.current.addEvent({ title: "A", date: "2026-08-05", time: "10:00" });
+      result.current.addEvent({ title: "B", date: "2026-08-05", time: "12:00" });
+    });
     await waitFor(() => {
-      expect(result.current.events.length).toBeGreaterThan(0);
+      expect(result.current.events).toHaveLength(2);
     });
     const a = result.current.events[0];
     const b = result.current.events[1];
@@ -281,7 +327,7 @@ describe("useEvents", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { result } = renderHook(() => useEvents());
     await waitFor(() => {
-      expect(result.current.events.length).toBeGreaterThan(0); // mount 恢复完成
+      expect(result.current.history.length).toBe(1); // mount 恢复完成
     });
     expect(fetchMock).toHaveBeenCalledWith("/api/history"); // mount 时读取
     act(() => {
@@ -305,9 +351,7 @@ describe("useEvents", () => {
 
   it("persists across remounts", async () => {
     const first = renderHook(() => useEvents());
-    await waitFor(() => {
-      expect(first.result.current.events.length).toBeGreaterThan(0);
-    });
+    await waitMounted(first.result);
     act(() => {
       first.result.current.addEvent({ title: "持久化测试", date: "2026-08-09" });
     });
