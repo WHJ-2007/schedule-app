@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 
+// 桌面端已改用 Tauri 命令读写历史栈（见 src/lib/history-storage.ts），
+// 此路由仅为兼容静态导出保留（output: export 需要 force-static 配置），前端不再调用。
+export const dynamic = "force-static";
+
 // 撤销历史持久化到项目文件 历史版本/versions.json（而非浏览器缓存）：
 // 刷新/换设备后撤销栈仍在。最多保留 300 条版本。
 const HISTORY_FILE = path.join(process.cwd(), "历史版本", "versions.json");

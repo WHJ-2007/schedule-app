@@ -2,14 +2,17 @@ import { beforeEach, afterEach, describe, it, expect, vi } from "vitest";
 import { renderHook, act, waitFor, cleanup } from "@testing-library/react";
 import { useEvents } from "./use-events";
 import { STORAGE_KEY } from "./events";
+import { invoke } from "@tauri-apps/api/core";
 
-// jsdom 26 自带 fetch 会发真实请求：默认拒绝（走 localStorage 回退），持久化测试内 mock 成功路径
+// 持久化走 history-storage：Tauri invoke 失败回退 localStorage。
+// 默认 mock invoke 返回 undefined（load 走 localStorage 空回退），持久化测试内 mock 成功路径
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+const invokeMock = vi.mocked(invoke);
+
 beforeEach(() => {
   localStorage.clear();
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(() => Promise.reject(new Error("offline")))
-  );
+  invokeMock.mockReset();
+  invokeMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -294,15 +297,11 @@ describe("useEvents", () => {
         at: 2,
       },
     ];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() =>
-        Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ entries: restored, index: 0 }),
-        } as Response)
-      )
-    );
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "load_history") return Promise.resolve({ entries: restored, index: 0 });
+      return Promise.resolve(undefined);
+    });
+    vi.stubGlobal("__TAURI_INTERNALS__", {}); // 模拟 Tauri 运行时，走 invoke 异步路径
     const { result } = renderHook(() => useEvents());
     await waitFor(() => {
       expect(result.current.events[0]?.title).toBe("旧版本");
@@ -319,34 +318,33 @@ describe("useEvents", () => {
   });
 
   it("操作后防抖写回文件（含 entries 与 index），undo 也写回", async () => {
-    const fetchMock = vi.fn();
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ entries: [], index: 0 }),
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "load_history") return Promise.resolve({ entries: [], index: 0 });
+      return Promise.resolve(undefined);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("__TAURI_INTERNALS__", {}); // 模拟 Tauri 运行时，走 invoke 异步路径
     const { result } = renderHook(() => useEvents());
     await waitFor(() => {
       expect(result.current.history.length).toBe(1); // mount 恢复完成
     });
-    expect(fetchMock).toHaveBeenCalledWith("/api/history"); // mount 时读取
+    expect(invokeMock).toHaveBeenCalledWith("load_history"); // mount 时读取
     act(() => {
       result.current.addEvent({ title: "待写回", date: "2026-08-05", time: "10:00" });
     });
     await act(async () => {
       await new Promise((r) => setTimeout(r, 700)); // 防抖 600ms
     });
-    const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST");
-    expect(post).toBeDefined();
-    expect(JSON.parse(String(post![1].body)).index).toBe(1);
+    const save = invokeMock.mock.calls.find((c) => c[0] === "save_history");
+    expect(save).toBeDefined();
+    expect((save![1] as { index: number }).index).toBe(1);
     act(() => {
       result.current.undo();
     });
     await act(async () => {
       await new Promise((r) => setTimeout(r, 700));
     });
-    const post2 = fetchMock.mock.calls.findLast((c) => c[1]?.method === "POST");
-    expect(JSON.parse(String(post2![1].body)).index).toBe(0);
+    const save2 = invokeMock.mock.calls.filter((c) => c[0] === "save_history").at(-1);
+    expect((save2![1] as { index: number }).index).toBe(0);
   });
 
   it("persists across remounts", async () => {

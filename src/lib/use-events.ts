@@ -10,10 +10,24 @@ import {
   loadEvents,
   saveEvents,
   createId,
+  sanitizeImportedEvents,
 } from "./events";
+import { loadHistoryFile, loadHistoryFileSync, saveHistoryFile } from "./history-storage";
 
 // 历史栈条目：events 是操作完成后的状态快照（引用零拷贝），at 为操作时间戳
 export type HistoryEntry = { events: ScheduleEvent[]; at: number };
+
+function sanitizeHistoryEntries(entries: unknown[]): HistoryEntry[] {
+  return entries.flatMap((entry) => {
+    if (typeof entry !== "object" || entry === null) return [];
+    const candidate = entry as { events?: unknown; at?: unknown };
+    if (!Array.isArray(candidate.events)) return [];
+    return [{
+      events: sanitizeImportedEvents(candidate.events),
+      at: typeof candidate.at === "number" ? candidate.at : Date.now(),
+    }];
+  });
+}
 
 // 事件整体挪动（周视图拖拽）/全天跨天拉伸的批量补丁：一次提交多条，撤销时一条记录。
 // time 缺省 = 全天事件横向拉伸（只改 date/endDate，不动时间字段）
@@ -58,21 +72,31 @@ export function useEvents() {
       setEvents(initialEvents);
       setLoaded(true);
     };
-    // 版本历史存项目文件（历史版本/versions.json）：刷新后撤销栈仍在。
-    // 无 fetch（旧环境/测试）→ 同步回退 localStorage，避免竞态
-    if (typeof fetch === "undefined") {
+    // 版本历史存文件（桌面端 AppData/versions.json，浏览器回退 localStorage）：
+    // 刷新后撤销栈仍在。无 Tauri 运行时（浏览器/测试）→ 同步读 localStorage 回退，避免竞态
+    const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isTauri) {
+      const data = loadHistoryFileSync();
+      if (data && Array.isArray(data.entries) && data.entries.length > 0) {
+        const cleaned = sanitizeHistoryEntries(data.entries);
+        if (cleaned.length > 0) {
+          restored = cleaned;
+          savedIndex = typeof data.index === "number" ? data.index : cleaned.length - 1;
+          initialEvents = restored[savedIndex]?.events ?? initial;
+        }
+      }
       finish();
       return;
     }
     (async () => {
       try {
-        const res = await fetch("/api/history");
-        if (res.ok) {
-          const data = (await res.json()) as { entries?: HistoryEntry[]; index?: number };
-          if (Array.isArray(data.entries) && data.entries.length > 0) {
-            restored = data.entries;
-            savedIndex = typeof data.index === "number" ? data.index : data.entries.length - 1;
-            initialEvents = data.entries[savedIndex]?.events ?? initial;
+        const data = await loadHistoryFile();
+        if (data && Array.isArray(data.entries) && data.entries.length > 0) {
+          const cleaned = sanitizeHistoryEntries(data.entries);
+          if (cleaned.length > 0) {
+            restored = cleaned;
+            savedIndex = typeof data.index === "number" ? data.index : cleaned.length - 1;
+            initialEvents = restored[savedIndex]?.events ?? initial;
           }
         }
       } catch {
@@ -97,12 +121,7 @@ export function useEvents() {
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     persistTimerRef.current = setTimeout(() => {
       persistTimerRef.current = null;
-      if (typeof fetch === "undefined") return;
-      fetch("/api/history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entries: historyRef.current, index: indexRef.current }),
-      }).catch(() => {});
+      saveHistoryFile(historyRef.current, indexRef.current).catch(() => {});
     }, 600);
     return () => {
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);

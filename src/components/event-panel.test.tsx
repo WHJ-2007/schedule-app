@@ -28,6 +28,8 @@ describe("EventPanel", () => {
     // 色盘：8 色点 + 默认格
     expect(screen.getAllByLabelText(/颜色/).length).toBeGreaterThanOrEqual(9);
     expect(screen.getByLabelText(/描述/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("响铃")).toBeNull();
+    expect(screen.getByText("日程开始和结束时发送通知")).toBeInTheDocument();
     expect(screen.getByLabelText("重复")).toBeInTheDocument();
     // 未勾选重复时不展开频率选项
     expect(screen.queryByLabelText("频率")).toBeNull();
@@ -52,6 +54,11 @@ describe("EventPanel", () => {
     renderPanel(emptyForm(["2026-08-05"]), { onSave });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     expect(onSave).toHaveBeenCalled();
+  });
+
+  it("全天日程提示设置开始时间后提醒才生效", () => {
+    renderPanel(emptyForm(["2026-08-05"]));
+    expect(screen.getByText("设置开始时间后生效")).toBeInTheDocument();
   });
 
   it("点删除触发 onDelete 且带 id", () => {

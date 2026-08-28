@@ -297,6 +297,16 @@ describe("persistence", () => {
     expect(loadEvents().map((e) => e.id)).toEqual(["x"]);
   });
 
+  it("加载旧数据时移除已废弃的响铃字段", () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([
+        { id: "legacy", title: "旧日程", date: "2026-08-03", time: "09:00", description: "", done: false, ring: true },
+      ])
+    );
+    expect(loadEvents()[0]).not.toHaveProperty("ring");
+  });
+
   it("keeps an explicitly empty list empty", () => {
     saveEvents([]);
     expect(loadEvents()).toEqual([]);

@@ -33,8 +33,10 @@ import {
   type RepeatFreq,
   type ScheduleEvent,
 } from "@/lib/events";
-import { copyViewAsJpeg } from "@/lib/export-image";
+import { copyViewToClipboard, downloadViewAsPng } from "@/lib/export-image";
+import { ensureReminderPermission } from "@/lib/notification";
 import type { EventMovePatch } from "@/lib/use-events";
+import { useScheduleReminders } from "@/lib/use-reminders";
 import { getSavedView, saveView, type ViewMode } from "@/lib/views";
 import type { ThemeTokens } from "./theme-tokens";
 import Settings from "./settings";
@@ -270,6 +272,12 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const zoomOut = () => setWeekZoom((z) => Math.max(0.5, Math.round((z - 0.25) * 100) / 100));
   const [playerOpen, setPlayerOpen] = useState(false); // 版本播放条开关
   const [toast, setToast] = useState<{ text: string; undoIndex?: number } | null>(null);
+  const [imageAction, setImageAction] = useState<"download" | "copy" | null>(null);
+  useScheduleReminders(events, (reminder) => {
+    setToast({
+      text: `${reminder.moment === "start" ? "开始" : "结束"}提醒：「${reminder.title}」`,
+    });
+  });
   const selectedIdsRef = useRef(selectedIds);
   selectedIdsRef.current = selectedIds;
   // 初始恒为 month：SSR 无 localStorage，直接读保存视图会导致服务端 HTML 与客户端首帧不一致而水合失败
@@ -281,7 +289,8 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
   const [viewZoom, setViewZoom] = useState<ViewZoom>(null);
   const zoomAnchorRef = useRef<ZoomAnchor>(null);
   const viewWrapRef = useRef<HTMLDivElement | null>(null);
-  const gridRef = useRef<HTMLDivElement | null>(null); // 月视图日历格（截图目标）
+  const monthShotRef = useRef<HTMLDivElement | null>(null); // 月视图星期标题 + 日历格（导出目标）
+  const gridRef = useRef<HTMLDivElement | null>(null); // 月视图日历格（选中泡泡定位）
   const weekShotRef = useRef<HTMLDivElement | null>(null); // 周视图时间轴（截图目标）
   const yearShotRef = useRef<HTMLDivElement | null>(null); // 年视图 12 月卡（截图目标）
   // 视图切换残影：旧视图 DOM 快照缩小移动到锚点元素位置并淡出，新视图从同一锚点缩放
@@ -815,6 +824,15 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
       }
       setSelectedDateKey(form.dates[0]);
     }
+    if (form.time) {
+      void ensureReminderPermission().then((permission) => {
+        if (permission === "denied") {
+          setToast({ text: "日程已保存；系统通知未授权，届时仅在应用内提醒" });
+        } else if (permission === "unsupported") {
+          setToast({ text: "日程已保存；当前环境不支持系统通知，届时仅在应用内提醒" });
+        }
+      });
+    }
     setForm(null);
   };
 
@@ -884,22 +902,63 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
     setToast({ text: `已复制：「${e.title}」（${toDateKey(nd)} ${minutesToTime(nsDay)} 开始）` });
   };
 
-  // 一键导出：当前视图（月/周/年）内容区渲染成 JPG 复制到剪贴板
-  const handleExport = async () => {
+  // 当前视图导出信息：下载与复制共用同一张经过排版的 PNG 分享卡。
+  const getImageExport = () => {
     const node =
-      viewMode === "month" ? gridRef.current : viewMode === "week" ? weekShotRef.current : yearShotRef.current;
-    if (!node) return;
+      viewMode === "month"
+        ? monthShotRef.current
+        : viewMode === "week"
+          ? weekShotRef.current
+          : yearShotRef.current;
+    const title =
+      viewMode === "month"
+        ? formatMonthTitle(viewYear, viewMonth)
+        : viewMode === "week"
+          ? formatWeekTitle(weekDates)
+          : formatYearTitle(viewYear);
+    return {
+      node,
+      options: {
+        title,
+        view: viewMode,
+        viewLabel: viewMode === "month" ? "月视图" : viewMode === "week" ? "周视图" : "年视图",
+        fileName: `${title}日程`,
+      },
+    };
+  };
+
+  const handleDownloadImage = async () => {
+    const target = getImageExport();
+    if (!target.node || imageAction) return;
+    setImageAction("download");
     try {
-      const result = await copyViewAsJpeg(node);
-      setToast({
-        text:
-          result === "copied"
-            ? "已复制日程图片到剪贴板（JPG）"
-            : "浏览器不支持剪贴板图片，已下载为 JPG 文件",
-      });
+      await downloadViewAsPng(target.node, target.options);
+      setToast({ text: "已导出日程图片（PNG）" });
     } catch (err) {
       console.error("导出失败", err);
       setToast({ text: `导出失败：${err instanceof Error ? err.message : String(err)}` });
+    } finally {
+      setImageAction(null);
+    }
+  };
+
+  const handleCopyImage = async () => {
+    const target = getImageExport();
+    if (!target.node || imageAction) return;
+    setImageAction("copy");
+    try {
+      await copyViewToClipboard(target.node, target.options);
+      setToast({ text: "已复制日程图片到剪贴板" });
+    } catch (err) {
+      console.error("复制失败", err);
+      setToast({
+        text:
+          err instanceof Error && err.message
+            ? `复制失败：${err.message}`
+            : "复制失败：请检查剪贴板权限后重试",
+      });
+    } finally {
+      setImageAction(null);
     }
   };
 
@@ -914,8 +973,8 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
             {tokens.header.tagline}
           </header>
 
-          <div className="mb-6 flex items-center justify-between">
-            <div className="flex gap-2">
+          <div className="mb-6 flex flex-col items-stretch gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <div className="flex self-start gap-2">
               {(["year", "month", "week"] as ViewMode[]).map((v) => (
                 <button
                   key={v}
@@ -928,7 +987,7 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                 </button>
               ))}
             </div>
-            <div className="relative flex gap-2">
+            <div className="relative flex flex-wrap items-center justify-start gap-2 sm:justify-end">
               <button
                 type="button"
                 onClick={undo}
@@ -955,14 +1014,33 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
               >
                 重做 ↷
               </button>
-              <button
-                type="button"
-                onClick={handleExport}
-                aria-label="导出图片"
-                className={tokens.navButton}
-              >
-                导出
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadImage}
+                  disabled={imageAction !== null}
+                  aria-label="导出图片"
+                  className={tokens.navButton + " inline-flex items-center gap-1.5 disabled:opacity-50"}
+                >
+                  <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.8">
+                    <path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4h14v-4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  {imageAction === "download" ? "导出中…" : "导出"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyImage}
+                  disabled={imageAction !== null}
+                  aria-label="复制日程图片"
+                  className={tokens.navButton + " inline-flex items-center gap-1.5 disabled:opacity-50"}
+                >
+                  <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.8">
+                    <rect x="8" y="8" width="11" height="11" rx="2" />
+                    <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" strokeLinecap="round" />
+                  </svg>
+                  {imageAction === "copy" ? "复制中…" : "复制"}
+                </button>
+              </div>
               {playerOpen && (
                 <VersionPlayer
                   history={history}
@@ -988,9 +1066,9 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
             <div className="grid gap-6 lg:grid-cols-[3fr_1fr]">
               {/* 月历 */}
               <section className={tokens.viewPanel}>
-                <div className="mb-2 flex items-center justify-between">
+                <div className="mb-2 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h2 className={tokens.sectionTitle}>{formatMonthTitle(viewYear, viewMonth)}</h2>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button type="button" onClick={goPrev} className={tokens.navButton}>
                       上月
                     </button>
@@ -1003,32 +1081,33 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                   </div>
                 </div>
 
-                <div className="mb-0.5 grid grid-cols-7 gap-1.5">
-                  {WEEKDAY_NAMES.map((w) => (
-                    <div key={w} className={tokens.weekdayHeader}>
-                      {w}
-                    </div>
-                  ))}
-                </div>
+                <div ref={monthShotRef}>
+                  <div className="mb-0.5 grid grid-cols-7 gap-1.5">
+                    {WEEKDAY_NAMES.map((w) => (
+                      <div key={w} className={tokens.weekdayHeader}>
+                        {w}
+                      </div>
+                    ))}
+                  </div>
 
-                <div
-                  ref={gridRef}
-                  key={`${viewYear}-${viewMonth}`}
-                  data-testid="view-anim"
-                  onAnimationEnd={(e) => {
-                    if (e.target === e.currentTarget) setNavDir(null);
-                  }}
-                  className={[
-                    "relative grid grid-cols-7 " + (tokens.cellGridGap ?? "gap-x-1.5 gap-y-0.5"),
-                    navDir === "left"
-                      ? "anim-slide-in-left"
-                      : navDir === "right"
-                        ? "anim-slide-in-right"
-                        : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                >
+                  <div
+                    ref={gridRef}
+                    key={`${viewYear}-${viewMonth}`}
+                    data-testid="view-anim"
+                    onAnimationEnd={(e) => {
+                      if (e.target === e.currentTarget) setNavDir(null);
+                    }}
+                    className={[
+                      "relative grid grid-cols-7 " + (tokens.cellGridGap ?? "gap-x-1.5 gap-y-0.5"),
+                      navDir === "left"
+                        ? "anim-slide-in-left"
+                        : navDir === "right"
+                          ? "anim-slide-in-right"
+                          : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
                   {grid.map((d) => {
                     const key = toDateKey(d);
                     const inMonth = isSameMonth(d, viewYear, viewMonth);
@@ -1136,13 +1215,14 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
                     );
                   })}
                   {/* 切换动画期间隐藏：泡泡不随缩放乱跑，动画结束后重新定位到选中格 */}
-                  {viewZoom === null && (
-                    <SelectionBubble
-                      gridRef={gridRef}
-                      className={tokens.cell.num + " " + tokens.cell.selected}
-                      label={selectedDate.getDate()}
-                    />
-                  )}
+                    {viewZoom === null && (
+                      <SelectionBubble
+                        gridRef={gridRef}
+                        className={tokens.cell.num + " " + tokens.cell.selected}
+                        label={selectedDate.getDate()}
+                      />
+                    )}
+                  </div>
                 </div>
               </section>
 
@@ -1179,30 +1259,36 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
               <div
                 data-testid="week-grid"
                 className={
-                  "grid gap-6 transition-[grid-template-columns] duration-300 " +
-                  (showWeekDayPanel ? "lg:grid-cols-[2fr_1fr]" : "lg:grid-cols-[1fr_0fr]")
+                  "grid transition-[grid-template-columns] duration-300 " +
+                  (showWeekDayPanel
+                    ? "gap-6 lg:grid-cols-[2fr_1fr]"
+                    : "gap-0 lg:grid-cols-[1fr_0fr]")
                 }
               >
-                <section className="flex flex-col">
-                  <div className="mb-4 flex items-center justify-between">
+                <section className="min-w-0 flex flex-col">
+                  <div className="mb-4 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <h2 className={tokens.sectionTitle}>{formatWeekTitle(weekDates)}</h2>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={goPrevWeek} className={tokens.navButton}>
-                        上一周
-                      </button>
-                      <button type="button" onClick={goTodayWeek} className={tokens.navButton}>
-                        今天
-                      </button>
-                      <button type="button" onClick={goNextWeek} className={tokens.navButton}>
-                        下一周
-                      </button>
-                      <span className="mx-0.5 h-5 w-px bg-neutral-200" />
-                      <button type="button" onClick={zoomOut} aria-label="缩小" className={tokens.navButton}>
-                        −
-                      </button>
-                      <button type="button" onClick={zoomIn} aria-label="放大" className={tokens.navButton}>
-                        ＋
-                      </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={goPrevWeek} className={tokens.navButton}>
+                          上一周
+                        </button>
+                        <button type="button" onClick={goTodayWeek} className={tokens.navButton}>
+                          今天
+                        </button>
+                        <button type="button" onClick={goNextWeek} className={tokens.navButton}>
+                          下一周
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="mx-0.5 hidden h-5 w-px bg-neutral-200 sm:block" />
+                        <button type="button" onClick={zoomOut} aria-label="缩小" className={tokens.navButton}>
+                          −
+                        </button>
+                        <button type="button" onClick={zoomIn} aria-label="放大" className={tokens.navButton}>
+                          ＋
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -1275,9 +1361,9 @@ export default function ScheduleApp({ tokens }: { tokens: ThemeTokens }) {
             )}
             {viewMode === "year" && (
               <section className={tokens.viewPanel}>
-                <div className="mb-4 flex items-center justify-between">
+                <div className="mb-4 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h2 className={tokens.sectionTitle}>{formatYearTitle(viewYear)}</h2>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button type="button" onClick={goPrevYear} className={tokens.navButton}>
                       上一年
                     </button>

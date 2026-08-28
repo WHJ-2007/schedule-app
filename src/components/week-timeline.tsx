@@ -1094,6 +1094,7 @@ export default function WeekTimeline({
                   </button>
                   <button
                     type="button"
+                    data-export-ignore
                     onClick={() => onAddDay([key])}
                     aria-label={`在${d.getMonth() + 1}月${d.getDate()}日添加日程`}
                     className={tokens.weekView.addDay}
@@ -1106,7 +1107,7 @@ export default function WeekTimeline({
           })}
         </div>
         {/* 滚动条占位：滚动区右侧滚动条压缩内部列，这里同步留白保持列对齐 */}
-        <div aria-hidden data-testid="header-scrollbar-gap" style={{ width: sbWidth }} />
+        <div aria-hidden data-export-ignore data-testid="header-scrollbar-gap" style={{ width: sbWidth }} />
       </div>
 
       {/* 全天横条层：跨连续日期列渲染；非重复事件可左右拖拽拉伸 */}
@@ -1176,6 +1177,7 @@ export default function WeekTimeline({
                     )}
                     <input
                       type="checkbox"
+                      data-export-ignore
                       checked={bar.e.done}
                       onChange={(ev) => {
                         ev.stopPropagation();
@@ -1186,6 +1188,7 @@ export default function WeekTimeline({
                     />
                     <button
                       type="button"
+                      data-export-ignore
                       onClick={(ev) => {
                         ev.stopPropagation();
                         applySelection([bar.e.id]);
@@ -1595,7 +1598,7 @@ export default function WeekTimeline({
       </div>
       {/* 拖拽时间气泡：跟随鼠标显示当前选区/目标时间（放滚动容器外，避免裁剪与滚动偏移） */}
       {tip && (
-        <div className={tokens.weekView.dragTip} style={{ left: tip.x, top: tip.y }}>
+        <div data-export-ignore className={tokens.weekView.dragTip} style={{ left: tip.x, top: tip.y }}>
           {tip.text}
         </div>
       )}
@@ -1680,6 +1683,7 @@ export default function WeekTimeline({
           return (
             <div
               role="menu"
+              data-export-ignore
               aria-label="日程操作"
               className="fixed z-50 min-w-[132px] rounded-xl border border-white/40 bg-white/85 p-1 shadow-xl backdrop-blur-xl"
               style={{ left, top }}

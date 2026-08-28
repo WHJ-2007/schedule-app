@@ -15,27 +15,40 @@ import {
   formatWeekTitle,
   isSameDay,
 } from "@/lib/date";
-import { copyViewAsJpeg } from "@/lib/export-image";
+import { copyViewToClipboard, downloadViewAsPng } from "@/lib/export-image";
+import { ensureReminderPermission } from "@/lib/notification";
 
-const mockExport = vi.mocked(copyViewAsJpeg);
+const mockDownload = vi.mocked(downloadViewAsPng);
+const mockCopy = vi.mocked(copyViewToClipboard);
+const mockEnsureReminderPermission = vi.mocked(ensureReminderPermission);
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
-vi.mock("@/lib/export-image", () => ({ copyViewAsJpeg: vi.fn() }));
+vi.mock("@/lib/export-image", () => ({
+  downloadViewAsPng: vi.fn(),
+  copyViewToClipboard: vi.fn(),
+}));
 
-// jsdom 26 自带 fetch 会真实请求 dev server；stub 为 undefined 让版本历史恢复
-// 走同步 localStorage 回退（useEvents 检测 typeof fetch === "undefined"），测试无竞态
+vi.mock("@/lib/use-reminders", () => ({ useScheduleReminders: vi.fn() }));
+vi.mock("@/lib/notification", () => ({
+  ensureReminderPermission: vi.fn().mockResolvedValue("granted"),
+}));
+
+// 版本历史恢复走 history-storage：jsdom 无 Tauri 运行时，invoke 抛错自动回退 localStorage，测试无竞态
 beforeEach(() => {
-  vi.stubGlobal("fetch", undefined);
+  localStorage.clear();
+  mockEnsureReminderPermission.mockResolvedValue("granted");
 });
 
 afterEach(() => {
   cleanup();
   localStorage.clear();
   vi.unstubAllGlobals();
-  mockExport.mockReset();
+  mockDownload.mockReset();
+  mockCopy.mockReset();
+  mockEnsureReminderPermission.mockReset();
 });
 
 describe("ScheduleApp (month view)", () => {
@@ -47,24 +60,62 @@ describe("ScheduleApp (month view)", () => {
     expect(screen.queryByRole("button", { name: "＋ 添加日程" })).toBeNull();
   });
 
-  it("一键导出：月视图截图目标是日历格，成功复制后提示", async () => {
-    mockExport.mockResolvedValue("copied");
+  it("窄窗口下月、周、年视图标题与控制区纵向排列，按钮文字不换行", () => {
     render(<ScheduleApp tokens={THEME_TOKENS} />);
-    fireEvent.click(screen.getByRole("button", { name: "导出图片" }));
-    expect(await screen.findByText("已复制日程图片到剪贴板（JPG）")).toBeInTheDocument();
-    const node = mockExport.mock.calls[0][0] as HTMLElement;
-    expect(node.querySelector("[data-date]")).toBeTruthy();
-    expect(node.querySelector('[data-testid="timeline-scroll"]')).toBeNull();
+
+    const monthPrev = screen.getByRole("button", { name: "上月" });
+    expect(monthPrev.parentElement?.parentElement).toHaveClass("flex-col", "sm:flex-row");
+    expect(monthPrev).toHaveClass("whitespace-nowrap");
+
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const weekPrev = screen.getByRole("button", { name: "上一周" });
+    expect(weekPrev.closest("section")?.firstElementChild).toHaveClass("flex-col", "sm:flex-row");
+    expect(weekPrev).toHaveClass("whitespace-nowrap");
+
+    fireEvent.click(screen.getByRole("button", { name: "年" }));
+    const yearPrev = screen.getByRole("button", { name: "上一年" });
+    expect(yearPrev.parentElement?.parentElement).toHaveClass("flex-col", "sm:flex-row");
+    expect(yearPrev).toHaveClass("whitespace-nowrap");
   });
 
-  it("一键导出：周视图截图目标是周时间轴，剪贴板不可用回退下载提示", async () => {
-    mockExport.mockResolvedValue("downloaded");
+  it("导出图片：月视图包含星期标题与日历格，并下载 PNG", async () => {
+    mockDownload.mockResolvedValue(undefined);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    fireEvent.click(screen.getByRole("button", { name: "导出图片" }));
+    expect(await screen.findByText("已导出日程图片（PNG）")).toBeInTheDocument();
+    const node = mockDownload.mock.calls[0][0] as HTMLElement;
+    expect(node.textContent).toContain("一");
+    expect(node.querySelector("[data-date]")).toBeTruthy();
+    expect(node.querySelector('[data-testid="timeline-scroll"]')).toBeNull();
+    expect(mockDownload.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ view: "month", viewLabel: "月视图" })
+    );
+  });
+
+  it("导出图片：周视图截图目标是周时间轴", async () => {
+    mockDownload.mockResolvedValue(undefined);
     render(<ScheduleApp tokens={THEME_TOKENS} />);
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     fireEvent.click(screen.getByRole("button", { name: "导出图片" }));
-    expect(await screen.findByText(/已下载为 JPG 文件/)).toBeInTheDocument();
-    const node = mockExport.mock.calls[0][0] as HTMLElement;
+    expect(await screen.findByText("已导出日程图片（PNG）")).toBeInTheDocument();
+    const node = mockDownload.mock.calls[0][0] as HTMLElement;
     expect(node.querySelector('[data-testid="timeline-scroll"]')).toBeTruthy();
+  });
+
+  it("复制按钮位于导出右侧，并把当前视图图片写入剪贴板", async () => {
+    mockCopy.mockResolvedValue(undefined);
+    render(<ScheduleApp tokens={THEME_TOKENS} />);
+    const exportButton = screen.getByRole("button", { name: "导出图片" });
+    const copyButton = screen.getByRole("button", { name: "复制日程图片" });
+    expect(
+      exportButton.compareDocumentPosition(copyButton) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    fireEvent.click(copyButton);
+    expect(await screen.findByText("已复制日程图片到剪贴板")).toBeInTheDocument();
+    expect(mockCopy).toHaveBeenCalledWith(
+      expect.any(HTMLElement),
+      expect.objectContaining({ view: "month", viewLabel: "月视图" })
+    );
   });
 
   it("月视图当日时间轴拖选位置与鼠标一致（不受月历格子干扰）", () => {
@@ -395,6 +446,8 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const grid = screen.getByTestId("week-grid");
     expect(grid.className).toContain("lg:grid-cols-[1fr_0fr]"); // 无选中：看板折叠，左侧占满
+    expect(grid.className).toContain("gap-0");
+    expect(grid.className).not.toContain("gap-6");
     // 列头 ＋ 新建：表单打开 → 展开
     const now = new Date();
     fireEvent.click(
@@ -403,10 +456,12 @@ describe("ScheduleApp (switcher & week view)", () => {
       })
     );
     expect(grid.className).toContain("lg:grid-cols-[2fr_1fr]");
+    expect(grid.className).toContain("gap-6");
     fireEvent.change(screen.getByLabelText(/标题/), { target: { value: "折叠测试" } });
     fireEvent.click(screen.getByRole("button", { name: /保存/ }));
     // 保存后未选中 → 折叠
     expect(grid.className).toContain("lg:grid-cols-[1fr_0fr]");
+    expect(grid.className).toContain("gap-0");
     // 点事件块选中 → 展开
     fireEvent.click(
       within(screen.getByTestId("view-anim")).getByRole("button", { name: /日程 折叠测试/ })
@@ -417,6 +472,7 @@ describe("ScheduleApp (switcher & week view)", () => {
     fireEvent.pointerDown(col, { pointerId: 1, clientX: 50, clientY: 60 });
     fireEvent.pointerUp(col, { pointerId: 1, clientX: 50, clientY: 60 });
     expect(grid.className).toContain("lg:grid-cols-[1fr_0fr]");
+    expect(grid.className).toContain("gap-0");
   });
 
   it("周视图单击非当前日事件：点菜单「编辑」后看板切到该日并保持展开（不误折叠）", () => {

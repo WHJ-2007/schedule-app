@@ -1,5 +1,6 @@
 node_modules
 .next
+.next-export
 out
 *.tsbuildinfo
 历史版本/

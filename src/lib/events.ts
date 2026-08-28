@@ -224,7 +224,7 @@ export function loadEvents(): ScheduleEvent[] {
   if (raw === null) return [];
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isValidEvent) : [];
+    return sanitizeImportedEvents(parsed);
   } catch {
     return [];
   }

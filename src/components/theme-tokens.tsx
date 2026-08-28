@@ -63,7 +63,7 @@ export const THEME_TOKENS: ThemeTokens = {
     },
     sectionTitle: "text-base text-neutral-900",
     weekdayHeader: "py-1 text-center text-xs text-neutral-400",
-    navButton: "rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-600 transition hover:scale-[1.03] hover:border-neutral-400 hover:shadow-sm",
+    navButton: "whitespace-nowrap rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-600 transition hover:scale-[1.03] hover:border-neutral-400 hover:shadow-sm",
     card: "rounded-lg border border-neutral-200 bg-white p-5",
     button: { primary: "rounded-md bg-blue-600 px-4 py-2 text-sm text-white transition hover:scale-[1.03] hover:bg-blue-700" },
     cell: {

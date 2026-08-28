@@ -188,6 +188,26 @@ export default function EventPanel({
               />
             </label>
           )}
+          <div className="flex items-start gap-2.5 rounded-lg border border-neutral-100 bg-white/50 px-3 py-3">
+            <svg
+              aria-hidden
+              viewBox="0 0 24 24"
+              className="mt-0.5 h-4 w-4 shrink-0 fill-none stroke-neutral-500"
+              strokeWidth="1.8"
+            >
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M10 21h4" strokeLinecap="round" />
+            </svg>
+            <span className="min-w-0">
+              <span className="block text-sm text-neutral-700">提醒</span>
+              <span className="mt-0.5 block text-xs leading-5 text-neutral-500">
+                日程开始和结束时发送通知
+              </span>
+              {!form.time && (
+                <span className="block text-xs leading-5 text-amber-700">设置开始时间后生效</span>
+              )}
+            </span>
+          </div>
           <div>
             <span className={dialog.inputLabel}>颜色</span>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
